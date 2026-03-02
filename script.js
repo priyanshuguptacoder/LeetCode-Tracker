@@ -6,18 +6,41 @@ function App() {
   // ============================================
   
   const getInitialState = () => {
-    const saved = localStorage.getItem('priyanshu-leetcode-state');
-    if (saved) {
-      return JSON.parse(saved);
+    try {
+      const saved = localStorage.getItem('priyanshu-leetcode-state');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Data sanitization - ensure all required fields exist
+        return {
+          statusOverrides: parsed.statusOverrides || {},
+          userDifficultyOverrides: parsed.userDifficultyOverrides || {},
+          customProblems: Array.isArray(parsed.customProblems) ? parsed.customProblems : [],
+          deletedProblems: Array.isArray(parsed.deletedProblems) ? parsed.deletedProblems : [],
+          solvedDates: parsed.solvedDates || {},
+          revisionFlags: parsed.revisionFlags || {},
+          solveTimes: parsed.solveTimes || {},
+          historicalDatesGenerated: parsed.historicalDatesGenerated || false,
+          monthlyTarget: parsed.monthlyTarget || 30,
+          todayCount: parsed.todayCount || 0,
+          weeklyCount: parsed.weeklyCount || 0,
+          lastUpdate: parsed.lastUpdate || new Date().toDateString()
+        };
+      }
+    } catch (error) {
+      console.error('Error loading state from localStorage:', error);
+      // Clear corrupted data
+      localStorage.removeItem('priyanshu-leetcode-state');
     }
+    
+    // Default state
     return {
       statusOverrides: {},
       userDifficultyOverrides: {},
       customProblems: [],
       deletedProblems: [],
-      solvedDates: {}, // { problemNumber: "YYYY-MM-DD" }
-      revisionFlags: {}, // { problemNumber: { needsRevision: boolean, revisionCount: number, lastRevisedDate: string } }
-      solveTimes: {}, // { problemNumber: number (minutes) }
+      solvedDates: {},
+      revisionFlags: {},
+      solveTimes: {},
       historicalDatesGenerated: false,
       monthlyTarget: 30,
       todayCount: 0,
@@ -179,11 +202,37 @@ function App() {
   // ============================================
   
   const getMonthlyStats = (problems, solvedDates) => {
-    const monthlyData = {};
-    
-    problems.forEach(problem => {
-      if (problem.status === 'Done' && solvedDates[problem.number]) {
-        const date = new Date(solvedDates[problem.number]);
+    try {
+      // Guard against invalid inputs
+      if (!Array.isArray(problems)) {
+        console.error('getMonthlyStats: problems is not an array');
+        return {};
+      }
+      
+      if (!solvedDates || typeof solvedDates !== 'object') {
+        console.error('getMonthlyStats: solvedDates is not an object');
+        return {};
+      }
+      
+      const monthlyData = {};
+      
+      problems.forEach(problem => {
+        // Validate problem object
+        if (!problem || typeof problem !== 'object') return;
+        if (!problem.number) return;
+        if (problem.status !== 'Done') return;
+        
+        // Check if solved date exists
+        const dateStr = solvedDates[problem.number];
+        if (!dateStr) return;
+        
+        // Validate date
+        const date = new Date(dateStr);
+        if (isNaN(date.getTime())) {
+          console.warn(`Invalid date for problem ${problem.number}: ${dateStr}`);
+          return;
+        }
+        
         const yearMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
         
         if (!monthlyData[yearMonth]) {
@@ -197,49 +246,79 @@ function App() {
         
         monthlyData[yearMonth].count++;
         monthlyData[yearMonth].problems.push(problem);
-      }
-    });
-    
-    return monthlyData;
+      });
+      
+      return monthlyData;
+    } catch (error) {
+      console.error('Error in getMonthlyStats:', error);
+      return {};
+    }
   };
 
   const getCurrentMonthStats = (monthlyData) => {
-    const now = new Date();
-    const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    return monthlyData[currentYearMonth] || { count: 0, problems: [] };
+    try {
+      if (!monthlyData || typeof monthlyData !== 'object') {
+        return { count: 0, problems: [] };
+      }
+      
+      const now = new Date();
+      const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      return monthlyData[currentYearMonth] || { count: 0, problems: [] };
+    } catch (error) {
+      console.error('Error in getCurrentMonthStats:', error);
+      return { count: 0, problems: [] };
+    }
   };
 
   const getBestMonth = (monthlyData) => {
-    let bestMonth = null;
-    let maxCount = 0;
-    
-    Object.entries(monthlyData).forEach(([yearMonth, data]) => {
-      if (data.count > maxCount) {
-        maxCount = data.count;
-        bestMonth = { yearMonth, ...data };
+    try {
+      if (!monthlyData || typeof monthlyData !== 'object') {
+        return null;
       }
-    });
-    
-    return bestMonth;
+      
+      let bestMonth = null;
+      let maxCount = 0;
+      
+      Object.entries(monthlyData).forEach(([yearMonth, data]) => {
+        if (data && data.count > maxCount) {
+          maxCount = data.count;
+          bestMonth = { yearMonth, ...data };
+        }
+      });
+      
+      return bestMonth;
+    } catch (error) {
+      console.error('Error in getBestMonth:', error);
+      return null;
+    }
   };
 
   const getLast6Months = (monthlyData) => {
-    const now = new Date();
-    const months = [];
-    
-    for (let i = 5; i >= 0; i--) {
-      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const yearMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      const monthName = date.toLocaleDateString('en-US', { month: 'short' });
+    try {
+      if (!monthlyData || typeof monthlyData !== 'object') {
+        monthlyData = {};
+      }
       
-      months.push({
-        yearMonth,
-        monthName,
-        count: monthlyData[yearMonth]?.count || 0
-      });
+      const now = new Date();
+      const months = [];
+      
+      for (let i = 5; i >= 0; i--) {
+        const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const yearMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        const monthName = date.toLocaleDateString('en-US', { month: 'short' });
+        
+        months.push({
+          yearMonth,
+          monthName,
+          count: monthlyData[yearMonth]?.count || 0
+        });
+      }
+      
+      return months;
+    } catch (error) {
+      console.error('Error in getLast6Months:', error);
+      return [];
     }
-    
-    return months;
   };
 
   // ============================================
@@ -803,36 +882,69 @@ function App() {
   // ============================================
   
   useEffect(() => {
-    if (!state.historicalDatesGenerated) {
+    try {
+      // Guard against invalid state
+      if (!state || typeof state !== 'object') return;
+      if (!Array.isArray(allProblems)) return;
+      if (!state.solvedDates || typeof state.solvedDates !== 'object') return;
+      if (state.historicalDatesGenerated) return;
+      
       const solvedProblemsWithoutDates = allProblems.filter(
-        p => p.status === 'Done' && !state.solvedDates[p.number]
+        p => p && p.status === 'Done' && p.number && !state.solvedDates[p.number]
       );
       
       if (solvedProblemsWithoutDates.length > 0) {
         const historicalDates = generateHistoricalDates(solvedProblemsWithoutDates);
         
-        setState(prev => ({
-          ...prev,
-          solvedDates: {
-            ...prev.solvedDates,
-            ...historicalDates
-          },
-          historicalDatesGenerated: true
-        }));
+        if (historicalDates && typeof historicalDates === 'object') {
+          setState(prev => ({
+            ...prev,
+            solvedDates: {
+              ...(prev.solvedDates || {}),
+              ...historicalDates
+            },
+            historicalDatesGenerated: true
+          }));
+        }
       }
+    } catch (error) {
+      console.error('Error in historical date generation:', error);
     }
-  }, []);
+  }, [state.historicalDatesGenerated, allProblems.length]);
 
   // ============================================
   // CALCULATE ANALYTICS
   // ============================================
   
-  const heatmapData = calculateHeatmapAndStreak(allProblems, state.solvedDates);
-  const monthlyData = getMonthlyStats(allProblems, state.solvedDates);
-  const currentMonthStats = getCurrentMonthStats(monthlyData);
-  const bestMonth = getBestMonth(monthlyData);
-  const last6Months = getLast6Months(monthlyData);
-  const maxMonthlyCount = Math.max(...last6Months.map(m => m.count), 1);
+  const heatmapData = React.useMemo(
+    () => calculateHeatmapAndStreak(allProblems, state.solvedDates || {}),
+    [allProblems, state.solvedDates]
+  );
+  
+  const monthlyData = React.useMemo(
+    () => getMonthlyStats(allProblems, state.solvedDates || {}),
+    [allProblems, state.solvedDates]
+  );
+  
+  const currentMonthStats = React.useMemo(
+    () => getCurrentMonthStats(monthlyData),
+    [monthlyData]
+  );
+  
+  const bestMonth = React.useMemo(
+    () => getBestMonth(monthlyData),
+    [monthlyData]
+  );
+  
+  const last6Months = React.useMemo(
+    () => getLast6Months(monthlyData),
+    [monthlyData]
+  );
+  
+  const maxMonthlyCount = React.useMemo(
+    () => Math.max(...last6Months.map(m => m.count || 0), 1),
+    [last6Months]
+  );
 
   // ============================================
   // DUPLICATE PREVENTION & VALIDATION
@@ -1258,8 +1370,9 @@ function App() {
   // RENDER
   // ============================================
   
-  return (
-    <div className="app">
+  try {
+    return (
+      <div className="app">
       {/* Notification */}
       {notification && (
         <div className={`notification notification-${notification.type}`}>
@@ -1963,6 +2076,34 @@ function App() {
       )}
     </div>
   );
+  } catch (error) {
+    console.error('Render error:', error);
+    return (
+      <div className="app" style={{ padding: '2rem', textAlign: 'center' }}>
+        <h1 style={{ color: 'var(--danger)' }}>⚠️ Error Loading Dashboard</h1>
+        <p style={{ color: 'var(--text-secondary)', marginTop: '1rem' }}>
+          Something went wrong. Please refresh the page.
+        </p>
+        <button 
+          onClick={() => {
+            localStorage.removeItem('priyanshu-leetcode-state');
+            window.location.reload();
+          }}
+          style={{
+            marginTop: '2rem',
+            padding: '0.75rem 1.5rem',
+            background: 'var(--primary)',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer'
+          }}
+        >
+          Clear Data & Reload
+        </button>
+      </div>
+    );
+  }
 }
 
 ReactDOM.render(<App />, document.getElementById('root'));
