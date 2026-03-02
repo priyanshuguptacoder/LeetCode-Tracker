@@ -1,13 +1,12 @@
 {
   "version": 2,
-  "name": "leetcode-tracker",
   "builds": [
     {
       "src": "backend/server.js",
       "use": "@vercel/node"
     },
     {
-      "src": "index.html",
+      "src": "*.{html,js,css,ico}",
       "use": "@vercel/static"
     }
   ],
@@ -20,8 +19,5 @@
       "src": "/(.*)",
       "dest": "/$1"
     }
-  ],
-  "env": {
-    "NODE_ENV": "production"
-  }
+  ]
 }
