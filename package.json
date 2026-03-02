@@ -1,0 +1,27 @@
+{
+  "name": "leetcode-tracker-fullstack",
+  "version": "2.0.0",
+  "description": "Full Stack LeetCode Problem Tracker with React and Node.js",
+  "scripts": {
+    "backend": "cd backend && npm start",
+    "backend:dev": "cd backend && npm run dev",
+    "backend:install": "cd backend && npm install",
+    "frontend": "npx http-server -p 8000",
+    "start": "npm run backend",
+    "dev": "npm run backend:dev"
+  },
+  "keywords": [
+    "leetcode",
+    "tracker",
+    "fullstack",
+    "react",
+    "nodejs",
+    "express"
+  ],
+  "author": "Priyanshu Gupta",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/priyanshuguptacoder/LeetCode-Tracker.git"
+  }
+}

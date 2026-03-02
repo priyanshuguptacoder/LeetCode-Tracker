@@ -2,6 +2,34 @@ const { useState, useEffect, useRef } = React;
 
 function App() {
   // ============================================
+  // API DATA FETCHING
+  // ============================================
+  
+  const [apiProblems, setApiProblems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [apiError, setApiError] = useState(null);
+
+  // Fetch problems from API on mount
+  useEffect(() => {
+    const fetchProblems = async () => {
+      try {
+        setLoading(true);
+        const response = await window.API.getAllProblems();
+        if (response.success) {
+          setApiProblems(response.data || []);
+        }
+        setLoading(false);
+      } catch (error) {
+        console.error('Failed to fetch problems:', error);
+        setApiError(error.message);
+        setLoading(false);
+      }
+    };
+    
+    fetchProblems();
+  }, []);
+
+  // ============================================
   // STATE MANAGEMENT
   // ============================================
   
@@ -782,75 +810,12 @@ function App() {
   };
 
   // ============================================
-  // DATA LAYER - SAFE MERGE SYSTEM
+  // DATA LAYER - API-BASED SYSTEM
   // ============================================
   
   const getAllProblems = () => {
-    const problemsMap = new Map();
-    const deletedSet = new Set(state.deletedProblems || []);
-    const permanentlyDeletedSet = new Set(state.permanentlyDeleted || []);
-
-    // Insert solvedProblems
-    solvedProblems.forEach(p => {
-      if (!deletedSet.has(p.number) && !permanentlyDeletedSet.has(p.number)) {
-        problemsMap.set(p.number, {
-          ...p,
-          pattern: normalizePattern(p.pattern),
-          userDifficulty: p.userDifficulty || p.difficulty,
-          status: 'Done',
-          isBase: true,
-          type: 'Solved',
-          autoDetected: false
-        });
-      }
-    });
-
-    // Insert targetProblems with auto-detection
-    targetProblems.forEach(p => {
-      if (!deletedSet.has(p.number) && !permanentlyDeletedSet.has(p.number) && !problemsMap.has(p.number)) {
-        const hasPattern = p.pattern && p.pattern.trim() !== '';
-        const finalPattern = hasPattern ? normalizePattern(p.pattern) : detectPattern(p.title);
-        
-        problemsMap.set(p.number, {
-          ...p,
-          pattern: finalPattern,
-          userDifficulty: p.userDifficulty || p.difficulty,
-          status: 'Not Started',
-          isBase: true,
-          type: 'Target',
-          autoDetected: !hasPattern
-        });
-      }
-    });
-
-    // Insert customProblems
-    state.customProblems.forEach(p => {
-      if (!deletedSet.has(p.number) && !permanentlyDeletedSet.has(p.number) && !problemsMap.has(p.number)) {
-        problemsMap.set(p.number, {
-          ...p,
-          pattern: normalizePattern(p.pattern),
-          userDifficulty: p.userDifficulty || p.difficulty,
-          isCustom: true,
-          autoDetected: p.autoDetected || false
-        });
-      }
-    });
-
-    // Apply status overrides
-    problemsMap.forEach((problem, number) => {
-      if (state.statusOverrides[number]) {
-        problem.status = state.statusOverrides[number];
-      }
-    });
-
-    // Apply userDifficulty overrides
-    problemsMap.forEach((problem, number) => {
-      if (state.userDifficultyOverrides && state.userDifficultyOverrides[number]) {
-        problem.userDifficulty = state.userDifficultyOverrides[number];
-      }
-    });
-
-    return Array.from(problemsMap.values()).sort((a, b) => a.number - b.number);
+    // Use API data directly - no need for complex merging
+    return apiProblems;
   };
 
   const allProblems = getAllProblems();
@@ -919,14 +884,8 @@ function App() {
   // ============================================
   
   const problemExists = (number) => {
-    // Check in all sources: base dataset, custom problems, deleted, and permanently deleted
-    const existsInSolved = solvedProblems.some(p => p.number === number);
-    const existsInTarget = targetProblems.some(p => p.number === number);
-    const existsInCustom = state.customProblems.some(p => p.number === number);
-    const existsInDeleted = (state.deletedProblems || []).includes(number);
-    const existsInPermanentlyDeleted = (state.permanentlyDeleted || []).includes(number);
-    
-    return existsInSolved || existsInTarget || existsInCustom || existsInDeleted || existsInPermanentlyDeleted;
+    // Check in API problems
+    return apiProblems.some(p => p.number === parseInt(number));
   };
 
   const validateDataset = () => {
@@ -962,7 +921,7 @@ function App() {
   // SMART ADD PROBLEM HANDLER
   // ============================================
   
-  const handleAddProblem = (e) => {
+  const handleAddProblem = async (e) => {
     e.preventDefault();
     
     // Password verification
@@ -985,18 +944,7 @@ function App() {
 
     // Duplicate check
     if (problemExists(problemNumber)) {
-      // Check where the problem exists
-      const existsInDeleted = (state.deletedProblems || []).includes(problemNumber);
-      const existsInPermanentlyDeleted = (state.permanentlyDeleted || []).includes(problemNumber);
-      
-      let message = `⚠️ Problem #${problemNumber} already exists!`;
-      if (existsInPermanentlyDeleted) {
-        message = `⚠️ Problem #${problemNumber} was permanently deleted. Cannot add again.`;
-      } else if (existsInDeleted) {
-        message = `⚠️ Problem #${problemNumber} is in trash. Restore it first or use a different number.`;
-      }
-      
-      showNotification(message, 'error');
+      showNotification(`⚠️ Problem #${problemNumber} already exists!`, 'error');
       
       // Try to highlight the row if it's visible
       const tableRow = document.querySelector(`tr[data-problem-number="${problemNumber}"]`);
@@ -1016,97 +964,67 @@ function App() {
       number: problemNumber,
       title: formData.title,
       difficulty: formData.difficulty,
-      userDifficulty: formData.difficulty,
       pattern: detectedPattern,
       link: formData.link || `https://leetcode.com/problems/${problemNumber}/`,
       status: formData.type === 'Solved' ? 'Done' : 'Not Started',
-      type: formData.type,
-      autoDetected: !hasPattern
+      solvedDate: formData.type === 'Solved' ? new Date().toISOString().split('T')[0] : null
     };
 
-    setState(prev => {
-      const newState = {
-        ...prev,
-        customProblems: [...prev.customProblems, newProblem]
-      };
+    try {
+      // Add to API
+      const response = await window.API.createProblem(newProblem);
       
-      // Auto-assign today's date if problem is marked as Solved
-      if (formData.type === 'Solved') {
-        const today = new Date().toISOString().split('T')[0];
-        newState.solvedDates = {
-          ...prev.solvedDates,
-          [problemNumber]: today
-        };
+      if (response.success) {
+        // Refresh problems from API
+        const allProblemsResponse = await window.API.getAllProblems();
+        setApiProblems(allProblemsResponse.data || []);
         
-        // Update calendar activity dates
-        if (prev.calendarActivityDates) {
-          const currentDates = new Set(prev.calendarActivityDates);
-          if (!currentDates.has(today)) {
-            newState.calendarActivityDates = [...prev.calendarActivityDates, today];
+        showNotification(`✅ Problem #${problemNumber} added successfully!`, 'success');
+        
+        // Close modal
+        setShowModal(false);
+        
+        // Reset form
+        setFormData({
+          number: '',
+          title: '',
+          difficulty: 'Medium',
+          type: 'Solved',
+          pattern: '',
+          link: ''
+        });
+        
+        // Scroll to the new problem after a short delay
+        setTimeout(() => {
+          const tableRow = document.querySelector(`tr[data-problem-number="${problemNumber}"]`);
+          if (tableRow) {
+            tableRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            tableRow.style.animation = 'highlightRow 2s ease';
           }
-        }
+        }, 300);
       }
-      
-      return newState;
-    });
-
-    // Show success notification with animation
-    const statsUpdate = formData.type === 'Solved' 
-      ? `Total: ${totalSolved + 1} | Active Days: ${heatmapData.activeDays + (state.calendarActivityDates && !state.calendarActivityDates.includes(new Date().toISOString().split('T')[0]) ? 1 : 0)}`
-      : '';
-    
-    showNotification(
-      `✅ Problem #${problemNumber} added successfully! ${statsUpdate}`, 
-      'success'
-    );
-    
-    // Log for debugging
-    console.log('✅ Problem Added:', {
-      number: problemNumber,
-      title: formData.title,
-      type: formData.type,
-      pattern: detectedPattern,
-      autoDetected: !hasPattern
-    });
-    
-    // Close modal with animation
-    setShowModal(false);
-    
-    // Reset form
-    setFormData({
-      number: '',
-      title: '',
-      difficulty: 'Medium',
-      type: 'Solved',
-      pattern: '',
-      link: ''
-    });
-    
-    // Scroll to the new problem after a short delay
-    setTimeout(() => {
-      const tableRow = document.querySelector(`tr[data-problem-number="${problemNumber}"]`);
-      if (tableRow) {
-        tableRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        tableRow.style.animation = 'highlightRow 2s ease';
-      }
-    }, 100);
+    } catch (error) {
+      showNotification(`❌ Error: ${error.message}`, 'error');
+    }
   };
 
   // ============================================
   // OTHER HANDLERS
   // ============================================
   
-  const handleStatusChange = (number, newStatus) => {
+  const handleStatusChange = async (number, newStatus) => {
     if (!verifyPassword('change status')) {
       return;
     }
     
     // Prompt for solve time when marking as Done
+    let solveTime = null;
     if (newStatus === 'Done') {
       const time = prompt('Enter solve time in minutes (optional, press Cancel to skip):');
       if (time !== null && time.trim() !== '') {
         const minutes = parseInt(time);
         if (!isNaN(minutes) && minutes > 0) {
+          solveTime = minutes;
           setState(prev => ({
             ...prev,
             solveTimes: {
@@ -1118,72 +1036,112 @@ function App() {
       }
     }
     
-    setState(prev => {
+    try {
       const today = new Date().toISOString().split('T')[0];
-      const newState = {
-        ...prev,
-        statusOverrides: {
-          ...prev.statusOverrides,
-          [number]: newStatus
-        }
+      
+      // Update via API
+      const updateData = {
+        status: newStatus,
+        solvedDate: newStatus === 'Done' ? today : null
       };
       
-      // Auto-assign date when marking as Done
-      if (newStatus === 'Done') {
-        if (!prev.solvedDates[number]) {
-          newState.solvedDates = {
-            ...prev.solvedDates,
-            [number]: today
+      const response = await window.API.updateProblem(number, updateData);
+      
+      if (response.success) {
+        // Refresh problems from API
+        const allProblemsResponse = await window.API.getAllProblems();
+        setApiProblems(allProblemsResponse.data || []);
+        
+        // Update localStorage for dates and flags
+        setState(prev => {
+          const newState = {
+            ...prev,
+            statusOverrides: {
+              ...prev.statusOverrides,
+              [number]: newStatus
+            }
           };
-        }
-        
-        // Update calendar activity dates
-        if (prev.calendarActivityDates) {
-          const currentDates = new Set(prev.calendarActivityDates);
-          if (!currentDates.has(today)) {
-            newState.calendarActivityDates = [...prev.calendarActivityDates, today];
+          
+          // Auto-assign date when marking as Done
+          if (newStatus === 'Done') {
+            if (!prev.solvedDates[number]) {
+              newState.solvedDates = {
+                ...prev.solvedDates,
+                [number]: today
+              };
+            }
+            
+            // Update calendar activity dates
+            if (prev.calendarActivityDates) {
+              const currentDates = new Set(prev.calendarActivityDates);
+              if (!currentDates.has(today)) {
+                newState.calendarActivityDates = [...prev.calendarActivityDates, today];
+              }
+            }
           }
-        }
-      }
-      
-      // Remove date and revision flag when unmarking as Done
-      if (newStatus !== 'Done') {
-        if (prev.solvedDates[number]) {
-          const { [number]: removed, ...remainingDates } = prev.solvedDates;
-          newState.solvedDates = remainingDates;
-        }
+          
+          // Remove date and revision flag when unmarking as Done
+          if (newStatus !== 'Done') {
+            if (prev.solvedDates[number]) {
+              const { [number]: removed, ...remainingDates } = prev.solvedDates;
+              newState.solvedDates = remainingDates;
+            }
+            
+            // Remove revision flag
+            if (prev.revisionFlags[number]) {
+              const { [number]: removed, ...remainingFlags } = prev.revisionFlags;
+              newState.revisionFlags = remainingFlags;
+            }
+          }
+          
+          return newState;
+        });
         
-        // Remove revision flag
-        if (prev.revisionFlags[number]) {
-          const { [number]: removed, ...remainingFlags } = prev.revisionFlags;
-          newState.revisionFlags = remainingFlags;
+        // Show notification
+        if (newStatus === 'Done') {
+          showNotification('✓ Problem marked done — streak updated!', 'success');
+        } else {
+          showNotification(`✓ Status changed to ${newStatus}`, 'success');
         }
       }
-      
-      return newState;
-    });
-    
-    // Show notification
-    if (newStatus === 'Done') {
-      showNotification('✓ Problem marked done — streak updated!', 'success');
+    } catch (error) {
+      showNotification(`❌ Error: ${error.message}`, 'error');
     }
   };
 
-  const handleUserDifficultyChange = (number, newDifficulty) => {
+  const handleUserDifficultyChange = async (number, newDifficulty) => {
     if (!verifyPassword('change difficulty')) {
       return;
     }
     
-    setState(prev => ({
-      ...prev,
-      userDifficultyOverrides: {
-        ...(prev.userDifficultyOverrides || {}),
-        [number]: newDifficulty
+    try {
+      // Update via API
+      const response = await window.API.updateProblem(number, {
+        userDifficulty: newDifficulty
+      });
+      
+      if (response.success) {
+        // Refresh problems from API
+        const allProblemsResponse = await window.API.getAllProblems();
+        setApiProblems(allProblemsResponse.data || []);
+        
+        // Update localStorage override
+        setState(prev => ({
+          ...prev,
+          userDifficultyOverrides: {
+            ...(prev.userDifficultyOverrides || {}),
+            [number]: newDifficulty
+          }
+        }));
+        
+        showNotification(`✓ Difficulty updated to ${newDifficulty}`, 'success');
       }
-    }));
+    } catch (error) {
+      showNotification(`❌ Error: ${error.message}`, 'error');
+    }
   };
 
-  const handleDelete = (number, isCustom) => {
+  const handleDelete = async (number, isCustom) => {
     if (!verifyPassword('delete this problem')) {
       return;
     }
@@ -1191,7 +1149,7 @@ function App() {
     // Enhanced confirmation with problem details
     const problem = allProblems.find(p => p.number === number);
     const confirmMessage = problem 
-      ? `Are you sure you want to delete:\n\n#${problem.number} - ${problem.title}\n\nThis will:\n• Move to trash (can be restored)\n• Remove from all statistics\n• Recalculate streaks\n• Update all progress bars`
+      ? `Are you sure you want to permanently delete:\n\n#${problem.number} - ${problem.title}\n\nThis action cannot be undone!`
       : 'Are you sure you want to delete this problem?';
     
     if (confirm(confirmMessage)) {
@@ -1203,116 +1161,46 @@ function App() {
         tableRow.style.transform = 'translateX(-20px)';
       }
       
-      // Delay state update for smooth animation
-      setTimeout(() => {
-        let hadDate = false;
-        
-        // ALL problems (custom and base) now use soft delete (trash system)
-        setState(prev => {
-          hadDate = !!prev.solvedDates[number];
-          // Clean up orphan data when deleting
-          const { [number]: removedDate, ...remainingSolvedDates } = prev.solvedDates || {};
-          const { [number]: removedRevision, ...remainingRevisionFlags } = prev.revisionFlags || {};
-          const { [number]: removedSolveTime, ...remainingSolveTimes } = prev.solveTimes || {};
+      // Delay API call for smooth animation
+      setTimeout(async () => {
+        try {
+          // Delete from API
+          const response = await window.API.deleteProblem(number);
           
-          return {
-            ...prev,
-            deletedProblems: [...(prev.deletedProblems || []), number],
-            solvedDates: remainingSolvedDates,
-            revisionFlags: remainingRevisionFlags,
-            solveTimes: remainingSolveTimes
-          };
-        });
-        
-        // Show success notification with problem info
-        const statsUpdate = problem && problem.status === 'Done'
-          ? `Total: ${totalSolved - 1} | Active Days: ${heatmapData.activeDays}`
-          : '';
-        
-        showNotification(
-          `✅ Problem #${number} moved to trash${problem ? ` - ${problem.title}` : ''} ${statsUpdate}`, 
-          'success'
-        );
-        
-        // Log for debugging
-        console.log('🗑️ Problem Moved to Trash:', {
-          number,
-          title: problem?.title,
-          wasCustom: isCustom,
-          hadDate: hadDate,
-          statsRecalculated: true
-        });
+          if (response.success) {
+            // Refresh problems from API
+            const allProblemsResponse = await window.API.getAllProblems();
+            setApiProblems(allProblemsResponse.data || []);
+            
+            // Clean up localStorage data for this problem
+            setState(prev => {
+              const { [number]: removedDate, ...remainingSolvedDates } = prev.solvedDates || {};
+              const { [number]: removedRevision, ...remainingRevisionFlags } = prev.revisionFlags || {};
+              const { [number]: removedSolveTime, ...remainingSolveTimes } = prev.solveTimes || {};
+              
+              return {
+                ...prev,
+                solvedDates: remainingSolvedDates,
+                revisionFlags: remainingRevisionFlags,
+                solveTimes: remainingSolveTimes
+              };
+            });
+            
+            showNotification(
+              `✅ Problem #${number} deleted successfully${problem ? ` - ${problem.title}` : ''}`, 
+              'success'
+            );
+            
+            console.log('🗑️ Problem Deleted:', {
+              number,
+              title: problem?.title,
+              deletedFromAPI: true
+            });
+          }
+        } catch (error) {
+          showNotification(`❌ Error: ${error.message}`, 'error');
+        }
       }, 300);
-    }
-  };
-
-  const handleRestoreDeletedProblems = () => {
-    if (!verifyPassword('restore deleted problems')) {
-      return;
-    }
-    
-    const deletedCount = state.deletedProblems?.length || 0;
-    
-    if (deletedCount === 0) {
-      showNotification('No deleted problems to restore', 'info');
-      return;
-    }
-    
-    if (confirm(`Restore ${deletedCount} deleted problem(s)?`)) {
-      setState(prev => ({
-        ...prev,
-        deletedProblems: []
-      }));
-      showNotification(`✓ Restored ${deletedCount} problem(s)`, 'success');
-    }
-  };
-
-  const handlePermanentDelete = () => {
-    if (!verifyPassword('permanently delete problems')) {
-      return;
-    }
-    
-    const deletedCount = state.deletedProblems?.length || 0;
-    
-    if (deletedCount === 0) {
-      showNotification('No deleted problems to permanently remove', 'info');
-      return;
-    }
-    
-    const confirmMessage = `⚠️ PERMANENT DELETE\n\nThis will permanently remove ${deletedCount} deleted problem(s) from the trash.\n\nYou will NOT be able to restore them.\n\nAre you absolutely sure?`;
-    
-    if (confirm(confirmMessage)) {
-      // Second confirmation for safety
-      if (confirm('Final confirmation: Delete permanently?')) {
-        setState(prev => {
-          // Get list of deleted problem numbers
-          const deletedNumbers = prev.deletedProblems || [];
-          
-          // Move all deleted problems to permanentlyDeleted
-          const newPermanentlyDeleted = [
-            ...(prev.permanentlyDeleted || []),
-            ...deletedNumbers
-          ];
-          
-          // Remove custom problems from customProblems array
-          const deletedSet = new Set(deletedNumbers);
-          const filteredCustomProblems = prev.customProblems.filter(
-            p => !deletedSet.has(p.number)
-          );
-          
-          return {
-            ...prev,
-            customProblems: filteredCustomProblems,
-            deletedProblems: [], // Clear trash
-            permanentlyDeleted: newPermanentlyDeleted // Add to permanent list
-          };
-        });
-        showNotification(`🗑️ Permanently deleted ${deletedCount} problem(s)`, 'success');
-        console.log('🗑️ Permanent Delete:', { 
-          count: deletedCount,
-          message: 'Problems moved to permanently deleted list' 
-        });
-      }
     }
   };
 
@@ -1767,6 +1655,61 @@ function App() {
   // ============================================
   
   try {
+    // Show loading state while fetching from API
+    if (loading) {
+      return (
+        <div className="app">
+          <div style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            height: '100vh',
+            flexDirection: 'column',
+            gap: '20px'
+          }}>
+            <div style={{fontSize: '48px'}}>⏳</div>
+            <div style={{fontSize: '24px', color: 'var(--primary)'}}>Loading problems from API...</div>
+          </div>
+        </div>
+      );
+    }
+
+    // Show error state if API fails
+    if (apiError) {
+      return (
+        <div className="app">
+          <div style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            height: '100vh',
+            flexDirection: 'column',
+            gap: '20px'
+          }}>
+            <div style={{fontSize: '48px'}}>❌</div>
+            <div style={{fontSize: '24px', color: 'var(--danger)'}}>Failed to connect to API</div>
+            <div style={{fontSize: '16px', color: 'var(--text-secondary)'}}>{apiError}</div>
+            <div style={{fontSize: '14px', color: 'var(--text-muted)'}}>
+              Make sure backend is running on http://localhost:5001
+            </div>
+            <button 
+              onClick={() => window.location.reload()} 
+              style={{
+                padding: '10px 20px',
+                background: 'var(--primary)',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer'
+              }}
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="app">
       {/* Notification */}
@@ -2166,16 +2109,6 @@ function App() {
               <button className="btn-add-problem" onClick={() => setShowModal(true)}>
                 <span>+</span> Add Problem
               </button>
-              {state.deletedProblems && state.deletedProblems.length > 0 && (
-                <>
-                  <button className="btn-restore-deleted" onClick={handleRestoreDeletedProblems}>
-                    <span>↺</span> Restore Deleted ({state.deletedProblems.length})
-                  </button>
-                  <button className="btn-permanent-delete" onClick={handlePermanentDelete}>
-                    <span>🗑️</span> Permanent Delete
-                  </button>
-                </>
-              )}
             </div>
           </div>
           <div className="progress-bar-wrapper">
