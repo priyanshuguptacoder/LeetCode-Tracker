@@ -937,7 +937,14 @@ function App() {
   // ============================================
   
   const problemExists = (number) => {
-    return allProblems.some(p => p.number === number);
+    // Check in all sources: base dataset, custom problems, deleted, and permanently deleted
+    const existsInSolved = solvedProblems.some(p => p.number === number);
+    const existsInTarget = targetProblems.some(p => p.number === number);
+    const existsInCustom = state.customProblems.some(p => p.number === number);
+    const existsInDeleted = (state.deletedProblems || []).includes(number);
+    const existsInPermanentlyDeleted = (state.permanentlyDeleted || []).includes(number);
+    
+    return existsInSolved || existsInTarget || existsInCustom || existsInDeleted || existsInPermanentlyDeleted;
   };
 
   const validateDataset = () => {
@@ -996,8 +1003,20 @@ function App() {
 
     // Duplicate check
     if (problemExists(problemNumber)) {
-      showNotification(`⚠️ Problem #${problemNumber} already exists!`, 'error');
+      // Check where the problem exists
+      const existsInDeleted = (state.deletedProblems || []).includes(problemNumber);
+      const existsInPermanentlyDeleted = (state.permanentlyDeleted || []).includes(problemNumber);
       
+      let message = `⚠️ Problem #${problemNumber} already exists!`;
+      if (existsInPermanentlyDeleted) {
+        message = `⚠️ Problem #${problemNumber} was permanently deleted. Cannot add again.`;
+      } else if (existsInDeleted) {
+        message = `⚠️ Problem #${problemNumber} is in trash. Restore it first or use a different number.`;
+      }
+      
+      showNotification(message, 'error');
+      
+      // Try to highlight the row if it's visible
       const tableRow = document.querySelector(`tr[data-problem-number="${problemNumber}"]`);
       if (tableRow) {
         tableRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
