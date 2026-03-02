@@ -93,6 +93,41 @@ body {
     font-size: 13px;
     color: var(--text-secondary);
     font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.live-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--primary);
+    background: rgba(0, 200, 150, 0.1);
+    padding: 4px 10px;
+    border-radius: 12px;
+    border: 1px solid rgba(0, 200, 150, 0.2);
+}
+
+.live-dot {
+    width: 6px;
+    height: 6px;
+    background: var(--primary);
+    border-radius: 50%;
+    animation: pulse 2s ease infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { 
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% { 
+        opacity: 0.5;
+        transform: scale(1.2);
+    }
 }
 
 .header-actions {
@@ -789,6 +824,17 @@ body {
 @keyframes highlightPulse {
     0%, 100% { background: transparent; }
     50% { background: rgba(0, 200, 150, 0.15); }
+}
+
+@keyframes highlightRow {
+    0% { 
+        background: rgba(0, 200, 150, 0.3);
+        transform: scale(1.02);
+    }
+    100% { 
+        background: transparent;
+        transform: scale(1);
+    }
 }
 
 .problems-table td {

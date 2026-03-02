@@ -1033,13 +1033,42 @@ function App() {
           ...prev.solvedDates,
           [problemNumber]: today
         };
+        
+        // Update calendar activity dates
+        if (prev.calendarActivityDates) {
+          const currentDates = new Set(prev.calendarActivityDates);
+          if (!currentDates.has(today)) {
+            newState.calendarActivityDates = [...prev.calendarActivityDates, today];
+          }
+        }
       }
       
       return newState;
     });
 
-    showNotification(`✓ Problem #${problemNumber} added successfully!`, 'success');
+    // Show success notification with animation
+    const statsUpdate = formData.type === 'Solved' 
+      ? `Total: ${totalSolved + 1} | Active Days: ${heatmapData.activeDays + (state.calendarActivityDates && !state.calendarActivityDates.includes(new Date().toISOString().split('T')[0]) ? 1 : 0)}`
+      : '';
+    
+    showNotification(
+      `✅ Problem #${problemNumber} added successfully! ${statsUpdate}`, 
+      'success'
+    );
+    
+    // Log for debugging
+    console.log('✅ Problem Added:', {
+      number: problemNumber,
+      title: formData.title,
+      type: formData.type,
+      pattern: detectedPattern,
+      autoDetected: !hasPattern
+    });
+    
+    // Close modal with animation
     setShowModal(false);
+    
+    // Reset form
     setFormData({
       number: '',
       title: '',
@@ -1048,6 +1077,15 @@ function App() {
       pattern: '',
       link: ''
     });
+    
+    // Scroll to the new problem after a short delay
+    setTimeout(() => {
+      const tableRow = document.querySelector(`tr[data-problem-number="${problemNumber}"]`);
+      if (tableRow) {
+        tableRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        tableRow.style.animation = 'highlightRow 2s ease';
+      }
+    }, 100);
   };
 
   // ============================================
@@ -1186,10 +1224,23 @@ function App() {
         }
         
         // Show success notification with problem info
+        const statsUpdate = problem && problem.status === 'Done'
+          ? `Total: ${totalSolved - 1} | Active Days: ${heatmapData.activeDays}`
+          : '';
+        
         showNotification(
-          `✅ Problem #${number} deleted successfully${problem ? ` - ${problem.title}` : ''}`, 
+          `✅ Problem #${number} deleted successfully${problem ? ` - ${problem.title}` : ''} ${statsUpdate}`, 
           'success'
         );
+        
+        // Log for debugging
+        console.log('🗑️ Problem Deleted:', {
+          number,
+          title: problem?.title,
+          wasCustom: isCustom,
+          hadDate: !!removedDate,
+          statsRecalculated: true
+        });
       }, 300);
     }
   };
@@ -1576,7 +1627,12 @@ function App() {
         <div className="header-content">
           <div className="header-title">
             <h1>Priyanshu Gupta</h1>
-            <p className="subtitle">Competitive Programming Intelligence Engine</p>
+            <p className="subtitle">
+              Competitive Programming Intelligence Engine
+              <span className="live-indicator" title="All stats update in real-time">
+                <span className="live-dot"></span> Live
+              </span>
+            </p>
           </div>
           <div className="header-actions">
             <a 
