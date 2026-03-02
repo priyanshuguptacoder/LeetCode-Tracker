@@ -1578,6 +1578,47 @@ function App() {
               })()}
             </div>
 
+            {/* Last 7 Days Activity */}
+            <div className="recent-activity-section">
+              <div className="recent-activity-title">Last 7 Days Activity</div>
+              <div className="recent-activity-grid">
+                {(() => {
+                  const days = [];
+                  const today = new Date();
+                  
+                  for (let i = 6; i >= 0; i--) {
+                    const date = new Date(today);
+                    date.setDate(date.getDate() - i);
+                    const dateStr = date.toISOString().split('T')[0];
+                    const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+                    
+                    // Count problems solved on this date
+                    const problemCount = Object.entries(state.solvedDates || {}).filter(
+                      ([_, solvedDate]) => solvedDate === dateStr
+                    ).length;
+                    
+                    const isToday = i === 0;
+                    
+                    days.push(
+                      <div key={dateStr} className={`activity-day ${isToday ? 'today' : ''}`}>
+                        <div className="activity-day-name">{dayName}</div>
+                        <div className={`activity-day-count ${problemCount > 0 ? 'active' : 'inactive'}`}>
+                          {problemCount > 0 ? problemCount : '—'}
+                        </div>
+                        <div className="activity-day-bar">
+                          <div 
+                            className="activity-day-bar-fill"
+                            style={{ height: `${Math.min((problemCount / 5) * 100, 100)}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return days;
+                })()}
+              </div>
+            </div>
+
             {/* Next Milestone */}
             <div className="streak-milestone">
               <div className="milestone-header">
