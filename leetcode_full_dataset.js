@@ -1,9 +1,8 @@
 // BASE DATASET - READ ONLY - DO NOT MODIFY
-// Priyanshu's 155 Solved Problems (67 Easy + 77 Medium + 11 Hard)
+// Priyanshu's 155 Solved Problems (67 Easy + 76 Medium + 12 Hard)
 const solvedProblems = [
   // Easy (67)
   { number: 1, title: "Two Sum", difficulty: "Easy", pattern: "Arrays / Hashing", link: "https://leetcode.com/problems/two-sum/" },
-  { number: 4, title: "Median of Two Sorted Arrays", difficulty: "Hard", pattern: "Binary Search", link: "https://leetcode.com/problems/median-of-two-sorted-arrays/" },
   { number: 9, title: "Palindrome Number", difficulty: "Easy", pattern: "Math", link: "https://leetcode.com/problems/palindrome-number/" },
   { number: 13, title: "Roman to Integer", difficulty: "Easy", pattern: "Strings", link: "https://leetcode.com/problems/roman-to-integer/" },
   { number: 14, title: "Longest Common Prefix", difficulty: "Easy", pattern: "Strings", link: "https://leetcode.com/problems/longest-common-prefix/" },
@@ -193,6 +192,7 @@ const targetProblems = [
   number: 221, title: "Maximal Square", difficulty: "Medium", pattern: "Dynamic Programming / Matrix", link: "https://leetcode.com/problems/maximal-square/"},
   { number: 137, title: "Single Number II", difficulty: "Medium", link: "https://leetcode.com/problems/single-number-ii/" },
   { number: 201, title: "Bitwise AND of Numbers Range", difficulty: "Medium", link: "https://leetcode.com/problems/bitwise-and-of-numbers-range/" },
+  { number: 260, title: "Single Number III", difficulty: "Medium", link: "https://leetcode.com/problems/single-number-iii/" },
   { number: 491, title: "Non-decreasing Subsequences", difficulty: "Medium", link: "https://leetcode.com/problems/non-decreasing-subsequences/" },
   // ===== Stack / Monotonic =====
   { number: 1249, title: "Minimum Remove to Make Valid Parentheses", difficulty: "Medium", link: "https://leetcode.com/problems/minimum-remove-to-make-valid-parentheses/" },

@@ -66,7 +66,7 @@ function App() {
   });
 
   // Password protection
-  const ADMIN_PASSWORD = '9653007120';
+  const ADMIN_PASSWORD = '0000';
 
   // Form state for modal
   const [formData, setFormData] = useState({
