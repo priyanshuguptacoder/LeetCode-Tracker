@@ -1470,7 +1470,57 @@ function App() {
   const avgProblemsPerDay = activeDaysCount > 0 ? (totalSolved / activeDaysCount).toFixed(2) : 0;
 
   // Advanced Analytics
-  const consistencyScore = calculateConsistencyScore(allProblems, state.solvedDates);
+  const consistencyScore = React.useMemo(() => {
+    const dates = Object.values(state.solvedDates || {}).filter(d => d);
+    if (dates.length === 0) {
+      return { 
+        score: 0, 
+        status: '🔴 Low', 
+        label: 'Low',
+        totalDaysTracked: 0,
+        activeDays: 0,
+        averageProblemsPerActiveDay: 0
+      };
+    }
+    
+    const sortedDates = dates.sort();
+    const firstDate = new Date(sortedDates[0]);
+    const today = new Date();
+    const totalDaysTracked = Math.max(1, Math.ceil((today - firstDate) / (1000 * 60 * 60 * 24)));
+    
+    // Use heatmapData.activeDays for consistency with top stats
+    const activeDays = heatmapData.activeDays;
+    const averageProblemsPerActiveDay = activeDays > 0 ? totalSolved / activeDays : 0;
+    
+    let consistency = (activeDays / totalDaysTracked) * 100;
+    
+    // Boost if solving 3+ problems per active day
+    if (averageProblemsPerActiveDay >= 3) {
+      consistency = Math.min(100, consistency * 1.1);
+    }
+    
+    let status, label;
+    if (consistency < 40) {
+      status = '🔴 Low';
+      label = 'Low';
+    } else if (consistency < 70) {
+      status = '🟡 Improving';
+      label = 'Improving';
+    } else {
+      status = '🟢 Strong Discipline';
+      label = 'Strong Discipline';
+    }
+    
+    return {
+      score: Math.round(consistency),
+      status,
+      label,
+      totalDaysTracked,
+      activeDays,
+      averageProblemsPerActiveDay: averageProblemsPerActiveDay.toFixed(1)
+    };
+  }, [heatmapData.activeDays, totalSolved, state.solvedDates]);
+
   const milestones = calculateMilestones(totalSolved);
   const weeklyPerformance = calculateWeeklyPerformance(allProblems, state.solvedDates);
   const dailyAverage = calculateDailyAverage(allProblems, state.solvedDates);
@@ -1718,10 +1768,10 @@ function App() {
             </div>
           </div>
           <div className="stat-card stat-secondary">
-            <div className="stat-icon">🔥</div>
+            <div className="stat-icon">🎯</div>
             <div className="stat-content">
-              <div className="stat-value">{heatmapData.currentStreak}</div>
-              <div className="stat-label">Current Streak</div>
+              <div className="stat-value">{totalTarget}</div>
+              <div className="stat-label">Target</div>
             </div>
           </div>
           <div className="stat-card stat-accent">
