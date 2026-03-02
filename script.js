@@ -1302,19 +1302,27 @@ function App() {
           // Get list of deleted problem numbers
           const deletedNumbers = new Set(prev.deletedProblems || []);
           
-          // Remove from customProblems permanently
+          // Remove custom problems permanently from customProblems array
           const filteredCustomProblems = prev.customProblems.filter(
             p => !deletedNumbers.has(p.number)
           );
           
+          // IMPORTANT: Keep deletedProblems array unchanged
+          // This ensures base dataset problems stay hidden
+          // Custom problems are removed from customProblems, so they won't appear even if in deletedProblems
+          
           return {
             ...prev,
-            customProblems: filteredCustomProblems,
-            deletedProblems: [] // Clear the trash
+            customProblems: filteredCustomProblems
+            // deletedProblems stays the same - keeps base problems hidden
           };
         });
         showNotification(`🗑️ Permanently deleted ${deletedCount} problem(s)`, 'success');
-        console.log('🗑️ Permanent Delete:', { count: deletedCount, message: 'Problems removed from customProblems and trash cleared' });
+        console.log('🗑️ Permanent Delete:', { 
+          count: deletedCount, 
+          customRemoved: deletedCount,
+          message: 'Custom problems removed from array, deleted list unchanged' 
+        });
       }
     }
   };
