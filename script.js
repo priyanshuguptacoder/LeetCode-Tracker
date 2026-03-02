@@ -247,12 +247,23 @@ function App() {
   // ============================================
   
   const calculateHeatmapAndStreak = (problems, solvedDates) => {
+    if (!problems || !solvedDates) {
+      return {
+        dateCounts: {},
+        activeDays: 0,
+        currentStreak: 0,
+        maxStreak: 0
+      };
+    }
+    
     const dateCounts = {};
     
     problems.forEach(problem => {
-      if (problem.status === 'Done' && solvedDates[problem.number]) {
+      if (problem && problem.status === 'Done' && problem.number && solvedDates[problem.number]) {
         const dateStr = solvedDates[problem.number];
-        dateCounts[dateStr] = (dateCounts[dateStr] || 0) + 1;
+        if (dateStr) {
+          dateCounts[dateStr] = (dateCounts[dateStr] || 0) + 1;
+        }
       }
     });
     
@@ -278,6 +289,8 @@ function App() {
     let prevDate = null;
     
     sortedDates.forEach(dateStr => {
+      if (!dateStr) return;
+      
       const currentDate = new Date(dateStr);
       
       if (prevDate) {
@@ -311,8 +324,28 @@ function App() {
   
   // 1️⃣ CONSISTENCY SCORE
   const calculateConsistencyScore = (problems, solvedDates) => {
+    if (!problems || !solvedDates) {
+      return { 
+        score: 0, 
+        status: '🔴 Low', 
+        label: 'Low',
+        totalDaysTracked: 0,
+        activeDays: 0,
+        averageProblemsPerActiveDay: 0
+      };
+    }
+    
     const dates = Object.values(solvedDates).filter(d => d);
-    if (dates.length === 0) return { score: 0, status: '🔴 Low', label: 'Low' };
+    if (dates.length === 0) {
+      return { 
+        score: 0, 
+        status: '🔴 Low', 
+        label: 'Low',
+        totalDaysTracked: 0,
+        activeDays: 0,
+        averageProblemsPerActiveDay: 0
+      };
+    }
     
     const sortedDates = dates.sort();
     const firstDate = new Date(sortedDates[0]);
@@ -320,7 +353,7 @@ function App() {
     const totalDaysTracked = Math.max(1, Math.ceil((today - firstDate) / (1000 * 60 * 60 * 24)));
     
     const activeDays = new Set(dates).size;
-    const totalSolved = problems.filter(p => p.status === 'Done').length;
+    const totalSolved = problems.filter(p => p && p.status === 'Done').length;
     const averageProblemsPerActiveDay = activeDays > 0 ? totalSolved / activeDays : 0;
     
     let consistency = (activeDays / totalDaysTracked) * 100;
@@ -372,6 +405,15 @@ function App() {
 
   // 3️⃣ WEEKLY PERFORMANCE
   const calculateWeeklyPerformance = (problems, solvedDates) => {
+    if (!problems || !solvedDates) {
+      return {
+        thisWeek: 0,
+        lastWeek: 0,
+        change: 0,
+        trend: '➡️'
+      };
+    }
+    
     const getISOWeekStart = (date) => {
       const d = new Date(date);
       const day = d.getDay();
@@ -388,7 +430,7 @@ function App() {
     let lastWeekCount = 0;
     
     problems.forEach(problem => {
-      if (problem.status === 'Done' && solvedDates[problem.number]) {
+      if (problem && problem.status === 'Done' && problem.number && solvedDates[problem.number]) {
         const solvedDate = new Date(solvedDates[problem.number]);
         
         if (solvedDate >= thisWeekStart) {
@@ -413,8 +455,18 @@ function App() {
 
   // 4️⃣ DAILY AVERAGE TREND
   const calculateDailyAverage = (problems, solvedDates) => {
+    if (!problems || !solvedDates) {
+      return {
+        overallAvg: 0,
+        last7Avg: 0,
+        prev7Avg: 0,
+        trend: 'Stable',
+        arrow: '➡️'
+      };
+    }
+    
     const activeDays = new Set(Object.values(solvedDates).filter(d => d)).size;
-    const totalSolved = problems.filter(p => p.status === 'Done').length;
+    const totalSolved = problems.filter(p => p && p.status === 'Done').length;
     const overallAvg = activeDays > 0 ? (totalSolved / activeDays).toFixed(2) : 0;
     
     // Last 7 days
@@ -430,7 +482,7 @@ function App() {
     const prev7Days = new Set();
     
     problems.forEach(problem => {
-      if (problem.status === 'Done' && solvedDates[problem.number]) {
+      if (problem && problem.status === 'Done' && problem.number && solvedDates[problem.number]) {
         const solvedDate = new Date(solvedDates[problem.number]);
         
         if (solvedDate >= last7Start) {
@@ -461,12 +513,20 @@ function App() {
 
   // 5️⃣ REVISION TRACKING
   const getRevisionStats = (problems) => {
+    if (!problems) {
+      return {
+        needsRevisionCount: 0,
+        needsRevisionProblems: [],
+        recentlyRevised: []
+      };
+    }
+    
     const needsRevision = problems.filter(p => 
-      p.status === 'Done' && state.revisionFlags[p.number]?.needsRevision
+      p && p.status === 'Done' && state.revisionFlags && state.revisionFlags[p.number]?.needsRevision
     );
     
     const recentlyRevised = problems
-      .filter(p => state.revisionFlags[p.number]?.lastRevisedDate)
+      .filter(p => p && state.revisionFlags && state.revisionFlags[p.number]?.lastRevisedDate)
       .sort((a, b) => {
         const dateA = state.revisionFlags[a.number]?.lastRevisedDate || '';
         const dateB = state.revisionFlags[b.number]?.lastRevisedDate || '';
@@ -483,6 +543,13 @@ function App() {
 
   // 6️⃣ STRONGEST DAY
   const calculateStrongestDay = (solvedDates) => {
+    if (!solvedDates) {
+      return {
+        count: 0,
+        date: 'N/A'
+      };
+    }
+    
     const dateCounts = {};
     
     Object.values(solvedDates).forEach(dateStr => {
@@ -513,6 +580,16 @@ function App() {
 
   // 7️⃣ SOLVE TIME TRACKING
   const calculateSolveTimes = (problems, solveTimes) => {
+    if (!problems || !solveTimes) {
+      return {
+        overallAvg: 0,
+        easyAvg: 0,
+        mediumAvg: 0,
+        hardAvg: 0,
+        totalTracked: 0
+      };
+    }
+    
     const times = {
       overall: [],
       Easy: [],
@@ -521,10 +598,10 @@ function App() {
     };
     
     problems.forEach(problem => {
-      if (problem.status === 'Done' && solveTimes[problem.number]) {
+      if (problem && problem.status === 'Done' && problem.number && solveTimes[problem.number]) {
         const time = solveTimes[problem.number];
         times.overall.push(time);
-        if (times[problem.difficulty]) {
+        if (problem.difficulty && times[problem.difficulty]) {
           times[problem.difficulty].push(time);
         }
       }
