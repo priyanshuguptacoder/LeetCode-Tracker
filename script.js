@@ -16,6 +16,8 @@ function App() {
       customProblems: [],
       deletedProblems: [],
       solvedDates: {}, // { problemNumber: "YYYY-MM-DD" }
+      revisionFlags: {}, // { problemNumber: { needsRevision: boolean, revisionCount: number, lastRevisedDate: string } }
+      solveTimes: {}, // { problemNumber: number (minutes) }
       historicalDatesGenerated: false,
       monthlyTarget: 30,
       todayCount: 0,
@@ -304,6 +306,242 @@ function App() {
   };
 
   // ============================================
+  // ADVANCED ANALYTICS
+  // ============================================
+  
+  // 1️⃣ CONSISTENCY SCORE
+  const calculateConsistencyScore = (problems, solvedDates) => {
+    const dates = Object.values(solvedDates).filter(d => d);
+    if (dates.length === 0) return { score: 0, status: '🔴 Low', label: 'Low' };
+    
+    const sortedDates = dates.sort();
+    const firstDate = new Date(sortedDates[0]);
+    const today = new Date();
+    const totalDaysTracked = Math.max(1, Math.ceil((today - firstDate) / (1000 * 60 * 60 * 24)));
+    
+    const activeDays = new Set(dates).size;
+    const totalSolved = problems.filter(p => p.status === 'Done').length;
+    const averageProblemsPerActiveDay = activeDays > 0 ? totalSolved / activeDays : 0;
+    
+    let consistency = (activeDays / totalDaysTracked) * 100;
+    
+    // Boost if solving 3+ problems per active day
+    if (averageProblemsPerActiveDay >= 3) {
+      consistency = Math.min(100, consistency * 1.1);
+    }
+    
+    let status, label;
+    if (consistency < 40) {
+      status = '🔴 Low';
+      label = 'Low';
+    } else if (consistency < 70) {
+      status = '🟡 Improving';
+      label = 'Improving';
+    } else {
+      status = '🟢 Strong Discipline';
+      label = 'Strong Discipline';
+    }
+    
+    return {
+      score: Math.round(consistency),
+      status,
+      label,
+      totalDaysTracked,
+      activeDays,
+      averageProblemsPerActiveDay: averageProblemsPerActiveDay.toFixed(1)
+    };
+  };
+
+  // 2️⃣ GOAL MILESTONES
+  const calculateMilestones = (totalSolved) => {
+    const milestones = [
+      { value: 150, label: '150 Problems', icon: '🥉' },
+      { value: 200, label: '200 Problems', icon: '🥈' },
+      { value: 250, label: '250 Problems', icon: '🥇' },
+      { value: 300, label: '300 Problems', icon: '🏆' }
+    ];
+    
+    const unlocked = milestones.filter(m => totalSolved >= m.value);
+    const nextMilestone = milestones.find(m => totalSolved < m.value);
+    const progressToNext = nextMilestone 
+      ? ((totalSolved / nextMilestone.value) * 100).toFixed(1)
+      : 100;
+    
+    return { unlocked, nextMilestone, progressToNext };
+  };
+
+  // 3️⃣ WEEKLY PERFORMANCE
+  const calculateWeeklyPerformance = (problems, solvedDates) => {
+    const getISOWeekStart = (date) => {
+      const d = new Date(date);
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Monday
+      return new Date(d.setDate(diff));
+    };
+    
+    const today = new Date();
+    const thisWeekStart = getISOWeekStart(today);
+    const lastWeekStart = new Date(thisWeekStart);
+    lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+    
+    let thisWeekCount = 0;
+    let lastWeekCount = 0;
+    
+    problems.forEach(problem => {
+      if (problem.status === 'Done' && solvedDates[problem.number]) {
+        const solvedDate = new Date(solvedDates[problem.number]);
+        
+        if (solvedDate >= thisWeekStart) {
+          thisWeekCount++;
+        } else if (solvedDate >= lastWeekStart && solvedDate < thisWeekStart) {
+          lastWeekCount++;
+        }
+      }
+    });
+    
+    const change = lastWeekCount > 0 
+      ? (((thisWeekCount - lastWeekCount) / lastWeekCount) * 100).toFixed(1)
+      : thisWeekCount > 0 ? 100 : 0;
+    
+    return {
+      thisWeek: thisWeekCount,
+      lastWeek: lastWeekCount,
+      change: parseFloat(change),
+      trend: change > 0 ? '📈' : change < 0 ? '📉' : '➡️'
+    };
+  };
+
+  // 4️⃣ DAILY AVERAGE TREND
+  const calculateDailyAverage = (problems, solvedDates) => {
+    const activeDays = new Set(Object.values(solvedDates).filter(d => d)).size;
+    const totalSolved = problems.filter(p => p.status === 'Done').length;
+    const overallAvg = activeDays > 0 ? (totalSolved / activeDays).toFixed(2) : 0;
+    
+    // Last 7 days
+    const today = new Date();
+    const last7Start = new Date(today);
+    last7Start.setDate(last7Start.getDate() - 7);
+    const prev7Start = new Date(last7Start);
+    prev7Start.setDate(prev7Start.getDate() - 7);
+    
+    let last7Count = 0;
+    let prev7Count = 0;
+    const last7Days = new Set();
+    const prev7Days = new Set();
+    
+    problems.forEach(problem => {
+      if (problem.status === 'Done' && solvedDates[problem.number]) {
+        const solvedDate = new Date(solvedDates[problem.number]);
+        
+        if (solvedDate >= last7Start) {
+          last7Count++;
+          last7Days.add(solvedDates[problem.number]);
+        } else if (solvedDate >= prev7Start && solvedDate < last7Start) {
+          prev7Count++;
+          prev7Days.add(solvedDates[problem.number]);
+        }
+      }
+    });
+    
+    const last7Avg = last7Days.size > 0 ? (last7Count / last7Days.size).toFixed(2) : 0;
+    const prev7Avg = prev7Days.size > 0 ? (prev7Count / prev7Days.size).toFixed(2) : 0;
+    
+    let trend = 'Stable';
+    if (last7Avg > prev7Avg) trend = 'Improving';
+    else if (last7Avg < prev7Avg) trend = 'Declining';
+    
+    return {
+      overallAvg,
+      last7Avg,
+      prev7Avg,
+      trend,
+      arrow: trend === 'Improving' ? '📈' : trend === 'Declining' ? '📉' : '➡️'
+    };
+  };
+
+  // 5️⃣ REVISION TRACKING
+  const getRevisionStats = (problems) => {
+    const needsRevision = problems.filter(p => 
+      p.status === 'Done' && state.revisionFlags[p.number]?.needsRevision
+    );
+    
+    const recentlyRevised = problems
+      .filter(p => state.revisionFlags[p.number]?.lastRevisedDate)
+      .sort((a, b) => {
+        const dateA = state.revisionFlags[a.number]?.lastRevisedDate || '';
+        const dateB = state.revisionFlags[b.number]?.lastRevisedDate || '';
+        return dateB.localeCompare(dateA);
+      })
+      .slice(0, 5);
+    
+    return {
+      needsRevisionCount: needsRevision.length,
+      needsRevisionProblems: needsRevision,
+      recentlyRevised
+    };
+  };
+
+  // 6️⃣ STRONGEST DAY
+  const calculateStrongestDay = (solvedDates) => {
+    const dateCounts = {};
+    
+    Object.values(solvedDates).forEach(dateStr => {
+      if (dateStr) {
+        dateCounts[dateStr] = (dateCounts[dateStr] || 0) + 1;
+      }
+    });
+    
+    let maxCount = 0;
+    let bestDate = null;
+    
+    Object.entries(dateCounts).forEach(([date, count]) => {
+      if (count > maxCount) {
+        maxCount = count;
+        bestDate = date;
+      }
+    });
+    
+    return {
+      count: maxCount,
+      date: bestDate ? new Date(bestDate).toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric', 
+        year: 'numeric' 
+      }) : 'N/A'
+    };
+  };
+
+  // 7️⃣ SOLVE TIME TRACKING
+  const calculateSolveTimes = (problems, solveTimes) => {
+    const times = {
+      overall: [],
+      Easy: [],
+      Medium: [],
+      Hard: []
+    };
+    
+    problems.forEach(problem => {
+      if (problem.status === 'Done' && solveTimes[problem.number]) {
+        const time = solveTimes[problem.number];
+        times.overall.push(time);
+        if (times[problem.difficulty]) {
+          times[problem.difficulty].push(time);
+        }
+      }
+    });
+    
+    const avg = (arr) => arr.length > 0 ? (arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1) : 0;
+    
+    return {
+      overallAvg: avg(times.overall),
+      easyAvg: avg(times.Easy),
+      mediumAvg: avg(times.Medium),
+      hardAvg: avg(times.Hard),
+      totalTracked: times.overall.length
+    };
+  };
+
+  // ============================================
   // DATA LAYER - SAFE MERGE SYSTEM
   // ============================================
   
@@ -411,6 +649,15 @@ function App() {
   const bestMonth = getBestMonth(monthlyData);
   const last6Months = getLast6Months(monthlyData);
   const maxMonthlyCount = Math.max(...last6Months.map(m => m.count), 1);
+  
+  // Advanced Analytics
+  const consistencyScore = calculateConsistencyScore(allProblems, state.solvedDates);
+  const milestones = calculateMilestones(totalSolved);
+  const weeklyPerformance = calculateWeeklyPerformance(allProblems, state.solvedDates);
+  const dailyAverage = calculateDailyAverage(allProblems, state.solvedDates);
+  const revisionStats = getRevisionStats(allProblems);
+  const strongestDay = calculateStrongestDay(state.solvedDates);
+  const solveTimes = calculateSolveTimes(allProblems, state.solveTimes || {});
 
   // ============================================
   // DUPLICATE PREVENTION & VALIDATION
@@ -542,6 +789,23 @@ function App() {
       return;
     }
     
+    // Prompt for solve time when marking as Done
+    if (newStatus === 'Done') {
+      const time = prompt('Enter solve time in minutes (optional, press Cancel to skip):');
+      if (time !== null && time.trim() !== '') {
+        const minutes = parseInt(time);
+        if (!isNaN(minutes) && minutes > 0) {
+          setState(prev => ({
+            ...prev,
+            solveTimes: {
+              ...prev.solveTimes,
+              [number]: minutes
+            }
+          }));
+        }
+      }
+    }
+    
     setState(prev => {
       const newState = {
         ...prev,
@@ -560,10 +824,18 @@ function App() {
         };
       }
       
-      // Remove date when unmarking as Done
-      if (newStatus !== 'Done' && prev.solvedDates[number]) {
-        const { [number]: removed, ...remainingDates } = prev.solvedDates;
-        newState.solvedDates = remainingDates;
+      // Remove date and revision flag when unmarking as Done
+      if (newStatus !== 'Done') {
+        if (prev.solvedDates[number]) {
+          const { [number]: removed, ...remainingDates } = prev.solvedDates;
+          newState.solvedDates = remainingDates;
+        }
+        
+        // Remove revision flag
+        if (prev.revisionFlags[number]) {
+          const { [number]: removed, ...remainingFlags } = prev.revisionFlags;
+          newState.revisionFlags = remainingFlags;
+        }
       }
       
       return newState;
@@ -602,6 +874,65 @@ function App() {
         }));
       }
       showNotification('Problem deleted', 'success');
+    }
+  };
+
+  const handleToggleRevision = (number) => {
+    if (!verifyPassword('toggle revision flag')) {
+      return;
+    }
+    
+    setState(prev => {
+      const current = prev.revisionFlags[number] || { needsRevision: false, revisionCount: 0 };
+      return {
+        ...prev,
+        revisionFlags: {
+          ...prev.revisionFlags,
+          [number]: {
+            ...current,
+            needsRevision: !current.needsRevision
+          }
+        }
+      };
+    });
+  };
+
+  const handleMarkRevised = (number) => {
+    if (!verifyPassword('mark as revised')) {
+      return;
+    }
+    
+    setState(prev => {
+      const current = prev.revisionFlags[number] || { needsRevision: false, revisionCount: 0 };
+      return {
+        ...prev,
+        revisionFlags: {
+          ...prev.revisionFlags,
+          [number]: {
+            needsRevision: false,
+            revisionCount: current.revisionCount + 1,
+            lastRevisedDate: new Date().toISOString().split('T')[0]
+          }
+        }
+      };
+    });
+    
+    showNotification('✓ Marked as revised', 'success');
+  };
+
+  const handleSolveTimeInput = (number) => {
+    const time = prompt('Enter solve time in minutes (or leave blank to skip):');
+    if (time !== null && time.trim() !== '') {
+      const minutes = parseInt(time);
+      if (!isNaN(minutes) && minutes > 0) {
+        setState(prev => ({
+          ...prev,
+          solveTimes: {
+            ...prev.solveTimes,
+            [number]: minutes
+          }
+        }));
+      }
     }
   };
 
@@ -861,6 +1192,161 @@ function App() {
           </div>
         </div>
 
+        {/* Advanced Analytics Grid */}
+        <div className="advanced-analytics-grid">
+          {/* Consistency Score */}
+          <div className="analytics-card consistency-card">
+            <h3 className="card-title">🎯 Consistency Score</h3>
+            <div className="consistency-content">
+              <div className="consistency-score-display">
+                <div className="consistency-score">{consistencyScore.score}%</div>
+                <div className="consistency-status">{consistencyScore.status}</div>
+              </div>
+              <div className="consistency-details">
+                <div className="consistency-detail-item">
+                  <span className="detail-label">Active Days:</span>
+                  <span className="detail-value">{consistencyScore.activeDays} / {consistencyScore.totalDaysTracked}</span>
+                </div>
+                <div className="consistency-detail-item">
+                  <span className="detail-label">Avg per Day:</span>
+                  <span className="detail-value">{consistencyScore.averageProblemsPerActiveDay}</span>
+                </div>
+              </div>
+              <div className="consistency-tooltip">
+                💡 Score = (Active Days / Total Days) × 100. Bonus for 3+ problems/day.
+              </div>
+            </div>
+          </div>
+
+          {/* Weekly Performance */}
+          <div className="analytics-card weekly-card">
+            <h3 className="card-title">📊 Weekly Performance</h3>
+            <div className="weekly-content">
+              <div className="weekly-comparison">
+                <div className="weekly-item">
+                  <div className="weekly-label">This Week</div>
+                  <div className="weekly-value">{weeklyPerformance.thisWeek}</div>
+                </div>
+                <div className="weekly-divider"></div>
+                <div className="weekly-item">
+                  <div className="weekly-label">Last Week</div>
+                  <div className="weekly-value">{weeklyPerformance.lastWeek}</div>
+                </div>
+              </div>
+              <div className="weekly-change">
+                <span className="change-icon">{weeklyPerformance.trend}</span>
+                <span className="change-value" style={{ color: weeklyPerformance.change > 0 ? 'var(--success)' : weeklyPerformance.change < 0 ? 'var(--danger)' : 'var(--text-secondary)' }}>
+                  {weeklyPerformance.change > 0 ? '+' : ''}{weeklyPerformance.change}%
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Daily Average */}
+          <div className="analytics-card daily-avg-card">
+            <h3 className="card-title">📈 Daily Average</h3>
+            <div className="daily-avg-content">
+              <div className="daily-avg-main">
+                <div className="daily-avg-value">{dailyAverage.overallAvg}</div>
+                <div className="daily-avg-label">Problems per Active Day</div>
+              </div>
+              <div className="daily-avg-trend">
+                <div className="trend-item">
+                  <span className="trend-label">Last 7 Days:</span>
+                  <span className="trend-value">{dailyAverage.last7Avg}</span>
+                </div>
+                <div className="trend-status">
+                  <span className="trend-arrow">{dailyAverage.arrow}</span>
+                  <span className="trend-text">{dailyAverage.trend}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Strongest Day */}
+          <div className="analytics-card strongest-day-card">
+            <h3 className="card-title">🔥 Best Day Record</h3>
+            <div className="strongest-day-content">
+              <div className="strongest-day-count">{strongestDay.count}</div>
+              <div className="strongest-day-label">Problems Solved</div>
+              <div className="strongest-day-date">{strongestDay.date}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Milestones */}
+        <div className="milestones-card">
+          <h3 className="card-title">🏆 Goal Milestones</h3>
+          <div className="milestones-grid">
+            {milestones.unlocked.map(milestone => (
+              <div key={milestone.value} className="milestone-badge unlocked">
+                <span className="milestone-icon">{milestone.icon}</span>
+                <span className="milestone-label">{milestone.label}</span>
+                <span className="milestone-status">✓ Unlocked</span>
+              </div>
+            ))}
+            {milestones.nextMilestone && (
+              <div className="milestone-badge next">
+                <span className="milestone-icon">{milestones.nextMilestone.icon}</span>
+                <span className="milestone-label">{milestones.nextMilestone.label}</span>
+                <div className="milestone-progress-bar">
+                  <div className="milestone-progress-fill" style={{ width: `${milestones.progressToNext}%` }}></div>
+                </div>
+                <span className="milestone-progress-text">{milestones.progressToNext}%</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Solve Time Analytics */}
+        {solveTimes.totalTracked > 0 && (
+          <div className="solve-time-card">
+            <h3 className="card-title">⏱️ Solve Time Analytics</h3>
+            <div className="solve-time-grid">
+              <div className="solve-time-item">
+                <div className="solve-time-label">Overall Average</div>
+                <div className="solve-time-value">{solveTimes.overallAvg} min</div>
+              </div>
+              <div className="solve-time-item">
+                <div className="solve-time-label">Easy</div>
+                <div className="solve-time-value">{solveTimes.easyAvg} min</div>
+              </div>
+              <div className="solve-time-item">
+                <div className="solve-time-label">Medium</div>
+                <div className="solve-time-value">{solveTimes.mediumAvg} min</div>
+              </div>
+              <div className="solve-time-item">
+                <div className="solve-time-label">Hard</div>
+                <div className="solve-time-value">{solveTimes.hardAvg} min</div>
+              </div>
+            </div>
+            <div className="solve-time-footer">
+              Tracked for {solveTimes.totalTracked} problems
+            </div>
+          </div>
+        )}
+
+        {/* Revision Tracking */}
+        {revisionStats.needsRevisionCount > 0 && (
+          <div className="revision-card">
+            <h3 className="card-title">📝 Needs Revision ({revisionStats.needsRevisionCount})</h3>
+            <div className="revision-list">
+              {revisionStats.needsRevisionProblems.slice(0, 5).map(problem => (
+                <div key={problem.number} className="revision-item">
+                  <span className="revision-number">#{problem.number}</span>
+                  <span className="revision-title">{problem.title}</span>
+                  <button 
+                    className="btn-revised"
+                    onClick={() => handleMarkRevised(problem.number)}
+                  >
+                    Mark Revised
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Progress Section */}
         <div className="progress-card">
           <div className="progress-header">
@@ -1095,13 +1581,24 @@ function App() {
                         </select>
                       </td>
                       <td>
-                        <button 
-                          className="btn-delete"
-                          onClick={() => handleDelete(problem.number, problem.isCustom)}
-                          title="Delete problem"
-                        >
-                          🗑️
-                        </button>
+                        <div className="action-buttons">
+                          {problem.status === 'Done' && (
+                            <button 
+                              className={`btn-revision ${state.revisionFlags[problem.number]?.needsRevision ? 'active' : ''}`}
+                              onClick={() => handleToggleRevision(problem.number)}
+                              title={state.revisionFlags[problem.number]?.needsRevision ? 'Remove revision flag' : 'Mark for revision'}
+                            >
+                              📝
+                            </button>
+                          )}
+                          <button 
+                            className="btn-delete"
+                            onClick={() => handleDelete(problem.number, problem.isCustom)}
+                            title="Delete problem"
+                          >
+                            🗑️
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
