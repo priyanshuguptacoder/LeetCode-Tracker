@@ -1535,11 +1535,6 @@ function App() {
     cleanOrphanData();
   }, [allProblems.length]);
 
-    // Check every hour for date changes
-    const interval = setInterval(checkDateUpdate, 60 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [state.lastUpdate]);
-
   // ============================================
   // RENDER
   // ============================================
