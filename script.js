@@ -1146,29 +1146,51 @@ function App() {
       return;
     }
     
-    if (confirm('Are you sure you want to delete this problem?')) {
-      if (isCustom) {
-        setState(prev => ({
-          ...prev,
-          customProblems: prev.customProblems.filter(p => p.number !== number)
-        }));
-      } else {
-        setState(prev => {
-          // Clean up orphan data when deleting
-          const { [number]: removedDate, ...remainingSolvedDates } = prev.solvedDates || {};
-          const { [number]: removedRevision, ...remainingRevisionFlags } = prev.revisionFlags || {};
-          const { [number]: removedSolveTime, ...remainingSolveTimes } = prev.solveTimes || {};
-          
-          return {
-            ...prev,
-            deletedProblems: [...(prev.deletedProblems || []), number],
-            solvedDates: remainingSolvedDates,
-            revisionFlags: remainingRevisionFlags,
-            solveTimes: remainingSolveTimes
-          };
-        });
+    // Enhanced confirmation with problem details
+    const problem = allProblems.find(p => p.number === number);
+    const confirmMessage = problem 
+      ? `Are you sure you want to delete:\n\n#${problem.number} - ${problem.title}\n\nThis will:\n• Remove from all statistics\n• Recalculate streaks\n• Update all progress bars`
+      : 'Are you sure you want to delete this problem?';
+    
+    if (confirm(confirmMessage)) {
+      // Add fade-out animation to table row
+      const tableRow = document.querySelector(`tr[data-problem-number="${number}"]`);
+      if (tableRow) {
+        tableRow.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+        tableRow.style.opacity = '0';
+        tableRow.style.transform = 'translateX(-20px)';
       }
-      showNotification('Problem deleted', 'success');
+      
+      // Delay state update for smooth animation
+      setTimeout(() => {
+        if (isCustom) {
+          setState(prev => ({
+            ...prev,
+            customProblems: prev.customProblems.filter(p => p.number !== number)
+          }));
+        } else {
+          setState(prev => {
+            // Clean up orphan data when deleting
+            const { [number]: removedDate, ...remainingSolvedDates } = prev.solvedDates || {};
+            const { [number]: removedRevision, ...remainingRevisionFlags } = prev.revisionFlags || {};
+            const { [number]: removedSolveTime, ...remainingSolveTimes } = prev.solveTimes || {};
+            
+            return {
+              ...prev,
+              deletedProblems: [...(prev.deletedProblems || []), number],
+              solvedDates: remainingSolvedDates,
+              revisionFlags: remainingRevisionFlags,
+              solveTimes: remainingSolveTimes
+            };
+          });
+        }
+        
+        // Show success notification with problem info
+        showNotification(
+          `✅ Problem #${number} deleted successfully${problem ? ` - ${problem.title}` : ''}`, 
+          'success'
+        );
+      }, 300);
     }
   };
 
@@ -2228,9 +2250,19 @@ function App() {
                 ) : (
                   <tr>
                     <td colSpan="8" className="empty-state">
-                      <div className="empty-icon">🔍</div>
-                      <p>No problems found</p>
-                      <small>Try adjusting your filters</small>
+                      {allProblems.length === 0 ? (
+                        <>
+                          <div className="empty-icon">📚</div>
+                          <p className="empty-title">No Problems Yet</p>
+                          <small>Click "Add Problem" to start tracking your LeetCode journey</small>
+                        </>
+                      ) : (
+                        <>
+                          <div className="empty-icon">🔍</div>
+                          <p className="empty-title">No problems found</p>
+                          <small>Try adjusting your filters or search term</small>
+                        </>
+                      )}
                     </td>
                   </tr>
                 )}

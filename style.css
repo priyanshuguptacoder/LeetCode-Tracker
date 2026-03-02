@@ -947,11 +947,25 @@ body {
 .empty-state {
     text-align: center;
     padding: 60px 20px;
+    animation: fadeIn 0.5s ease;
 }
 
 .empty-icon {
     font-size: 48px;
     margin-bottom: 16px;
+    animation: bounce 2s ease infinite;
+}
+
+@keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+}
+
+.empty-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 8px;
 }
 
 .empty-state p {
@@ -964,6 +978,18 @@ body {
 .empty-state small {
     font-size: 13px;
     color: var(--text-secondary);
+    display: block;
+    margin-top: 8px;
+}
+
+/* Table row fade-out animation */
+.problems-table tbody tr {
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.problems-table tbody tr.deleting {
+    opacity: 0;
+    transform: translateX(-20px);
 }
 
 /* ============================================
