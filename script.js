@@ -1201,13 +1201,28 @@ function App() {
       
       // Delay state update for smooth animation
       setTimeout(() => {
+        let hadDate = false;
+        
         if (isCustom) {
-          setState(prev => ({
-            ...prev,
-            customProblems: prev.customProblems.filter(p => p.number !== number)
-          }));
+          setState(prev => {
+            hadDate = !!prev.solvedDates[number];
+            return {
+              ...prev,
+              customProblems: prev.customProblems.filter(p => p.number !== number),
+              solvedDates: prev.solvedDates[number] 
+                ? Object.fromEntries(Object.entries(prev.solvedDates).filter(([k]) => k != number))
+                : prev.solvedDates,
+              revisionFlags: prev.revisionFlags[number]
+                ? Object.fromEntries(Object.entries(prev.revisionFlags).filter(([k]) => k != number))
+                : prev.revisionFlags,
+              solveTimes: prev.solveTimes[number]
+                ? Object.fromEntries(Object.entries(prev.solveTimes).filter(([k]) => k != number))
+                : prev.solveTimes
+            };
+          });
         } else {
           setState(prev => {
+            hadDate = !!prev.solvedDates[number];
             // Clean up orphan data when deleting
             const { [number]: removedDate, ...remainingSolvedDates } = prev.solvedDates || {};
             const { [number]: removedRevision, ...remainingRevisionFlags } = prev.revisionFlags || {};
@@ -1238,7 +1253,7 @@ function App() {
           number,
           title: problem?.title,
           wasCustom: isCustom,
-          hadDate: !!removedDate,
+          hadDate: hadDate,
           statsRecalculated: true
         });
       }, 300);
@@ -1263,6 +1278,33 @@ function App() {
         deletedProblems: []
       }));
       showNotification(`✓ Restored ${deletedCount} problem(s)`, 'success');
+    }
+  };
+
+  const handlePermanentDelete = () => {
+    if (!verifyPassword('permanently delete problems')) {
+      return;
+    }
+    
+    const deletedCount = state.deletedProblems?.length || 0;
+    
+    if (deletedCount === 0) {
+      showNotification('No deleted problems to permanently remove', 'info');
+      return;
+    }
+    
+    const confirmMessage = `⚠️ PERMANENT DELETE\n\nThis will permanently remove ${deletedCount} deleted problem(s) from the trash.\n\nYou will NOT be able to restore them.\n\nAre you absolutely sure?`;
+    
+    if (confirm(confirmMessage)) {
+      // Second confirmation for safety
+      if (confirm('Final confirmation: Delete permanently?')) {
+        setState(prev => ({
+          ...prev,
+          deletedProblems: []
+        }));
+        showNotification(`🗑️ Permanently deleted ${deletedCount} problem(s)`, 'success');
+        console.log('🗑️ Permanent Delete:', { count: deletedCount });
+      }
     }
   };
 
@@ -2037,9 +2079,14 @@ function App() {
                 <span>+</span> Add Problem
               </button>
               {state.deletedProblems && state.deletedProblems.length > 0 && (
-                <button className="btn-restore-deleted" onClick={handleRestoreDeletedProblems}>
-                  <span>↺</span> Restore Deleted ({state.deletedProblems.length})
-                </button>
+                <>
+                  <button className="btn-restore-deleted" onClick={handleRestoreDeletedProblems}>
+                    <span>↺</span> Restore Deleted ({state.deletedProblems.length})
+                  </button>
+                  <button className="btn-permanent-delete" onClick={handlePermanentDelete}>
+                    <span>🗑️</span> Permanent Delete
+                  </button>
+                </>
               )}
             </div>
           </div>

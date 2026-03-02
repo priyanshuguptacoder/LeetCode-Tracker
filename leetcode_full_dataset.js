@@ -233,4 +233,4 @@ const targetProblems = [
 const solvedSet = new Set(solvedProblems.map(p => p.number));
 const duplicates = targetProblems.filter(p => solvedSet.has(p.number));
 
-console.log("Duplicate Check:", duplicates); // Should print []
+// console.log("Duplicate Check:", duplicates); // Should print []
