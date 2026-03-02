@@ -402,19 +402,30 @@ body {
     z-index: 1;
 }
 
-.mission-badge {
-    text-align: center;
-    padding: 12px;
-    background: linear-gradient(135deg, rgba(0, 200, 150, 0.1), rgba(99, 102, 241, 0.1));
-    border-radius: 8px;
-    font-weight: 700;
-    color: var(--primary);
-    animation: pulse 2s ease infinite;
+.rolling-stats {
+    display: flex;
+    gap: 24px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
 }
 
-@keyframes pulse {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.02); }
+.rolling-stat-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.rolling-stat-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.rolling-stat-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--primary);
 }
 
 /* ============================================

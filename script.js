@@ -300,34 +300,6 @@ function App() {
     }
   };
 
-  const getLast6Months = (monthlyData) => {
-    try {
-      if (!monthlyData || typeof monthlyData !== 'object') {
-        monthlyData = {};
-      }
-      
-      const now = new Date();
-      const months = [];
-      
-      for (let i = 5; i >= 0; i--) {
-        const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        const yearMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-        const monthName = date.toLocaleDateString('en-US', { month: 'short' });
-        
-        months.push({
-          yearMonth,
-          monthName,
-          count: monthlyData[yearMonth]?.count || 0
-        });
-      }
-      
-      return months;
-    } catch (error) {
-      console.error('Error in getLast6Months:', error);
-      return [];
-    }
-  };
-
   // ============================================
   // HEATMAP & STREAK CALCULATION
   // ============================================
@@ -956,16 +928,6 @@ function App() {
     () => getBestMonth(monthlyData),
     [monthlyData]
   );
-  
-  const last6Months = React.useMemo(
-    () => getLast6Months(monthlyData),
-    [monthlyData]
-  );
-  
-  const maxMonthlyCount = React.useMemo(
-    () => Math.max(...last6Months.map(m => m.count || 0), 1),
-    [last6Months]
-  );
 
   // ============================================
   // DUPLICATE PREVENTION & VALIDATION
@@ -1191,10 +1153,20 @@ function App() {
           customProblems: prev.customProblems.filter(p => p.number !== number)
         }));
       } else {
-        setState(prev => ({
-          ...prev,
-          deletedProblems: [...(prev.deletedProblems || []), number]
-        }));
+        setState(prev => {
+          // Clean up orphan data when deleting
+          const { [number]: removedDate, ...remainingSolvedDates } = prev.solvedDates || {};
+          const { [number]: removedRevision, ...remainingRevisionFlags } = prev.revisionFlags || {};
+          const { [number]: removedSolveTime, ...remainingSolveTimes } = prev.solveTimes || {};
+          
+          return {
+            ...prev,
+            deletedProblems: [...(prev.deletedProblems || []), number],
+            solvedDates: remainingSolvedDates,
+            revisionFlags: remainingRevisionFlags,
+            solveTimes: remainingSolveTimes
+          };
+        });
       }
       showNotification('Problem deleted', 'success');
     }
@@ -1364,8 +1336,15 @@ function App() {
   
   const totalSolved = allProblems.filter(p => p.status === 'Done').length;
   const totalProblems = allProblems.length;
-  const remaining = Math.max(200 - totalSolved, 0);
-  const progressPercentage = Math.min(Math.round((totalSolved / 200) * 100), 100);
+  
+  // Rolling 100 Progress (last 100 solved problems)
+  const last100Progress = totalSolved % 100;
+  const completedCycles = Math.floor(totalSolved / 100);
+  const rollingProgressPercentage = last100Progress;
+  
+  // Average problems per active day
+  const activeDaysCount = heatmapData.activeDays || 0;
+  const avgProblemsPerDay = activeDaysCount > 0 ? (totalSolved / activeDaysCount).toFixed(2) : 0;
 
   // Advanced Analytics
   const consistencyScore = calculateConsistencyScore(allProblems, state.solvedDates);
@@ -1514,6 +1493,53 @@ function App() {
     return () => clearInterval(interval);
   }, [state.lastUpdate]);
 
+  // Clean up orphan data on mount
+  useEffect(() => {
+    const validProblemNumbers = new Set(allProblems.map(p => p.number));
+    
+    const cleanOrphanData = () => {
+      const solvedDatesKeys = Object.keys(state.solvedDates || {}).map(Number);
+      const revisionFlagsKeys = Object.keys(state.revisionFlags || {}).map(Number);
+      const solveTimesKeys = Object.keys(state.solveTimes || {}).map(Number);
+      
+      const orphanSolvedDates = solvedDatesKeys.filter(num => !validProblemNumbers.has(num));
+      const orphanRevisionFlags = revisionFlagsKeys.filter(num => !validProblemNumbers.has(num));
+      const orphanSolveTimes = solveTimesKeys.filter(num => !validProblemNumbers.has(num));
+      
+      if (orphanSolvedDates.length > 0 || orphanRevisionFlags.length > 0 || orphanSolveTimes.length > 0) {
+        console.log('Cleaning orphan data:', {
+          solvedDates: orphanSolvedDates.length,
+          revisionFlags: orphanRevisionFlags.length,
+          solveTimes: orphanSolveTimes.length
+        });
+        
+        setState(prev => {
+          const newSolvedDates = { ...prev.solvedDates };
+          const newRevisionFlags = { ...prev.revisionFlags };
+          const newSolveTimes = { ...prev.solveTimes };
+          
+          orphanSolvedDates.forEach(num => delete newSolvedDates[num]);
+          orphanRevisionFlags.forEach(num => delete newRevisionFlags[num]);
+          orphanSolveTimes.forEach(num => delete newSolveTimes[num]);
+          
+          return {
+            ...prev,
+            solvedDates: newSolvedDates,
+            revisionFlags: newRevisionFlags,
+            solveTimes: newSolveTimes
+          };
+        });
+      }
+    };
+    
+    cleanOrphanData();
+  }, [allProblems.length]);
+
+    // Check every hour for date changes
+    const interval = setInterval(checkDateUpdate, 60 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [state.lastUpdate]);
+
   // ============================================
   // RENDER
   // ============================================
@@ -1569,24 +1595,24 @@ function App() {
             </div>
           </div>
           <div className="stat-card stat-secondary">
-            <div className="stat-icon">📊</div>
+            <div className="stat-icon">🔥</div>
             <div className="stat-content">
-              <div className="stat-value">{remaining}</div>
-              <div className="stat-label">Remaining to 200</div>
+              <div className="stat-value">{heatmapData.currentStreak}</div>
+              <div className="stat-label">Current Streak</div>
             </div>
           </div>
           <div className="stat-card stat-accent">
-            <div className="stat-icon">⚡</div>
+            <div className="stat-icon">📅</div>
             <div className="stat-content">
-              <div className="stat-value">{progressPercentage}%</div>
-              <div className="stat-label">Completion Rate</div>
+              <div className="stat-value">{heatmapData.activeDays}</div>
+              <div className="stat-label">Active Days</div>
             </div>
           </div>
           <div className="stat-card stat-info">
-            <div className="stat-icon">📚</div>
+            <div className="stat-icon">⚡</div>
             <div className="stat-content">
-              <div className="stat-value">{totalProblems}</div>
-              <div className="stat-label">Total Problems</div>
+              <div className="stat-value">{avgProblemsPerDay}</div>
+              <div className="stat-label">Avg Per Active Day</div>
             </div>
           </div>
         </div>
@@ -1768,27 +1794,6 @@ function App() {
           </div>
         </div>
 
-        {/* Last 6 Months Chart */}
-        <div className="months-chart-card">
-          <h3 className="card-title">Last 6 Months Activity</h3>
-          <div className="months-chart">
-            {last6Months.map(month => (
-              <div key={month.yearMonth} className="month-bar-container">
-                <div className="month-bar-wrapper">
-                  <div 
-                    className="month-bar" 
-                    style={{ height: `${(month.count / maxMonthlyCount) * 100}%` }}
-                    title={`${month.count} problems`}
-                  >
-                    <span className="month-bar-value">{month.count}</span>
-                  </div>
-                </div>
-                <div className="month-label">{month.monthName}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
         {/* Advanced Analytics Grid */}
         <div className="advanced-analytics-grid">
           {/* Consistency Score */}
@@ -1948,8 +1953,11 @@ function App() {
         <div className="progress-card">
           <div className="progress-header">
             <div>
-              <h2>Mission 200 Progress</h2>
-              <p className="progress-subtitle">{totalSolved} / 200 problems completed</p>
+              <h2>Rolling Focus: Latest 100 Problems</h2>
+              <p className="progress-subtitle">
+                Current Cycle: {last100Progress} / 100 
+                {completedCycles > 0 && ` • Completed ${completedCycles} cycle${completedCycles > 1 ? 's' : ''}`}
+              </p>
             </div>
             <div className="progress-actions">
               <button className="btn-add-problem" onClick={() => setShowModal(true)}>
@@ -1966,17 +1974,22 @@ function App() {
             <div className="progress-bar-track">
               <div 
                 className="progress-bar-fill" 
-                style={{ width: `${progressPercentage}%` }}
+                style={{ width: `${rollingProgressPercentage}%` }}
               >
-                <span className="progress-bar-text">{progressPercentage}%</span>
+                <span className="progress-bar-text">{rollingProgressPercentage}%</span>
               </div>
             </div>
           </div>
-          {totalSolved >= 200 && (
-            <div className="mission-badge">
-              🎉 Mission 200 Completed!
+          <div className="rolling-stats">
+            <div className="rolling-stat-item">
+              <span className="rolling-stat-label">Total Solved:</span>
+              <span className="rolling-stat-value">{totalSolved}</span>
             </div>
-          )}
+            <div className="rolling-stat-item">
+              <span className="rolling-stat-label">In Dataset:</span>
+              <span className="rolling-stat-value">{totalProblems}</span>
+            </div>
+          </div>
         </div>
 
         {/* Analytics Grid */}
