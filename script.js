@@ -66,7 +66,7 @@ function App() {
   });
 
   // Password protection
-  const ADMIN_PASSWORD = '0000';
+  const ADMIN_PASSWORD = '0';
 
   // Form state for modal
   const [formData, setFormData] = useState({
@@ -1682,10 +1682,10 @@ function App() {
             </div>
           </div>
           <div className="stat-card stat-info">
-            <div className="stat-icon">⚡</div>
+            <div className="stat-icon">📚</div>
             <div className="stat-content">
-              <div className="stat-value">{avgProblemsPerDay}</div>
-              <div className="stat-label">Avg Per Active Day</div>
+              <div className="stat-value">{totalProblems}</div>
+              <div className="stat-label">Total Problems</div>
             </div>
           </div>
         </div>
