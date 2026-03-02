@@ -30,6 +30,9 @@ function App() {
   const [showModal, setShowModal] = useState(false);
   const [notification, setNotification] = useState(null);
 
+  // Password protection
+  const ADMIN_PASSWORD = '9653007120';
+
   // Form state for modal
   const [formData, setFormData] = useState({
     number: '',
@@ -188,6 +191,20 @@ function App() {
   };
 
   // ============================================
+  // PASSWORD VERIFICATION
+  // ============================================
+  
+  const verifyPassword = (action) => {
+    const password = prompt(`🔒 Enter password to ${action}:`);
+    if (password === ADMIN_PASSWORD) {
+      return true;
+    } else if (password !== null) {
+      showNotification('❌ Incorrect password', 'error');
+    }
+    return false;
+  };
+
+  // ============================================
   // NOTIFICATION SYSTEM
   // ============================================
   
@@ -202,6 +219,11 @@ function App() {
   
   const handleAddProblem = (e) => {
     e.preventDefault();
+    
+    // Password verification
+    if (!verifyPassword('add this problem')) {
+      return;
+    }
     
     // Validation
     if (!formData.number || !formData.title || !formData.link) {
@@ -265,10 +287,12 @@ function App() {
   // ============================================
   // OTHER HANDLERS
   // ============================================
-  // OTHER HANDLERS
-  // ============================================
   
   const handleStatusChange = (number, newStatus) => {
+    if (!verifyPassword('change status')) {
+      return;
+    }
+    
     setState(prev => ({
       ...prev,
       statusOverrides: {
@@ -279,6 +303,10 @@ function App() {
   };
 
   const handleUserDifficultyChange = (number, newDifficulty) => {
+    if (!verifyPassword('change difficulty')) {
+      return;
+    }
+    
     setState(prev => ({
       ...prev,
       userDifficultyOverrides: {
@@ -289,6 +317,10 @@ function App() {
   };
 
   const handleDelete = (number, isCustom) => {
+    if (!verifyPassword('delete this problem')) {
+      return;
+    }
+    
     if (confirm('Are you sure you want to delete this problem?')) {
       if (isCustom) {
         setState(prev => ({
