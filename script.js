@@ -16,6 +16,7 @@ function App() {
           userDifficultyOverrides: parsed.userDifficultyOverrides || {},
           customProblems: Array.isArray(parsed.customProblems) ? parsed.customProblems : [],
           deletedProblems: Array.isArray(parsed.deletedProblems) ? parsed.deletedProblems : [],
+          permanentlyDeleted: Array.isArray(parsed.permanentlyDeleted) ? parsed.permanentlyDeleted : [],
           solvedDates: parsed.solvedDates || {},
           calendarActivityDates: Array.isArray(parsed.calendarActivityDates) ? parsed.calendarActivityDates : null,
           revisionFlags: parsed.revisionFlags || {},
@@ -39,6 +40,7 @@ function App() {
       userDifficultyOverrides: {},
       customProblems: [],
       deletedProblems: [],
+      permanentlyDeleted: [],
       solvedDates: {},
       calendarActivityDates: null,
       revisionFlags: {},
@@ -804,10 +806,11 @@ function App() {
   const getAllProblems = () => {
     const problemsMap = new Map();
     const deletedSet = new Set(state.deletedProblems || []);
+    const permanentlyDeletedSet = new Set(state.permanentlyDeleted || []);
 
     // Insert solvedProblems
     solvedProblems.forEach(p => {
-      if (!deletedSet.has(p.number)) {
+      if (!deletedSet.has(p.number) && !permanentlyDeletedSet.has(p.number)) {
         problemsMap.set(p.number, {
           ...p,
           pattern: normalizePattern(p.pattern),
@@ -822,7 +825,7 @@ function App() {
 
     // Insert targetProblems with auto-detection
     targetProblems.forEach(p => {
-      if (!deletedSet.has(p.number) && !problemsMap.has(p.number)) {
+      if (!deletedSet.has(p.number) && !permanentlyDeletedSet.has(p.number) && !problemsMap.has(p.number)) {
         const hasPattern = p.pattern && p.pattern.trim() !== '';
         const finalPattern = hasPattern ? normalizePattern(p.pattern) : detectPattern(p.title);
         
@@ -840,7 +843,7 @@ function App() {
 
     // Insert customProblems
     state.customProblems.forEach(p => {
-      if (!deletedSet.has(p.number) && !problemsMap.has(p.number)) {
+      if (!deletedSet.has(p.number) && !permanentlyDeletedSet.has(p.number) && !problemsMap.has(p.number)) {
         problemsMap.set(p.number, {
           ...p,
           pattern: normalizePattern(p.pattern),
@@ -1187,7 +1190,7 @@ function App() {
     // Enhanced confirmation with problem details
     const problem = allProblems.find(p => p.number === number);
     const confirmMessage = problem 
-      ? `Are you sure you want to delete:\n\n#${problem.number} - ${problem.title}\n\nThis will:\n• Remove from all statistics\n• Recalculate streaks\n• Update all progress bars`
+      ? `Are you sure you want to delete:\n\n#${problem.number} - ${problem.title}\n\nThis will:\n• Move to trash (can be restored)\n• Remove from all statistics\n• Recalculate streaks\n• Update all progress bars`
       : 'Are you sure you want to delete this problem?';
     
     if (confirm(confirmMessage)) {
@@ -1203,40 +1206,22 @@ function App() {
       setTimeout(() => {
         let hadDate = false;
         
-        if (isCustom) {
-          setState(prev => {
-            hadDate = !!prev.solvedDates[number];
-            return {
-              ...prev,
-              customProblems: prev.customProblems.filter(p => p.number !== number),
-              solvedDates: prev.solvedDates[number] 
-                ? Object.fromEntries(Object.entries(prev.solvedDates).filter(([k]) => k != number))
-                : prev.solvedDates,
-              revisionFlags: prev.revisionFlags[number]
-                ? Object.fromEntries(Object.entries(prev.revisionFlags).filter(([k]) => k != number))
-                : prev.revisionFlags,
-              solveTimes: prev.solveTimes[number]
-                ? Object.fromEntries(Object.entries(prev.solveTimes).filter(([k]) => k != number))
-                : prev.solveTimes
-            };
-          });
-        } else {
-          setState(prev => {
-            hadDate = !!prev.solvedDates[number];
-            // Clean up orphan data when deleting
-            const { [number]: removedDate, ...remainingSolvedDates } = prev.solvedDates || {};
-            const { [number]: removedRevision, ...remainingRevisionFlags } = prev.revisionFlags || {};
-            const { [number]: removedSolveTime, ...remainingSolveTimes } = prev.solveTimes || {};
-            
-            return {
-              ...prev,
-              deletedProblems: [...(prev.deletedProblems || []), number],
-              solvedDates: remainingSolvedDates,
-              revisionFlags: remainingRevisionFlags,
-              solveTimes: remainingSolveTimes
-            };
-          });
-        }
+        // ALL problems (custom and base) now use soft delete (trash system)
+        setState(prev => {
+          hadDate = !!prev.solvedDates[number];
+          // Clean up orphan data when deleting
+          const { [number]: removedDate, ...remainingSolvedDates } = prev.solvedDates || {};
+          const { [number]: removedRevision, ...remainingRevisionFlags } = prev.revisionFlags || {};
+          const { [number]: removedSolveTime, ...remainingSolveTimes } = prev.solveTimes || {};
+          
+          return {
+            ...prev,
+            deletedProblems: [...(prev.deletedProblems || []), number],
+            solvedDates: remainingSolvedDates,
+            revisionFlags: remainingRevisionFlags,
+            solveTimes: remainingSolveTimes
+          };
+        });
         
         // Show success notification with problem info
         const statsUpdate = problem && problem.status === 'Done'
@@ -1244,12 +1229,12 @@ function App() {
           : '';
         
         showNotification(
-          `✅ Problem #${number} deleted successfully${problem ? ` - ${problem.title}` : ''} ${statsUpdate}`, 
+          `✅ Problem #${number} moved to trash${problem ? ` - ${problem.title}` : ''} ${statsUpdate}`, 
           'success'
         );
         
         // Log for debugging
-        console.log('🗑️ Problem Deleted:', {
+        console.log('🗑️ Problem Moved to Trash:', {
           number,
           title: problem?.title,
           wasCustom: isCustom,
@@ -1300,28 +1285,31 @@ function App() {
       if (confirm('Final confirmation: Delete permanently?')) {
         setState(prev => {
           // Get list of deleted problem numbers
-          const deletedNumbers = new Set(prev.deletedProblems || []);
+          const deletedNumbers = prev.deletedProblems || [];
           
-          // Remove custom problems permanently from customProblems array
+          // Move all deleted problems to permanentlyDeleted
+          const newPermanentlyDeleted = [
+            ...(prev.permanentlyDeleted || []),
+            ...deletedNumbers
+          ];
+          
+          // Remove custom problems from customProblems array
+          const deletedSet = new Set(deletedNumbers);
           const filteredCustomProblems = prev.customProblems.filter(
-            p => !deletedNumbers.has(p.number)
+            p => !deletedSet.has(p.number)
           );
-          
-          // IMPORTANT: Keep deletedProblems array unchanged
-          // This ensures base dataset problems stay hidden
-          // Custom problems are removed from customProblems, so they won't appear even if in deletedProblems
           
           return {
             ...prev,
-            customProblems: filteredCustomProblems
-            // deletedProblems stays the same - keeps base problems hidden
+            customProblems: filteredCustomProblems,
+            deletedProblems: [], // Clear trash
+            permanentlyDeleted: newPermanentlyDeleted // Add to permanent list
           };
         });
         showNotification(`🗑️ Permanently deleted ${deletedCount} problem(s)`, 'success');
         console.log('🗑️ Permanent Delete:', { 
-          count: deletedCount, 
-          customRemoved: deletedCount,
-          message: 'Custom problems removed from array, deleted list unchanged' 
+          count: deletedCount,
+          message: 'Problems moved to permanently deleted list' 
         });
       }
     }
