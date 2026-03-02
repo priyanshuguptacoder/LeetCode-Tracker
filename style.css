@@ -296,6 +296,13 @@ body {
     margin-top: 4px;
 }
 
+.progress-actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
 .btn-add-problem {
     display: flex;
     align-items: center;
@@ -318,6 +325,31 @@ body {
 
 .btn-add-problem span {
     font-size: 20px;
+    line-height: 1;
+}
+
+.btn-restore-deleted {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: linear-gradient(135deg, var(--warning), #F59E0B);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 8px;
+    border: none;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.btn-restore-deleted:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0 20px rgba(245, 158, 11, 0.3);
+}
+
+.btn-restore-deleted span {
+    font-size: 18px;
     line-height: 1;
 }
 

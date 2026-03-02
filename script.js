@@ -1200,6 +1200,27 @@ function App() {
     }
   };
 
+  const handleRestoreDeletedProblems = () => {
+    if (!verifyPassword('restore deleted problems')) {
+      return;
+    }
+    
+    const deletedCount = state.deletedProblems?.length || 0;
+    
+    if (deletedCount === 0) {
+      showNotification('No deleted problems to restore', 'info');
+      return;
+    }
+    
+    if (confirm(`Restore ${deletedCount} deleted problem(s)?`)) {
+      setState(prev => ({
+        ...prev,
+        deletedProblems: []
+      }));
+      showNotification(`✓ Restored ${deletedCount} problem(s)`, 'success');
+    }
+  };
+
   const handleToggleRevision = (number) => {
     if (!verifyPassword('toggle revision flag')) {
       return;
@@ -1893,9 +1914,16 @@ function App() {
               <h2>Mission 200 Progress</h2>
               <p className="progress-subtitle">{totalSolved} / 200 problems completed</p>
             </div>
-            <button className="btn-add-problem" onClick={() => setShowModal(true)}>
-              <span>+</span> Add Problem
-            </button>
+            <div className="progress-actions">
+              <button className="btn-add-problem" onClick={() => setShowModal(true)}>
+                <span>+</span> Add Problem
+              </button>
+              {state.deletedProblems && state.deletedProblems.length > 0 && (
+                <button className="btn-restore-deleted" onClick={handleRestoreDeletedProblems}>
+                  <span>↺</span> Restore Deleted ({state.deletedProblems.length})
+                </button>
+              )}
+            </div>
           </div>
           <div className="progress-bar-wrapper">
             <div className="progress-bar-track">
