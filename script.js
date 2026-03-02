@@ -1578,35 +1578,6 @@ function App() {
               })()}
             </div>
 
-            {/* Mini 30-Day Heatmap */}
-            <div className="mini-heatmap-section">
-              <div className="mini-heatmap-title">Last 30 Days</div>
-              <div className="mini-heatmap">
-                {(() => {
-                  const days = [];
-                  const today = new Date();
-                  const allDates = state.calendarActivityDates || Object.values(state.solvedDates || {});
-                  
-                  for (let i = 29; i >= 0; i--) {
-                    const date = new Date(today);
-                    date.setDate(date.getDate() - i);
-                    const dateStr = date.toISOString().split('T')[0];
-                    const isSolved = allDates.includes(dateStr);
-                    const dayName = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                    
-                    days.push(
-                      <div 
-                        key={dateStr}
-                        className={`heatmap-day ${isSolved ? 'solved' : 'empty'}`}
-                        title={dayName}
-                      ></div>
-                    );
-                  }
-                  return days;
-                })()}
-              </div>
-            </div>
-
             {/* Next Milestone */}
             <div className="streak-milestone">
               <div className="milestone-header">

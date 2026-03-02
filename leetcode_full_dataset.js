@@ -3,6 +3,7 @@
 const solvedProblems = [
   // Easy (67)
   { number: 1, title: "Two Sum", difficulty: "Easy", pattern: "Arrays / Hashing", link: "https://leetcode.com/problems/two-sum/" },
+  { number: 4, title: "Median of Two Sorted Arrays", difficulty: "Hard", pattern: "Binary Search", link: "https://leetcode.com/problems/median-of-two-sorted-arrays/" },
   { number: 9, title: "Palindrome Number", difficulty: "Easy", pattern: "Math", link: "https://leetcode.com/problems/palindrome-number/" },
   { number: 13, title: "Roman to Integer", difficulty: "Easy", pattern: "Strings", link: "https://leetcode.com/problems/roman-to-integer/" },
   { number: 14, title: "Longest Common Prefix", difficulty: "Easy", pattern: "Strings", link: "https://leetcode.com/problems/longest-common-prefix/" },
