@@ -1562,6 +1562,84 @@ function App() {
                 <div className="streak-label">Active Days</div>
               </div>
             </div>
+
+            {/* Today Status */}
+            <div className={`today-status ${(() => {
+              const today = new Date().toISOString().split('T')[0];
+              const allDates = state.calendarActivityDates || Object.values(state.solvedDates || {});
+              return allDates.includes(today) ? 'solved' : 'pending';
+            })()}`}>
+              {(() => {
+                const today = new Date().toISOString().split('T')[0];
+                const allDates = state.calendarActivityDates || Object.values(state.solvedDates || {});
+                return allDates.includes(today) 
+                  ? <><span className="status-icon">✅</span> Solved Today — Streak Alive</>
+                  : <><span className="status-icon">❌</span> Solve 1 Problem to Keep Streak</>;
+              })()}
+            </div>
+
+            {/* Mini 30-Day Heatmap */}
+            <div className="mini-heatmap-section">
+              <div className="mini-heatmap-title">Last 30 Days</div>
+              <div className="mini-heatmap">
+                {(() => {
+                  const days = [];
+                  const today = new Date();
+                  const allDates = state.calendarActivityDates || Object.values(state.solvedDates || {});
+                  
+                  for (let i = 29; i >= 0; i--) {
+                    const date = new Date(today);
+                    date.setDate(date.getDate() - i);
+                    const dateStr = date.toISOString().split('T')[0];
+                    const isSolved = allDates.includes(dateStr);
+                    const dayName = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                    
+                    days.push(
+                      <div 
+                        key={dateStr}
+                        className={`heatmap-day ${isSolved ? 'solved' : 'empty'}`}
+                        title={dayName}
+                      ></div>
+                    );
+                  }
+                  return days;
+                })()}
+              </div>
+            </div>
+
+            {/* Next Milestone */}
+            <div className="streak-milestone">
+              <div className="milestone-header">
+                <span className="milestone-label">Next Milestone</span>
+                <span className="milestone-target">
+                  {heatmapData.currentStreak < 50 ? '50 Days' : '100 Days'}
+                </span>
+              </div>
+              <div className="milestone-progress-bar">
+                <div 
+                  className="milestone-progress-fill"
+                  style={{ 
+                    width: `${heatmapData.currentStreak < 50 
+                      ? (heatmapData.currentStreak / 50) * 100 
+                      : ((heatmapData.currentStreak - 50) / 50) * 100}%` 
+                  }}
+                ></div>
+              </div>
+              <div className="milestone-text">
+                {heatmapData.currentStreak < 50 
+                  ? `${heatmapData.currentStreak} / 50 days`
+                  : `${heatmapData.currentStreak} / 100 days`}
+              </div>
+            </div>
+
+            {/* Motivation Message */}
+            <div className="motivation-message">
+              {heatmapData.currentStreak >= 30 
+                ? '🔥 Discipline Level: Elite'
+                : heatmapData.currentStreak >= 15
+                ? '⚡ Momentum Building'
+                : '🚀 Build Your Streak'}
+            </div>
           </div>
 
           <div className="monthly-card">
