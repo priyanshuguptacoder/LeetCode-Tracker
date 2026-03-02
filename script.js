@@ -36,7 +36,8 @@ function App() {
     title: '',
     difficulty: 'Medium',
     type: 'Solved',
-    pattern: ''
+    pattern: '',
+    link: ''
   });
 
   // ============================================
@@ -203,7 +204,7 @@ function App() {
     e.preventDefault();
     
     // Validation
-    if (!formData.number || !formData.title) {
+    if (!formData.number || !formData.title || !formData.link) {
       showNotification('Please fill in all required fields', 'error');
       return;
     }
@@ -238,7 +239,7 @@ function App() {
       difficulty: formData.difficulty,
       userDifficulty: formData.difficulty,
       pattern: detectedPattern,
-      link: `https://leetcode.com/problems/${problemNumber}/`,
+      link: formData.link || `https://leetcode.com/problems/${problemNumber}/`,
       status: formData.type === 'Solved' ? 'Done' : 'Not Started',
       type: formData.type,
       autoDetected: !hasPattern
@@ -256,7 +257,8 @@ function App() {
       title: '',
       difficulty: 'Medium',
       type: 'Solved',
-      pattern: ''
+      pattern: '',
+      link: ''
     });
   };
 
@@ -782,6 +784,17 @@ function App() {
                     value={formData.title}
                     onChange={(e) => setFormData({...formData, title: e.target.value})}
                     placeholder="e.g., Two Sum"
+                    className="form-input"
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label>LeetCode Link *</label>
+                  <input
+                    type="url"
+                    value={formData.link}
+                    onChange={(e) => setFormData({...formData, link: e.target.value})}
+                    placeholder="https://leetcode.com/problems/two-sum/"
                     className="form-input"
                     required
                   />
