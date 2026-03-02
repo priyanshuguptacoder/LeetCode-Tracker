@@ -1462,6 +1462,7 @@ function App() {
   
   const totalSolved = allProblems.filter(p => p.status === 'Done').length;
   const totalProblems = allProblems.length;
+  const totalTarget = allProblems.filter(p => p.status !== 'Done').length;
   
   // Rolling 100 Progress (last 100 solved problems)
   const last100Progress = totalSolved % 100;
@@ -2113,12 +2114,18 @@ function App() {
           </div>
           <div className="rolling-stats">
             <div className="rolling-stat-item">
-              <span className="rolling-stat-label">Total Solved:</span>
-              <span className="rolling-stat-value">{totalSolved}</span>
-            </div>
-            <div className="rolling-stat-item">
-              <span className="rolling-stat-label">In Dataset:</span>
+              <span className="rolling-stat-label">Total Problems:</span>
               <span className="rolling-stat-value">{totalProblems}</span>
+            </div>
+            <div className="rolling-stat-divider"></div>
+            <div className="rolling-stat-item">
+              <span className="rolling-stat-label">Solved:</span>
+              <span className="rolling-stat-value solved">{totalSolved}</span>
+            </div>
+            <div className="rolling-stat-divider"></div>
+            <div className="rolling-stat-item">
+              <span className="rolling-stat-label">Target:</span>
+              <span className="rolling-stat-value target">{totalTarget}</span>
             </div>
           </div>
         </div>

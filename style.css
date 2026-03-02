@@ -473,16 +473,24 @@ body {
 
 .rolling-stats {
     display: flex;
-    gap: 24px;
+    align-items: center;
+    gap: 16px;
     margin-top: 16px;
     padding-top: 16px;
     border-top: 1px solid var(--border);
+    flex-wrap: wrap;
 }
 
 .rolling-stat-item {
     display: flex;
     align-items: center;
     gap: 8px;
+}
+
+.rolling-stat-divider {
+    width: 1px;
+    height: 24px;
+    background: var(--border);
 }
 
 .rolling-stat-label {
@@ -492,9 +500,17 @@ body {
 }
 
 .rolling-stat-value {
-    font-size: 18px;
+    font-size: 20px;
     font-weight: 700;
+    color: var(--text-primary);
+}
+
+.rolling-stat-value.solved {
     color: var(--primary);
+}
+
+.rolling-stat-value.target {
+    color: var(--accent);
 }
 
 /* ============================================
