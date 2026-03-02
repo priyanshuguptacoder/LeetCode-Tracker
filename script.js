@@ -833,19 +833,6 @@ function App() {
   const bestMonth = getBestMonth(monthlyData);
   const last6Months = getLast6Months(monthlyData);
   const maxMonthlyCount = Math.max(...last6Months.map(m => m.count), 1);
-  
-  // Advanced Analytics
-  const consistencyScore = calculateConsistencyScore(allProblems, state.solvedDates);
-  const milestones = calculateMilestones(totalSolved);
-  const weeklyPerformance = calculateWeeklyPerformance(allProblems, state.solvedDates);
-  const dailyAverage = calculateDailyAverage(allProblems, state.solvedDates);
-  const revisionStats = getRevisionStats(allProblems);
-  const strongestDay = calculateStrongestDay(state.solvedDates);
-  const solveTimes = calculateSolveTimes(allProblems, state.solveTimes || {});
-  const aiTargetSuggestion = React.useMemo(
-    () => calculateAITargetSuggestion(allProblems, state.solvedDates, consistencyScore),
-    [allProblems.length, state.solvedDates, consistencyScore.score]
-  );
 
   // ============================================
   // DUPLICATE PREVENTION & VALIDATION
@@ -1156,6 +1143,19 @@ function App() {
   const totalProblems = allProblems.length;
   const remaining = Math.max(200 - totalSolved, 0);
   const progressPercentage = Math.min(Math.round((totalSolved / 200) * 100), 100);
+
+  // Advanced Analytics
+  const consistencyScore = calculateConsistencyScore(allProblems, state.solvedDates);
+  const milestones = calculateMilestones(totalSolved);
+  const weeklyPerformance = calculateWeeklyPerformance(allProblems, state.solvedDates);
+  const dailyAverage = calculateDailyAverage(allProblems, state.solvedDates);
+  const revisionStats = getRevisionStats(allProblems);
+  const strongestDay = calculateStrongestDay(state.solvedDates);
+  const solveTimes = calculateSolveTimes(allProblems, state.solveTimes || {});
+  const aiTargetSuggestion = React.useMemo(
+    () => calculateAITargetSuggestion(allProblems, state.solvedDates, consistencyScore),
+    [allProblems.length, state.solvedDates, consistencyScore.score]
+  );
 
   // LeetCode Difficulty distribution
   const easyCount = allProblems.filter(p => p.difficulty === 'Easy' && p.status === 'Done').length;
