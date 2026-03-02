@@ -1205,3 +1205,288 @@ body.light-mode .modal-overlay {
 .shadow-md { box-shadow: var(--shadow-md); }
 .shadow-lg { box-shadow: var(--shadow-lg); }
 .shadow-xl { box-shadow: var(--shadow-xl); }
+
+/* ============================================
+   STREAK & MONTHLY ANALYTICS
+   ============================================ */
+
+.streak-monthly-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.streak-card,
+.monthly-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.5rem;
+    backdrop-filter: blur(10px);
+    transition: all 0.3s ease;
+}
+
+.streak-card:hover,
+.monthly-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--primary);
+}
+
+.streak-stats {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    margin-top: 1.5rem;
+}
+
+.streak-item {
+    text-align: center;
+}
+
+.streak-value {
+    font-size: 2.5rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 0.5rem;
+}
+
+.streak-label {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.streak-divider {
+    width: 1px;
+    height: 50px;
+    background: var(--border);
+}
+
+.monthly-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.current-month {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.best-month-badge {
+    background: linear-gradient(135deg, var(--warning), #F97316);
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.monthly-progress {
+    text-align: center;
+    margin: 1.5rem 0;
+}
+
+.monthly-count {
+    font-size: 2.5rem;
+    font-weight: 800;
+    margin-bottom: 0.5rem;
+}
+
+.monthly-value {
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.monthly-separator {
+    color: var(--text-muted);
+    margin: 0 0.5rem;
+}
+
+.monthly-target {
+    color: var(--text-secondary);
+}
+
+.monthly-label {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.monthly-bar-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.monthly-bar-track {
+    flex: 1;
+    height: 12px;
+    background: var(--bg-tertiary);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.monthly-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary), var(--accent));
+    border-radius: 10px;
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: var(--glow-primary);
+}
+
+.monthly-percent {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--primary);
+    min-width: 50px;
+    text-align: right;
+}
+
+/* ============================================
+   LAST 6 MONTHS CHART
+   ============================================ */
+
+.months-chart-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    backdrop-filter: blur(10px);
+}
+
+.months-chart {
+    display: flex;
+    justify-content: space-around;
+    align-items: flex-end;
+    height: 200px;
+    margin-top: 1.5rem;
+    padding: 1rem 0;
+    gap: 1rem;
+}
+
+.month-bar-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.month-bar-wrapper {
+    width: 100%;
+    height: 150px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+}
+
+.month-bar {
+    width: 100%;
+    max-width: 60px;
+    background: linear-gradient(180deg, var(--primary), var(--accent));
+    border-radius: 8px 8px 0 0;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 0.5rem;
+    min-height: 30px;
+    box-shadow: var(--glow-primary);
+}
+
+.month-bar:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 0 30px rgba(0, 200, 150, 0.5);
+}
+
+.month-bar-value {
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: white;
+}
+
+.month-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+/* ============================================
+   LIGHT MODE ADJUSTMENTS
+   ============================================ */
+
+.light-mode .streak-card,
+.light-mode .monthly-card,
+.light-mode .months-chart-card {
+    background: white;
+    border-color: #E2E8F0;
+}
+
+.light-mode .streak-divider {
+    background: #E2E8F0;
+}
+
+.light-mode .monthly-bar-track {
+    background: #F1F5F9;
+}
+
+.light-mode .month-bar {
+    box-shadow: 0 4px 6px rgba(0, 200, 150, 0.2);
+}
+
+.light-mode .month-bar:hover {
+    box-shadow: 0 8px 12px rgba(0, 200, 150, 0.3);
+}
+
+/* ============================================
+   RESPONSIVE DESIGN
+   ============================================ */
+
+@media (max-width: 768px) {
+    .streak-monthly-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .streak-stats {
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+    
+    .streak-divider {
+        width: 100%;
+        height: 1px;
+    }
+    
+    .months-chart {
+        height: 150px;
+        gap: 0.5rem;
+    }
+    
+    .month-bar-wrapper {
+        height: 100px;
+    }
+    
+    .month-bar {
+        max-width: 40px;
+    }
+    
+    .monthly-header {
+        flex-direction: column;
+        gap: 0.5rem;
+        align-items: flex-start;
+    }
+}

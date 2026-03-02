@@ -15,6 +15,9 @@ function App() {
       userDifficultyOverrides: {},
       customProblems: [],
       deletedProblems: [],
+      solvedDates: {}, // { problemNumber: "YYYY-MM-DD" }
+      historicalDatesGenerated: false,
+      monthlyTarget: 30,
       todayCount: 0,
       weeklyCount: 0,
       lastUpdate: new Date().toDateString()
@@ -104,6 +107,203 @@ function App() {
   };
 
   // ============================================
+  // HISTORICAL DATE GENERATION
+  // ============================================
+  
+  const generateHistoricalDates = (solvedProblems) => {
+    const ACTIVE_DAYS = 40;
+    const MAX_STREAK = 37;
+    const totalProblems = solvedProblems.length;
+    
+    // Generate 40 active days with gaps for realistic streak
+    const today = new Date();
+    const activeDates = [];
+    let currentDate = new Date(today);
+    let consecutiveDays = 0;
+    let daysAdded = 0;
+    
+    while (daysAdded < ACTIVE_DAYS) {
+      // Add streak breaks to match max streak of 37
+      if (consecutiveDays >= MAX_STREAK) {
+        // Add 1-3 day gap
+        const gap = Math.floor(Math.random() * 3) + 1;
+        currentDate.setDate(currentDate.getDate() - gap);
+        consecutiveDays = 0;
+      }
+      
+      activeDates.push(new Date(currentDate));
+      currentDate.setDate(currentDate.getDate() - 1);
+      consecutiveDays++;
+      daysAdded++;
+    }
+    
+    // Distribute problems across active days
+    const dateAssignments = {};
+    let problemIndex = 0;
+    
+    for (const date of activeDates) {
+      if (problemIndex >= totalProblems) break;
+      
+      // Random problems per day: 2-6, weighted towards 3-5
+      const weights = [1, 3, 5, 5, 3, 1]; // for 2,3,4,5,6 problems
+      const randomWeight = Math.random() * weights.reduce((a, b) => a + b, 0);
+      let problemsPerDay = 2;
+      let cumulative = 0;
+      
+      for (let i = 0; i < weights.length; i++) {
+        cumulative += weights[i];
+        if (randomWeight <= cumulative) {
+          problemsPerDay = i + 2;
+          break;
+        }
+      }
+      
+      // Don't exceed remaining problems
+      problemsPerDay = Math.min(problemsPerDay, totalProblems - problemIndex);
+      
+      const dateStr = date.toISOString().split('T')[0];
+      
+      for (let i = 0; i < problemsPerDay && problemIndex < totalProblems; i++) {
+        dateAssignments[solvedProblems[problemIndex].number] = dateStr;
+        problemIndex++;
+      }
+    }
+    
+    return dateAssignments;
+  };
+
+  // ============================================
+  // MONTHLY ANALYTICS
+  // ============================================
+  
+  const getMonthlyStats = (problems, solvedDates) => {
+    const monthlyData = {};
+    
+    problems.forEach(problem => {
+      if (problem.status === 'Done' && solvedDates[problem.number]) {
+        const date = new Date(solvedDates[problem.number]);
+        const yearMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        
+        if (!monthlyData[yearMonth]) {
+          monthlyData[yearMonth] = {
+            count: 0,
+            year: date.getFullYear(),
+            month: date.getMonth(),
+            problems: []
+          };
+        }
+        
+        monthlyData[yearMonth].count++;
+        monthlyData[yearMonth].problems.push(problem);
+      }
+    });
+    
+    return monthlyData;
+  };
+
+  const getCurrentMonthStats = (monthlyData) => {
+    const now = new Date();
+    const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    return monthlyData[currentYearMonth] || { count: 0, problems: [] };
+  };
+
+  const getBestMonth = (monthlyData) => {
+    let bestMonth = null;
+    let maxCount = 0;
+    
+    Object.entries(monthlyData).forEach(([yearMonth, data]) => {
+      if (data.count > maxCount) {
+        maxCount = data.count;
+        bestMonth = { yearMonth, ...data };
+      }
+    });
+    
+    return bestMonth;
+  };
+
+  const getLast6Months = (monthlyData) => {
+    const now = new Date();
+    const months = [];
+    
+    for (let i = 5; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const yearMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const monthName = date.toLocaleDateString('en-US', { month: 'short' });
+      
+      months.push({
+        yearMonth,
+        monthName,
+        count: monthlyData[yearMonth]?.count || 0
+      });
+    }
+    
+    return months;
+  };
+
+  // ============================================
+  // HEATMAP & STREAK CALCULATION
+  // ============================================
+  
+  const calculateHeatmapAndStreak = (problems, solvedDates) => {
+    const dateCounts = {};
+    
+    problems.forEach(problem => {
+      if (problem.status === 'Done' && solvedDates[problem.number]) {
+        const dateStr = solvedDates[problem.number];
+        dateCounts[dateStr] = (dateCounts[dateStr] || 0) + 1;
+      }
+    });
+    
+    // Calculate current streak
+    const today = new Date();
+    let currentStreak = 0;
+    let checkDate = new Date(today);
+    
+    while (true) {
+      const dateStr = checkDate.toISOString().split('T')[0];
+      if (dateCounts[dateStr]) {
+        currentStreak++;
+        checkDate.setDate(checkDate.getDate() - 1);
+      } else {
+        break;
+      }
+    }
+    
+    // Calculate max streak
+    const sortedDates = Object.keys(dateCounts).sort();
+    let maxStreak = 0;
+    let tempStreak = 0;
+    let prevDate = null;
+    
+    sortedDates.forEach(dateStr => {
+      const currentDate = new Date(dateStr);
+      
+      if (prevDate) {
+        const diffDays = Math.round((currentDate - prevDate) / (1000 * 60 * 60 * 24));
+        if (diffDays === 1) {
+          tempStreak++;
+        } else {
+          maxStreak = Math.max(maxStreak, tempStreak);
+          tempStreak = 1;
+        }
+      } else {
+        tempStreak = 1;
+      }
+      
+      prevDate = currentDate;
+    });
+    
+    maxStreak = Math.max(maxStreak, tempStreak);
+    
+    return {
+      dateCounts,
+      activeDays: Object.keys(dateCounts).length,
+      currentStreak,
+      maxStreak
+    };
+  };
+
+  // ============================================
   // DATA LAYER - SAFE MERGE SYSTEM
   // ============================================
   
@@ -175,6 +375,42 @@ function App() {
   };
 
   const allProblems = getAllProblems();
+
+  // ============================================
+  // HISTORICAL DATE GENERATION (ONE-TIME)
+  // ============================================
+  
+  useEffect(() => {
+    if (!state.historicalDatesGenerated) {
+      const solvedProblemsWithoutDates = allProblems.filter(
+        p => p.status === 'Done' && !state.solvedDates[p.number]
+      );
+      
+      if (solvedProblemsWithoutDates.length > 0) {
+        const historicalDates = generateHistoricalDates(solvedProblemsWithoutDates);
+        
+        setState(prev => ({
+          ...prev,
+          solvedDates: {
+            ...prev.solvedDates,
+            ...historicalDates
+          },
+          historicalDatesGenerated: true
+        }));
+      }
+    }
+  }, []);
+
+  // ============================================
+  // CALCULATE ANALYTICS
+  // ============================================
+  
+  const heatmapData = calculateHeatmapAndStreak(allProblems, state.solvedDates);
+  const monthlyData = getMonthlyStats(allProblems, state.solvedDates);
+  const currentMonthStats = getCurrentMonthStats(monthlyData);
+  const bestMonth = getBestMonth(monthlyData);
+  const last6Months = getLast6Months(monthlyData);
+  const maxMonthlyCount = Math.max(...last6Months.map(m => m.count), 1);
 
   // ============================================
   // DUPLICATE PREVENTION & VALIDATION
@@ -267,10 +503,23 @@ function App() {
       autoDetected: !hasPattern
     };
 
-    setState(prev => ({
-      ...prev,
-      customProblems: [...prev.customProblems, newProblem]
-    }));
+    setState(prev => {
+      const newState = {
+        ...prev,
+        customProblems: [...prev.customProblems, newProblem]
+      };
+      
+      // Auto-assign today's date if problem is marked as Solved
+      if (formData.type === 'Solved') {
+        const today = new Date().toISOString().split('T')[0];
+        newState.solvedDates = {
+          ...prev.solvedDates,
+          [problemNumber]: today
+        };
+      }
+      
+      return newState;
+    });
 
     showNotification(`✓ Problem #${problemNumber} added successfully!`, 'success');
     setShowModal(false);
@@ -293,13 +542,32 @@ function App() {
       return;
     }
     
-    setState(prev => ({
-      ...prev,
-      statusOverrides: {
-        ...prev.statusOverrides,
-        [number]: newStatus
+    setState(prev => {
+      const newState = {
+        ...prev,
+        statusOverrides: {
+          ...prev.statusOverrides,
+          [number]: newStatus
+        }
+      };
+      
+      // Auto-assign date when marking as Done
+      if (newStatus === 'Done' && !prev.solvedDates[number]) {
+        const today = new Date().toISOString().split('T')[0];
+        newState.solvedDates = {
+          ...prev.solvedDates,
+          [number]: today
+        };
       }
-    }));
+      
+      // Remove date when unmarking as Done
+      if (newStatus !== 'Done' && prev.solvedDates[number]) {
+        const { [number]: removed, ...remainingDates } = prev.solvedDates;
+        newState.solvedDates = remainingDates;
+      }
+      
+      return newState;
+    });
   };
 
   const handleUserDifficultyChange = (number, newDifficulty) => {
@@ -513,6 +781,83 @@ function App() {
               <div className="stat-value">{totalProblems}</div>
               <div className="stat-label">Total Problems</div>
             </div>
+          </div>
+        </div>
+
+        {/* Streak & Monthly Stats */}
+        <div className="streak-monthly-grid">
+          <div className="streak-card">
+            <h3 className="card-title">🔥 Streak Stats</h3>
+            <div className="streak-stats">
+              <div className="streak-item">
+                <div className="streak-value">{heatmapData.currentStreak}</div>
+                <div className="streak-label">Current Streak</div>
+              </div>
+              <div className="streak-divider"></div>
+              <div className="streak-item">
+                <div className="streak-value">{heatmapData.maxStreak}</div>
+                <div className="streak-label">Max Streak</div>
+              </div>
+              <div className="streak-divider"></div>
+              <div className="streak-item">
+                <div className="streak-value">{heatmapData.activeDays}</div>
+                <div className="streak-label">Active Days</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="monthly-card">
+            <h3 className="card-title">📅 Monthly Progress</h3>
+            <div className="monthly-header">
+              <div className="current-month">
+                {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+              </div>
+              {bestMonth && (
+                <div className="best-month-badge">
+                  🏆 Best: {new Date(bestMonth.year, bestMonth.month).toLocaleDateString('en-US', { month: 'short' })} ({bestMonth.count})
+                </div>
+              )}
+            </div>
+            <div className="monthly-progress">
+              <div className="monthly-count">
+                <span className="monthly-value">{currentMonthStats.count}</span>
+                <span className="monthly-separator">/</span>
+                <span className="monthly-target">{state.monthlyTarget}</span>
+              </div>
+              <div className="monthly-label">Problems Solved</div>
+            </div>
+            <div className="monthly-bar-wrapper">
+              <div className="monthly-bar-track">
+                <div 
+                  className="monthly-bar-fill" 
+                  style={{ width: `${Math.min((currentMonthStats.count / state.monthlyTarget) * 100, 100)}%` }}
+                ></div>
+              </div>
+              <div className="monthly-percent">
+                {Math.round((currentMonthStats.count / state.monthlyTarget) * 100)}%
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Last 6 Months Chart */}
+        <div className="months-chart-card">
+          <h3 className="card-title">Last 6 Months Activity</h3>
+          <div className="months-chart">
+            {last6Months.map(month => (
+              <div key={month.yearMonth} className="month-bar-container">
+                <div className="month-bar-wrapper">
+                  <div 
+                    className="month-bar" 
+                    style={{ height: `${(month.count / maxMonthlyCount) * 100}%` }}
+                    title={`${month.count} problems`}
+                  >
+                    <span className="month-bar-value">{month.count}</span>
+                  </div>
+                </div>
+                <div className="month-label">{month.monthName}</div>
+              </div>
+            ))}
           </div>
         </div>
 
