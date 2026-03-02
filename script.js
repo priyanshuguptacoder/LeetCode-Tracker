@@ -459,25 +459,7 @@ function App() {
     };
   };
 
-  // 2️⃣ GOAL MILESTONES
-  const calculateMilestones = (totalSolved) => {
-    const milestones = [
-      { value: 150, label: '150 Problems', icon: '🥉' },
-      { value: 200, label: '200 Problems', icon: '🥈' },
-      { value: 250, label: '250 Problems', icon: '🥇' },
-      { value: 300, label: '300 Problems', icon: '🏆' }
-    ];
-    
-    const unlocked = milestones.filter(m => totalSolved >= m.value);
-    const nextMilestone = milestones.find(m => totalSolved < m.value);
-    const progressToNext = nextMilestone 
-      ? ((totalSolved / nextMilestone.value) * 100).toFixed(1)
-      : 100;
-    
-    return { unlocked, nextMilestone, progressToNext };
-  };
-
-  // 3️⃣ WEEKLY PERFORMANCE
+  // 2️⃣ WEEKLY PERFORMANCE
   const calculateWeeklyPerformance = (problems, solvedDates) => {
     if (!problems || !solvedDates) {
       return {
@@ -1464,12 +1446,51 @@ function App() {
     setSearchTerm('');
   };
 
+  const handleClearAllFilters = () => {
+    // Add animation class to all filter inputs
+    const filterInputs = document.querySelectorAll('.filter-input, .filter-select');
+    filterInputs.forEach(input => {
+      input.classList.add('filter-reset-animation');
+    });
+    
+    // Remove animation class after animation completes
+    setTimeout(() => {
+      filterInputs.forEach(input => {
+        input.classList.remove('filter-reset-animation');
+      });
+    }, 400);
+    
+    // Reset all filters
+    setSearchTerm('');
+    setDifficultyFilter('All');
+    setPatternFilter('All');
+    setStatusFilter('All');
+    
+    // Show notification
+    showNotification('✨ All filters cleared', 'success');
+  };
+
   // Auto-reset search when empty
   useEffect(() => {
     if (searchTerm.trim() === '') {
       // Search is cleared, filtered results will show all
     }
   }, [searchTerm]);
+
+  // ESC key to clear all filters
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        // Only clear if any filter is active
+        if (searchTerm || difficultyFilter !== 'All' || patternFilter !== 'All' || statusFilter !== 'All') {
+          handleClearAllFilters();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [searchTerm, difficultyFilter, patternFilter, statusFilter]);
 
   // ============================================
   // DYNAMIC ANALYTICS CALCULATIONS
@@ -1505,15 +1526,19 @@ function App() {
     const sortedDates = dates.sort();
     const firstDate = new Date(sortedDates[0]);
     const today = new Date();
-    const totalDaysTracked = Math.max(1, Math.ceil((today - firstDate) / (1000 * 60 * 60 * 24)));
+    today.setHours(0, 0, 0, 0); // Reset to start of day
+    firstDate.setHours(0, 0, 0, 0); // Reset to start of day
+    const totalDaysTracked = Math.max(1, Math.ceil((today - firstDate) / (1000 * 60 * 60 * 24)) + 1);
     
     // Use heatmapData.activeDays for consistency with top stats
     const activeDays = heatmapData.activeDays;
     const averageProblemsPerActiveDay = activeDays > 0 ? totalSolved / activeDays : 0;
     
-    let consistency = (activeDays / totalDaysTracked) * 100;
+    // Ensure activeDays never exceeds totalDaysTracked
+    const safeActiveDays = Math.min(activeDays, totalDaysTracked);
+    let consistency = (safeActiveDays / totalDaysTracked) * 100;
     
-    // Boost if solving 3+ problems per active day
+    // Boost if solving 3+ problems per active day (but cap at 100%)
     if (averageProblemsPerActiveDay >= 3) {
       consistency = Math.min(100, consistency * 1.1);
     }
@@ -1535,12 +1560,11 @@ function App() {
       status,
       label,
       totalDaysTracked,
-      activeDays,
+      activeDays: safeActiveDays,
       averageProblemsPerActiveDay: averageProblemsPerActiveDay.toFixed(1)
     };
   }, [heatmapData.activeDays, totalSolved, state.solvedDates]);
 
-  const milestones = calculateMilestones(totalSolved);
   const weeklyPerformance = calculateWeeklyPerformance(allProblems, state.solvedDates);
   const dailyAverage = calculateDailyAverage(allProblems, state.solvedDates);
   const revisionStats = getRevisionStats(allProblems);
@@ -1635,6 +1659,17 @@ function App() {
       return matchesSearch && matchesDifficulty && matchesPattern && matchesStatus;
     });
   }, [allProblems, searchTerm, difficultyFilter, patternFilter, statusFilter]);
+
+  // Animate table count when filtered problems change
+  useEffect(() => {
+    const countElement = document.querySelector('.table-count');
+    if (countElement) {
+      countElement.classList.add('count-update');
+      setTimeout(() => {
+        countElement.classList.remove('count-update');
+      }, 500);
+    }
+  }, [filteredProblems.length]);
 
   // ============================================
   // EFFECTS
@@ -2068,30 +2103,6 @@ function App() {
           </div>
         </div>
 
-        {/* Milestones */}
-        <div className="milestones-card">
-          <h3 className="card-title">🏆 Goal Milestones</h3>
-          <div className="milestones-grid">
-            {milestones.unlocked.map(milestone => (
-              <div key={milestone.value} className="milestone-badge unlocked">
-                <span className="milestone-icon">{milestone.icon}</span>
-                <span className="milestone-label">{milestone.label}</span>
-                <span className="milestone-status">✓ Unlocked</span>
-              </div>
-            ))}
-            {milestones.nextMilestone && (
-              <div className="milestone-badge next">
-                <span className="milestone-icon">{milestones.nextMilestone.icon}</span>
-                <span className="milestone-label">{milestones.nextMilestone.label}</span>
-                <div className="milestone-progress-bar">
-                  <div className="milestone-progress-fill" style={{ width: `${milestones.progressToNext}%` }}></div>
-                </div>
-                <span className="milestone-progress-text">{milestones.progressToNext}%</span>
-              </div>
-            )}
-          </div>
-        </div>
-
         {/* Solve Time Analytics */}
         {solveTimes.totalTracked > 0 && (
           <div className="solve-time-card">
@@ -2339,6 +2350,18 @@ function App() {
                 <option>Done</option>
               </select>
             </div>
+            {(searchTerm || difficultyFilter !== 'All' || patternFilter !== 'All' || statusFilter !== 'All') && (
+              <div className="filter-group filter-clear-group">
+                <label>&nbsp;</label>
+                <button 
+                  className="btn-clear-filters"
+                  onClick={handleClearAllFilters}
+                  title="Clear all filters (ESC)"
+                >
+                  Clear
+                </button>
+              </div>
+            )}
           </div>
         </div>
 

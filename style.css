@@ -770,6 +770,11 @@ body {
     gap: 8px;
 }
 
+.filter-clear-group {
+    display: flex;
+    align-items: flex-end;
+}
+
 .filter-group label {
     font-size: 12px;
     font-weight: 700;
@@ -802,6 +807,103 @@ body {
     color: var(--text-muted);
 }
 
+.btn-clear-filters {
+    background: transparent;
+    border: 1.5px solid var(--border);
+    color: var(--text-secondary);
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    height: 42px;
+    animation: fadeInSlide 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+@keyframes fadeInSlide {
+    from {
+        opacity: 0;
+        transform: translateX(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.btn-clear-filters::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(239, 68, 68, 0.2);
+    transform: translate(-50%, -50%);
+    transition: width 0.6s, height 0.6s;
+}
+
+.btn-clear-filters:active::before {
+    width: 300px;
+    height: 300px;
+}
+
+.btn-clear-filters:hover {
+    border-color: #ef4444;
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.05);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.15);
+}
+
+.btn-clear-filters:active {
+    transform: translateY(0) scale(0.98);
+    transition: all 0.1s ease;
+}
+
+/* Filter reset animation */
+.filter-input,
+.filter-select {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    font-family: 'Inter', sans-serif;
+}
+
+.filter-input.filter-reset-animation,
+.filter-select.filter-reset-animation {
+    animation: filterReset 0.4s ease;
+}
+
+@keyframes filterReset {
+    0% {
+        transform: scale(1);
+        background: var(--bg-tertiary);
+    }
+    25% {
+        transform: scale(0.98);
+        background: rgba(0, 200, 150, 0.1);
+    }
+    50% {
+        transform: scale(1.02);
+        background: rgba(0, 200, 150, 0.15);
+    }
+    100% {
+        transform: scale(1);
+        background: var(--bg-tertiary);
+    }
+}
+
 /* ============================================
    TABLE
    ============================================ */
@@ -832,6 +934,26 @@ body {
     font-size: 13px;
     color: var(--text-secondary);
     font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.table-count.count-update {
+    animation: countPulse 0.5s ease;
+}
+
+@keyframes countPulse {
+    0% {
+        transform: scale(1);
+        color: var(--text-secondary);
+    }
+    50% {
+        transform: scale(1.15);
+        color: var(--primary);
+    }
+    100% {
+        transform: scale(1);
+        color: var(--text-secondary);
+    }
 }
 
 .table-wrapper {
@@ -861,10 +983,23 @@ body {
 .problems-table tbody tr {
     border-bottom: 1px solid var(--border);
     transition: all 0.2s ease;
+    animation: fadeInRow 0.3s ease;
+}
+
+@keyframes fadeInRow {
+    from {
+        opacity: 0;
+        transform: translateY(-5px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .problems-table tbody tr:hover {
     background: rgba(0, 200, 150, 0.03);
+    transform: translateX(2px);
 }
 
 .problems-table tbody tr.highlight-row {
