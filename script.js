@@ -541,6 +541,113 @@ function App() {
     };
   };
 
+  // 8️⃣ AI-BASED MONTHLY TARGET SUGGESTION
+  const calculateAITargetSuggestion = (problems, solvedDates, consistencyScore) => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    
+    // Get problems solved in last 1, 2, 3 months
+    const getMonthStart = (monthsAgo) => {
+      const d = new Date(currentYear, currentMonth - monthsAgo, 1);
+      return d;
+    };
+    
+    const last1MonthStart = getMonthStart(1);
+    const last2MonthStart = getMonthStart(2);
+    const last3MonthStart = getMonthStart(3);
+    const currentMonthStart = getMonthStart(0);
+    
+    let last1MonthCount = 0;
+    let last2MonthCount = 0;
+    let last3MonthCount = 0;
+    let currentMonthCount = 0;
+    
+    problems.forEach(problem => {
+      if (problem.status === 'Done' && solvedDates[problem.number]) {
+        const solvedDate = new Date(solvedDates[problem.number]);
+        
+        if (solvedDate >= currentMonthStart) {
+          currentMonthCount++;
+        }
+        if (solvedDate >= last1MonthStart && solvedDate < currentMonthStart) {
+          last1MonthCount++;
+        }
+        if (solvedDate >= last2MonthStart && solvedDate < last1MonthStart) {
+          last2MonthCount++;
+        }
+        if (solvedDate >= last3MonthStart && solvedDate < last2MonthStart) {
+          last3MonthCount++;
+        }
+      }
+    });
+    
+    // Calculate averages
+    const averageLast3Months = Math.round((last1MonthCount + last2MonthCount + last3MonthCount) / 3);
+    
+    // Current month pace
+    const daysIntoMonth = now.getDate();
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+    const currentPace = daysIntoMonth > 0 ? (currentMonthCount / daysIntoMonth) * daysInMonth : 0;
+    
+    // Base suggestion (10% increase)
+    let suggestedTarget = Math.round(averageLast3Months * 1.10);
+    
+    // Adjust based on current pace
+    if (currentPace > averageLast3Months * 1.2) {
+      // Strong pace - increase by 10%
+      suggestedTarget = Math.round(suggestedTarget * 1.10);
+    } else if (currentPace < averageLast3Months * 0.7) {
+      // Weak pace - decrease by 10%
+      suggestedTarget = Math.round(suggestedTarget * 0.90);
+    }
+    
+    // Growth mode detection
+    const isGrowthTrend = last1MonthCount > last2MonthCount && last2MonthCount > last3MonthCount;
+    const isInconsistent = Math.abs(last1MonthCount - last2MonthCount) > 10 || Math.abs(last2MonthCount - last3MonthCount) > 10;
+    
+    if (isGrowthTrend) {
+      // Aggressive growth
+      suggestedTarget = Math.round(suggestedTarget * 1.15);
+    } else if (isInconsistent) {
+      // Stable target
+      suggestedTarget = averageLast3Months;
+    }
+    
+    // High consistency bonus
+    if (consistencyScore.score > 75) {
+      suggestedTarget = Math.round(suggestedTarget * 1.10);
+    }
+    
+    // Round to nearest 5
+    suggestedTarget = Math.round(suggestedTarget / 5) * 5;
+    
+    // Apply constraints
+    suggestedTarget = Math.max(20, suggestedTarget);
+    suggestedTarget = Math.min(suggestedTarget, Math.round(averageLast3Months * 1.5));
+    suggestedTarget = Math.max(suggestedTarget, last1MonthCount);
+    
+    // Determine growth mode
+    let growthMode = 'Balanced';
+    if (suggestedTarget >= averageLast3Months * 1.3) {
+      growthMode = 'Aggressive';
+    } else if (suggestedTarget <= averageLast3Months * 1.05) {
+      growthMode = 'Conservative';
+    }
+    
+    return {
+      suggestedTarget,
+      growthMode,
+      last1MonthCount,
+      last2MonthCount,
+      last3MonthCount,
+      averageLast3Months,
+      currentMonthCount,
+      currentPace: Math.round(currentPace),
+      reasoning: `Based on ${averageLast3Months} avg/month over last 3 months`
+    };
+  };
+
   // ============================================
   // DATA LAYER - SAFE MERGE SYSTEM
   // ============================================
@@ -658,6 +765,10 @@ function App() {
   const revisionStats = getRevisionStats(allProblems);
   const strongestDay = calculateStrongestDay(state.solvedDates);
   const solveTimes = calculateSolveTimes(allProblems, state.solveTimes || {});
+  const aiTargetSuggestion = React.useMemo(
+    () => calculateAITargetSuggestion(allProblems, state.solvedDates, consistencyScore),
+    [allProblems.length, state.solvedDates, consistencyScore.score]
+  );
 
   // ============================================
   // DUPLICATE PREVENTION & VALIDATION
@@ -936,6 +1047,30 @@ function App() {
     }
   };
 
+  const handleAdoptSuggestedTarget = () => {
+    if (!verifyPassword('adopt suggested target')) {
+      return;
+    }
+    
+    setState(prev => ({
+      ...prev,
+      monthlyTarget: aiTargetSuggestion.suggestedTarget
+    }));
+    
+    showNotification(`✓ Monthly target updated to ${aiTargetSuggestion.suggestedTarget}`, 'success');
+  };
+
+  const handleClearSearch = () => {
+    setSearchTerm('');
+  };
+
+  // Auto-reset search when empty
+  useEffect(() => {
+    if (searchTerm.trim() === '') {
+      // Search is cleared, filtered results will show all
+    }
+  }, [searchTerm]);
+
   // ============================================
   // DYNAMIC ANALYTICS CALCULATIONS
   // ============================================
@@ -1010,22 +1145,25 @@ function App() {
   // Filters
   const patterns = ['All', ...new Set(allProblems.map(p => p.pattern))].sort();
 
-  const filteredProblems = allProblems.filter(problem => {
-    const matchesSearch = 
-      problem.number.toString().includes(searchTerm) ||
-      problem.title.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesDifficulty = 
-      difficultyFilter === 'All' || problem.difficulty === difficultyFilter;
-    
-    const matchesPattern = 
-      patternFilter === 'All' || problem.pattern === patternFilter;
-    
-    const matchesStatus = 
-      statusFilter === 'All' || problem.status === statusFilter;
+  const filteredProblems = React.useMemo(() => {
+    return allProblems.filter(problem => {
+      const matchesSearch = 
+        searchTerm.trim() === '' ||
+        problem.number.toString().includes(searchTerm) ||
+        problem.title.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const matchesDifficulty = 
+        difficultyFilter === 'All' || problem.difficulty === difficultyFilter;
+      
+      const matchesPattern = 
+        patternFilter === 'All' || problem.pattern === patternFilter;
+      
+      const matchesStatus = 
+        statusFilter === 'All' || problem.status === statusFilter;
 
-    return matchesSearch && matchesDifficulty && matchesPattern && matchesStatus;
-  });
+      return matchesSearch && matchesDifficulty && matchesPattern && matchesStatus;
+    });
+  }, [allProblems, searchTerm, difficultyFilter, patternFilter, statusFilter]);
 
   // ============================================
   // EFFECTS
@@ -1166,6 +1304,28 @@ function App() {
               </div>
               <div className="monthly-percent">
                 {Math.round((currentMonthStats.count / state.monthlyTarget) * 100)}%
+              </div>
+            </div>
+            
+            {/* AI Target Suggestion */}
+            <div className="ai-suggestion-section">
+              <div className="ai-suggestion-header">
+                <span className="ai-icon">🤖</span>
+                <span className="ai-title">AI Suggested Target</span>
+                <span className={`growth-mode-badge ${aiTargetSuggestion.growthMode.toLowerCase()}`}>
+                  {aiTargetSuggestion.growthMode}
+                </span>
+              </div>
+              <div className="ai-suggestion-value">{aiTargetSuggestion.suggestedTarget}</div>
+              <div className="ai-suggestion-reason">{aiTargetSuggestion.reasoning}</div>
+              <button 
+                className="btn-adopt-target"
+                onClick={handleAdoptSuggestedTarget}
+              >
+                Adopt Suggested Target
+              </button>
+              <div className="ai-tooltip">
+                💡 Based on last 3 months average ({aiTargetSuggestion.averageLast3Months}), current pace ({aiTargetSuggestion.currentPace}/month), and consistency score.
               </div>
             </div>
           </div>
@@ -1462,13 +1622,24 @@ function App() {
           <div className="filters-grid">
             <div className="filter-group">
               <label>Search</label>
-              <input
-                type="text"
-                placeholder="Problem # or title..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="filter-input"
-              />
+              <div className="search-input-wrapper">
+                <input
+                  type="text"
+                  placeholder="Problem # or title..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="filter-input search-input"
+                />
+                {searchTerm && (
+                  <button 
+                    className="search-clear-btn"
+                    onClick={handleClearSearch}
+                    title="Clear search"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
             </div>
             <div className="filter-group">
               <label>Difficulty</label>

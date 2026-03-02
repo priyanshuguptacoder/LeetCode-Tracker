@@ -1969,3 +1969,180 @@ body.light-mode .modal-overlay {
         height: 1px;
     }
 }
+
+/* ============================================
+   SEARCH INPUT WITH CLEAR BUTTON
+   ============================================ */
+
+.search-input-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.search-input {
+    padding-right: 2.5rem !important;
+}
+
+.search-clear-btn {
+    position: absolute;
+    right: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.25rem;
+    cursor: pointer;
+    padding: 0.25rem;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+    opacity: 0;
+    animation: fadeIn 0.3s ease forwards;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-50%) scale(0.8);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(-50%) scale(1);
+    }
+}
+
+.search-clear-btn:hover {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--danger);
+}
+
+/* ============================================
+   AI TARGET SUGGESTION
+   ============================================ */
+
+.ai-suggestion-section {
+    margin-top: 1.5rem;
+    padding: 1.5rem;
+    background: linear-gradient(135deg, rgba(0, 200, 150, 0.1), rgba(99, 102, 241, 0.1));
+    border: 2px solid var(--primary);
+    border-radius: 12px;
+    backdrop-filter: blur(10px);
+}
+
+.ai-suggestion-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.ai-icon {
+    font-size: 1.5rem;
+}
+
+.ai-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    flex: 1;
+}
+
+.growth-mode-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.growth-mode-badge.conservative {
+    background: linear-gradient(135deg, #6366F1, #8B5CF6);
+    color: white;
+}
+
+.growth-mode-badge.balanced {
+    background: linear-gradient(135deg, var(--primary), #10B981);
+    color: white;
+}
+
+.growth-mode-badge.aggressive {
+    background: linear-gradient(135deg, var(--warning), #F97316);
+    color: white;
+}
+
+.ai-suggestion-value {
+    font-size: 2.5rem;
+    font-weight: 900;
+    text-align: center;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 0.5rem;
+}
+
+.ai-suggestion-reason {
+    text-align: center;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin-bottom: 1rem;
+}
+
+.btn-adopt-target {
+    width: 100%;
+    padding: 0.75rem 1.5rem;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: var(--glow-primary);
+}
+
+.btn-adopt-target:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0 30px rgba(0, 200, 150, 0.5);
+}
+
+.ai-tooltip {
+    margin-top: 1rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    padding: 0.75rem;
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    border-left: 3px solid var(--accent);
+}
+
+/* Light Mode */
+.light-mode .ai-suggestion-section {
+    background: linear-gradient(135deg, rgba(0, 200, 150, 0.05), rgba(99, 102, 241, 0.05));
+    border-color: var(--primary);
+}
+
+.light-mode .ai-tooltip {
+    background: #F1F5F9;
+}
+
+.light-mode .search-clear-btn {
+    color: #64748B;
+}
+
+.light-mode .search-clear-btn:hover {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--danger);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .ai-suggestion-header {
+        flex-wrap: wrap;
+    }
+    
+    .ai-suggestion-value {
+        font-size: 2rem;
+    }
+}
