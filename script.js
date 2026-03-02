@@ -1477,6 +1477,43 @@ function App() {
     document.body.classList.toggle('light-mode', !darkMode);
   }, [darkMode]);
 
+  // Auto-update for new month/day
+  useEffect(() => {
+    const checkDateUpdate = () => {
+      const today = new Date().toDateString();
+      const currentMonth = new Date().getMonth();
+      const currentYear = new Date().getFullYear();
+      
+      if (state.lastUpdate) {
+        const lastUpdateDate = new Date(state.lastUpdate);
+        const lastMonth = lastUpdateDate.getMonth();
+        const lastYear = lastUpdateDate.getFullYear();
+        
+        // Check if we're in a new month
+        if (currentYear !== lastYear || currentMonth !== lastMonth) {
+          console.log('New month detected - monthly stats will auto-update');
+          // Monthly stats will automatically recalculate based on solvedDates
+          // No need to reset anything, just update lastUpdate
+          setState(prev => ({
+            ...prev,
+            lastUpdate: today
+          }));
+        } else if (state.lastUpdate !== today) {
+          // New day, update lastUpdate
+          setState(prev => ({
+            ...prev,
+            lastUpdate: today
+          }));
+        }
+      }
+    };
+    
+    checkDateUpdate();
+    // Check every hour for date changes
+    const interval = setInterval(checkDateUpdate, 60 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [state.lastUpdate]);
+
   // ============================================
   // RENDER
   // ============================================

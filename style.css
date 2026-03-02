@@ -2020,22 +2020,28 @@ body.light-mode .modal-overlay {
     right: 0.75rem;
     top: 50%;
     transform: translateY(-50%);
-    background: transparent;
+    background: rgba(239, 68, 68, 0.1);
     border: none;
     color: var(--text-muted);
-    font-size: 1.25rem;
+    font-size: 1rem;
+    font-weight: 700;
     cursor: pointer;
-    padding: 0.25rem;
-    border-radius: 4px;
-    transition: all 0.3s ease;
+    padding: 0.35rem 0.5rem;
+    border-radius: 6px;
+    transition: all 0.2s ease;
     opacity: 0;
-    animation: fadeIn 0.3s ease forwards;
+    animation: fadeIn 0.2s ease forwards;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
 }
 
 @keyframes fadeIn {
     from {
         opacity: 0;
-        transform: translateY(-50%) scale(0.8);
+        transform: translateY(-50%) scale(0.7);
     }
     to {
         opacity: 1;
@@ -2044,8 +2050,13 @@ body.light-mode .modal-overlay {
 }
 
 .search-clear-btn:hover {
-    background: rgba(239, 68, 68, 0.15);
+    background: rgba(239, 68, 68, 0.2);
     color: var(--danger);
+    transform: translateY(-50%) scale(1.1);
+}
+
+.search-clear-btn:active {
+    transform: translateY(-50%) scale(0.95);
 }
 
 /* ============================================
@@ -2160,12 +2171,14 @@ body.light-mode .modal-overlay {
 }
 
 .light-mode .search-clear-btn {
+    background: rgba(239, 68, 68, 0.08);
     color: #64748B;
 }
 
 .light-mode .search-clear-btn:hover {
-    background: rgba(239, 68, 68, 0.1);
+    background: rgba(239, 68, 68, 0.15);
     color: var(--danger);
+    transform: translateY(-50%) scale(1.1);
 }
 
 /* Responsive */
