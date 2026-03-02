@@ -1298,12 +1298,23 @@ function App() {
     if (confirm(confirmMessage)) {
       // Second confirmation for safety
       if (confirm('Final confirmation: Delete permanently?')) {
-        setState(prev => ({
-          ...prev,
-          deletedProblems: []
-        }));
+        setState(prev => {
+          // Get list of deleted problem numbers
+          const deletedNumbers = new Set(prev.deletedProblems || []);
+          
+          // Remove from customProblems permanently
+          const filteredCustomProblems = prev.customProblems.filter(
+            p => !deletedNumbers.has(p.number)
+          );
+          
+          return {
+            ...prev,
+            customProblems: filteredCustomProblems,
+            deletedProblems: [] // Clear the trash
+          };
+        });
         showNotification(`🗑️ Permanently deleted ${deletedCount} problem(s)`, 'success');
-        console.log('🗑️ Permanent Delete:', { count: deletedCount });
+        console.log('🗑️ Permanent Delete:', { count: deletedCount, message: 'Problems removed from customProblems and trash cleared' });
       }
     }
   };
