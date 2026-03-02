@@ -188,11 +188,9 @@ const targetProblems = [
   { number: 334, title: "Increasing Triplet Subsequence", difficulty: "Medium", link: "https://leetcode.com/problems/increasing-triplet-subsequence/" },
   { number: 912, title: "Sort an Array", difficulty: "Medium", link: "https://leetcode.com/problems/sort-an-array/" },
 
-  { 
-  number: 221, title: "Maximal Square", difficulty: "Medium", pattern: "Dynamic Programming / Matrix", link: "https://leetcode.com/problems/maximal-square/"},
+  { number: 221, title: "Maximal Square", difficulty: "Medium", pattern: "Dynamic Programming / Matrix", link: "https://leetcode.com/problems/maximal-square/"},
   { number: 137, title: "Single Number II", difficulty: "Medium", link: "https://leetcode.com/problems/single-number-ii/" },
   { number: 201, title: "Bitwise AND of Numbers Range", difficulty: "Medium", link: "https://leetcode.com/problems/bitwise-and-of-numbers-range/" },
-  { number: 260, title: "Single Number III", difficulty: "Medium", link: "https://leetcode.com/problems/single-number-iii/" },
   { number: 491, title: "Non-decreasing Subsequences", difficulty: "Medium", link: "https://leetcode.com/problems/non-decreasing-subsequences/" },
   // ===== Stack / Monotonic =====
   { number: 1249, title: "Minimum Remove to Make Valid Parentheses", difficulty: "Medium", link: "https://leetcode.com/problems/minimum-remove-to-make-valid-parentheses/" },
