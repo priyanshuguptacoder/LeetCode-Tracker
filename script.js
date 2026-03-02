@@ -17,6 +17,7 @@ function App() {
           customProblems: Array.isArray(parsed.customProblems) ? parsed.customProblems : [],
           deletedProblems: Array.isArray(parsed.deletedProblems) ? parsed.deletedProblems : [],
           solvedDates: parsed.solvedDates || {},
+          calendarActivityDates: Array.isArray(parsed.calendarActivityDates) ? parsed.calendarActivityDates : null,
           revisionFlags: parsed.revisionFlags || {},
           solveTimes: parsed.solveTimes || {},
           historicalDatesGenerated: parsed.historicalDatesGenerated || false,
@@ -39,6 +40,7 @@ function App() {
       customProblems: [],
       deletedProblems: [],
       solvedDates: {},
+      calendarActivityDates: null,
       revisionFlags: {},
       solveTimes: {},
       historicalDatesGenerated: false,
@@ -56,7 +58,12 @@ function App() {
   const [patternFilter, setPatternFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
   const [showModal, setShowModal] = useState(false);
+  const [showAlignmentModal, setShowAlignmentModal] = useState(false);
   const [notification, setNotification] = useState(null);
+  const [alignmentData, setAlignmentData] = useState({
+    activeDays: '',
+    maxStreak: ''
+  });
 
   // Password protection
   const ADMIN_PASSWORD = '9653007120';
@@ -325,8 +332,83 @@ function App() {
   // HEATMAP & STREAK CALCULATION
   // ============================================
   
-  const calculateHeatmapAndStreak = (problems, solvedDates) => {
-    if (!problems || !solvedDates) {
+  const calculateHeatmapAndStreak = (solvedDates, calendarActivityDates) => {
+    try {
+      // Use calendarActivityDates as source of truth if it exists
+      let uniqueDates = [];
+      
+      if (calendarActivityDates && Array.isArray(calendarActivityDates) && calendarActivityDates.length > 0) {
+        // Use calendar activity dates
+        uniqueDates = [...new Set(calendarActivityDates)].filter(d => d).sort();
+      } else if (solvedDates && typeof solvedDates === 'object') {
+        // Use solved dates
+        uniqueDates = [...new Set(Object.values(solvedDates))].filter(d => d).sort();
+      }
+      
+      if (uniqueDates.length === 0) {
+        return {
+          dateCounts: {},
+          activeDays: 0,
+          currentStreak: 0,
+          maxStreak: 0
+        };
+      }
+      
+      // Count problems per date (for heatmap)
+      const dateCounts = {};
+      if (solvedDates && typeof solvedDates === 'object') {
+        Object.values(solvedDates).forEach(dateStr => {
+          if (dateStr) {
+            dateCounts[dateStr] = (dateCounts[dateStr] || 0) + 1;
+          }
+        });
+      }
+      
+      // Active Days = unique dates
+      const activeDays = uniqueDates.length;
+      
+      // Calculate Current Streak (from today backwards)
+      const today = new Date().toISOString().split('T')[0];
+      let currentStreak = 0;
+      let checkDate = new Date();
+      
+      while (true) {
+        const dateStr = checkDate.toISOString().split('T')[0];
+        if (uniqueDates.includes(dateStr)) {
+          currentStreak++;
+          checkDate.setDate(checkDate.getDate() - 1);
+        } else {
+          break;
+        }
+      }
+      
+      // Calculate Max Streak (consecutive days)
+      let maxStreak = 0;
+      let tempStreak = 1;
+      
+      for (let i = 1; i < uniqueDates.length; i++) {
+        const prevDate = new Date(uniqueDates[i - 1]);
+        const currDate = new Date(uniqueDates[i]);
+        const diffDays = Math.round((currDate - prevDate) / (1000 * 60 * 60 * 24));
+        
+        if (diffDays === 1) {
+          tempStreak++;
+        } else {
+          maxStreak = Math.max(maxStreak, tempStreak);
+          tempStreak = 1;
+        }
+      }
+      
+      maxStreak = Math.max(maxStreak, tempStreak);
+      
+      return {
+        dateCounts,
+        activeDays,
+        currentStreak,
+        maxStreak
+      };
+    } catch (error) {
+      console.error('Error in calculateHeatmapAndStreak:', error);
       return {
         dateCounts: {},
         activeDays: 0,
@@ -334,67 +416,6 @@ function App() {
         maxStreak: 0
       };
     }
-    
-    const dateCounts = {};
-    
-    problems.forEach(problem => {
-      if (problem && problem.status === 'Done' && problem.number && solvedDates[problem.number]) {
-        const dateStr = solvedDates[problem.number];
-        if (dateStr) {
-          dateCounts[dateStr] = (dateCounts[dateStr] || 0) + 1;
-        }
-      }
-    });
-    
-    // Calculate current streak
-    const today = new Date();
-    let currentStreak = 0;
-    let checkDate = new Date(today);
-    
-    while (true) {
-      const dateStr = checkDate.toISOString().split('T')[0];
-      if (dateCounts[dateStr]) {
-        currentStreak++;
-        checkDate.setDate(checkDate.getDate() - 1);
-      } else {
-        break;
-      }
-    }
-    
-    // Calculate max streak
-    const sortedDates = Object.keys(dateCounts).sort();
-    let maxStreak = 0;
-    let tempStreak = 0;
-    let prevDate = null;
-    
-    sortedDates.forEach(dateStr => {
-      if (!dateStr) return;
-      
-      const currentDate = new Date(dateStr);
-      
-      if (prevDate) {
-        const diffDays = Math.round((currentDate - prevDate) / (1000 * 60 * 60 * 24));
-        if (diffDays === 1) {
-          tempStreak++;
-        } else {
-          maxStreak = Math.max(maxStreak, tempStreak);
-          tempStreak = 1;
-        }
-      } else {
-        tempStreak = 1;
-      }
-      
-      prevDate = currentDate;
-    });
-    
-    maxStreak = Math.max(maxStreak, tempStreak);
-    
-    return {
-      dateCounts,
-      activeDays: Object.keys(dateCounts).length,
-      currentStreak,
-      maxStreak
-    };
   };
 
   // ============================================
@@ -917,8 +938,8 @@ function App() {
   // ============================================
   
   const heatmapData = React.useMemo(
-    () => calculateHeatmapAndStreak(allProblems, state.solvedDates || {}),
-    [allProblems, state.solvedDates]
+    () => calculateHeatmapAndStreak(state.solvedDates || {}, state.calendarActivityDates),
+    [state.solvedDates, state.calendarActivityDates]
   );
   
   const monthlyData = React.useMemo(
@@ -1094,6 +1115,7 @@ function App() {
     }
     
     setState(prev => {
+      const today = new Date().toISOString().split('T')[0];
       const newState = {
         ...prev,
         statusOverrides: {
@@ -1103,12 +1125,21 @@ function App() {
       };
       
       // Auto-assign date when marking as Done
-      if (newStatus === 'Done' && !prev.solvedDates[number]) {
-        const today = new Date().toISOString().split('T')[0];
-        newState.solvedDates = {
-          ...prev.solvedDates,
-          [number]: today
-        };
+      if (newStatus === 'Done') {
+        if (!prev.solvedDates[number]) {
+          newState.solvedDates = {
+            ...prev.solvedDates,
+            [number]: today
+          };
+        }
+        
+        // Update calendar activity dates
+        if (prev.calendarActivityDates) {
+          const currentDates = new Set(prev.calendarActivityDates);
+          if (!currentDates.has(today)) {
+            newState.calendarActivityDates = [...prev.calendarActivityDates, today];
+          }
+        }
       }
       
       // Remove date and revision flag when unmarking as Done
@@ -1127,6 +1158,11 @@ function App() {
       
       return newState;
     });
+    
+    // Show notification
+    if (newStatus === 'Done') {
+      showNotification('✓ Problem marked done — streak updated!', 'success');
+    }
   };
 
   const handleUserDifficultyChange = (number, newDifficulty) => {
@@ -1234,6 +1270,60 @@ function App() {
     }));
     
     showNotification(`✓ Monthly target updated to ${aiTargetSuggestion.suggestedTarget}`, 'success');
+  };
+
+  const handleAlignHistoricalActivity = () => {
+    if (!verifyPassword('align historical activity')) {
+      return;
+    }
+    
+    const activeDays = parseInt(alignmentData.activeDays);
+    const maxStreak = parseInt(alignmentData.maxStreak);
+    
+    if (isNaN(activeDays) || isNaN(maxStreak) || activeDays < 1 || maxStreak < 1) {
+      showNotification('Please enter valid numbers', 'error');
+      return;
+    }
+    
+    if (maxStreak > activeDays) {
+      showNotification('Max streak cannot exceed active days', 'error');
+      return;
+    }
+    
+    // Generate synthetic dates
+    const today = new Date();
+    const dates = [];
+    
+    // Add consecutive streak (most recent days)
+    for (let i = 0; i < maxStreak; i++) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      dates.push(date.toISOString().split('T')[0]);
+    }
+    
+    // Add additional non-consecutive days to reach total active days
+    const additionalDays = activeDays - maxStreak;
+    if (additionalDays > 0) {
+      let daysBack = maxStreak + 2; // Start after a gap
+      for (let i = 0; i < additionalDays; i++) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - daysBack);
+        dates.push(date.toISOString().split('T')[0]);
+        daysBack += Math.floor(Math.random() * 3) + 2; // Random gaps
+      }
+    }
+    
+    // Remove duplicates and sort
+    const uniqueDates = [...new Set(dates)].sort();
+    
+    setState(prev => ({
+      ...prev,
+      calendarActivityDates: uniqueDates
+    }));
+    
+    setShowAlignmentModal(false);
+    setAlignmentData({ activeDays: '', maxStreak: '' });
+    showNotification(`✓ Historical activity aligned: ${activeDays} active days, ${maxStreak} max streak`, 'success');
   };
 
   const handleClearSearch = () => {
@@ -1446,7 +1536,16 @@ function App() {
         {/* Streak & Monthly Stats */}
         <div className="streak-monthly-grid">
           <div className="streak-card">
-            <h3 className="card-title">🔥 Streak Stats</h3>
+            <div className="streak-header">
+              <h3 className="card-title">🔥 Streak Stats</h3>
+              <button 
+                className="btn-align-activity"
+                onClick={() => setShowAlignmentModal(true)}
+                title="Adjust Historical Activity"
+              >
+                ⚙️ Align
+              </button>
+            </div>
             <div className="streak-stats">
               <div className="streak-item">
                 <div className="streak-value">{heatmapData.currentStreak}</div>
@@ -2071,6 +2170,60 @@ function App() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Alignment Modal */}
+      {showAlignmentModal && (
+        <div className="modal-overlay" onClick={() => setShowAlignmentModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>⚙️ Adjust Historical Activity</h2>
+              <button className="modal-close" onClick={() => setShowAlignmentModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <p className="modal-description">
+                Align your tracker stats with LeetCode by entering your actual activity metrics.
+              </p>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Total Active Days *</label>
+                  <input
+                    type="number"
+                    value={alignmentData.activeDays}
+                    onChange={(e) => setAlignmentData({...alignmentData, activeDays: e.target.value})}
+                    placeholder="e.g., 40"
+                    className="form-input"
+                    min="1"
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Max Streak *</label>
+                  <input
+                    type="number"
+                    value={alignmentData.maxStreak}
+                    onChange={(e) => setAlignmentData({...alignmentData, maxStreak: e.target.value})}
+                    placeholder="e.g., 37"
+                    className="form-input"
+                    min="1"
+                    required
+                  />
+                </div>
+              </div>
+              <div className="form-hint">
+                💡 This will generate synthetic historical dates to match your LeetCode stats. Future activity will auto-sync when you mark problems as Done.
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn-secondary" onClick={() => setShowAlignmentModal(false)}>
+                Cancel
+              </button>
+              <button type="button" className="btn-primary" onClick={handleAlignHistoricalActivity}>
+                Apply Alignment
+              </button>
+            </div>
           </div>
         </div>
       )}
