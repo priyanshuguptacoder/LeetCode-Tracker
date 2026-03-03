@@ -4,40 +4,11 @@ const cors = require('cors');
 const problemRoutes = require('./routes/problemRoutes');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 // Middleware
-// CORS configuration for production
-const corsOptions = {
-  origin: function (origin, callback) {
-    // Allow requests with no origin (mobile apps, Postman, etc.)
-    if (!origin) return callback(null, true);
-    
-    // Allow localhost for development
-    if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
-      return callback(null, true);
-    }
-    
-    // Allow your deployed frontend domains
-    const allowedDomains = [
-      'netlify.app',
-      'vercel.app',
-      'render.com',
-      'railway.app'
-    ];
-    
-    const isAllowed = allowedDomains.some(domain => origin.includes(domain));
-    if (isAllowed) {
-      return callback(null, true);
-    }
-    
-    callback(new Error('Not allowed by CORS'));
-  },
-  credentials: true,
-  optionsSuccessStatus: 200
-};
-
-app.use(cors(corsOptions));
+// CORS - Allow all origins for production deployment
+app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -77,14 +48,11 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start server (only in development, Vercel handles this in production)
-if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`📊 API: http://localhost:${PORT}/api`);
-    console.log(`🏥 Health: http://localhost:${PORT}/`);
-  });
-}
+// Start server
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📊 API: http://localhost:${PORT}/api`);
+  console.log(`🏥 Health: http://localhost:${PORT}/`);
+});
 
-// Export for Vercel serverless
 module.exports = app;
