@@ -3,35 +3,69 @@ const path = require('path');
 
 const PROBLEMS_FILE = path.join(__dirname, '../problems.json');
 
-// Ensure problems.json exists
+// Ensure problems.json exists with users structure
 const ensureFileExists = async () => {
   try {
     await fs.access(PROBLEMS_FILE);
+    // Verify structure
+    const data = await fs.readFile(PROBLEMS_FILE, 'utf8');
+    const parsed = JSON.parse(data);
+    if (!parsed.users) {
+      // Migrate old format to new format
+      await fs.writeFile(PROBLEMS_FILE, JSON.stringify({ users: {} }, null, 2));
+    }
   } catch {
-    await fs.writeFile(PROBLEMS_FILE, JSON.stringify({ problems: [] }, null, 2));
+    await fs.writeFile(PROBLEMS_FILE, JSON.stringify({ users: {} }, null, 2));
   }
 };
 
-// Read problems from file
-const readProblems = async () => {
+// Read all data from file
+const readData = async () => {
   await ensureFileExists();
   const data = await fs.readFile(PROBLEMS_FILE, 'utf8');
   return JSON.parse(data);
 };
 
-// Write problems to file
-const writeProblems = async (data) => {
+// Write all data to file
+const writeData = async (data) => {
   await fs.writeFile(PROBLEMS_FILE, JSON.stringify(data, null, 2));
 };
 
-// GET all problems
+// Get user's problems
+const getUserProblems = async (userId) => {
+  const data = await readData();
+  if (!data.users[userId]) {
+    data.users[userId] = [];
+    await writeData(data);
+  }
+  return data.users[userId];
+};
+
+// Set user's problems
+const setUserProblems = async (userId, problems) => {
+  const data = await readData();
+  data.users[userId] = problems;
+  await writeData(data);
+};
+
+// GET all problems for a user
 exports.getAllProblems = async (req, res) => {
   try {
-    const data = await readProblems();
+    const { userId } = req.query;
+    
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        error: 'userId is required'
+      });
+    }
+    
+    const problems = await getUserProblems(userId);
+    
     res.json({
       success: true,
-      count: data.problems.length,
-      data: data.problems
+      count: problems.length,
+      data: problems
     });
   } catch (error) {
     res.status(500).json({
@@ -42,12 +76,21 @@ exports.getAllProblems = async (req, res) => {
   }
 };
 
-// GET single problem by number
+// GET single problem by number for a user
 exports.getProblem = async (req, res) => {
   try {
     const { number } = req.params;
-    const data = await readProblems();
-    const problem = data.problems.find(p => p.number === parseInt(number));
+    const { userId } = req.query;
+    
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        error: 'userId is required'
+      });
+    }
+    
+    const problems = await getUserProblems(userId);
+    const problem = problems.find(p => p.number === parseInt(number));
     
     if (!problem) {
       return res.status(404).json({
@@ -72,7 +115,14 @@ exports.getProblem = async (req, res) => {
 // POST create new problem
 exports.createProblem = async (req, res) => {
   try {
-    const { number, title, difficulty, pattern, link, userDifficulty, status, solvedDate } = req.body;
+    const { userId, number, title, difficulty, pattern, link, userDifficulty, status, solvedDate } = req.body;
+    
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        error: 'userId is required'
+      });
+    }
     
     // Validation
     if (!number || !title || !difficulty || !pattern || !link) {
@@ -82,10 +132,10 @@ exports.createProblem = async (req, res) => {
       });
     }
     
-    const data = await readProblems();
+    const problems = await getUserProblems(userId);
     
     // Check for duplicate
-    const exists = data.problems.find(p => p.number === parseInt(number));
+    const exists = problems.find(p => p.number === parseInt(number));
     if (exists) {
       return res.status(400).json({
         success: false,
@@ -106,10 +156,10 @@ exports.createProblem = async (req, res) => {
       createdAt: new Date().toISOString()
     };
     
-    data.problems.push(newProblem);
-    data.problems.sort((a, b) => a.number - b.number);
+    problems.push(newProblem);
+    problems.sort((a, b) => a.number - b.number);
     
-    await writeProblems(data);
+    await setUserProblems(userId, problems);
     
     res.status(201).json({
       success: true,
@@ -128,10 +178,17 @@ exports.createProblem = async (req, res) => {
 exports.updateProblem = async (req, res) => {
   try {
     const { number } = req.params;
-    const updates = req.body;
+    const { userId, ...updates } = req.body;
     
-    const data = await readProblems();
-    const index = data.problems.findIndex(p => p.number === parseInt(number));
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        error: 'userId is required'
+      });
+    }
+    
+    const problems = await getUserProblems(userId);
+    const index = problems.findIndex(p => p.number === parseInt(number));
     
     if (index === -1) {
       return res.status(404).json({
@@ -141,18 +198,18 @@ exports.updateProblem = async (req, res) => {
     }
     
     // Update problem
-    data.problems[index] = {
-      ...data.problems[index],
+    problems[index] = {
+      ...problems[index],
       ...updates,
       number: parseInt(number), // Ensure number doesn't change
       updatedAt: new Date().toISOString()
     };
     
-    await writeProblems(data);
+    await setUserProblems(userId, problems);
     
     res.json({
       success: true,
-      data: data.problems[index]
+      data: problems[index]
     });
   } catch (error) {
     res.status(500).json({
@@ -167,9 +224,17 @@ exports.updateProblem = async (req, res) => {
 exports.deleteProblem = async (req, res) => {
   try {
     const { number } = req.params;
+    const { userId } = req.query;
     
-    const data = await readProblems();
-    const index = data.problems.findIndex(p => p.number === parseInt(number));
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        error: 'userId is required'
+      });
+    }
+    
+    const problems = await getUserProblems(userId);
+    const index = problems.findIndex(p => p.number === parseInt(number));
     
     if (index === -1) {
       return res.status(404).json({
@@ -178,8 +243,8 @@ exports.deleteProblem = async (req, res) => {
       });
     }
     
-    const deletedProblem = data.problems.splice(index, 1)[0];
-    await writeProblems(data);
+    const deletedProblem = problems.splice(index, 1)[0];
+    await setUserProblems(userId, problems);
     
     res.json({
       success: true,
@@ -198,8 +263,16 @@ exports.deleteProblem = async (req, res) => {
 // GET stats
 exports.getStats = async (req, res) => {
   try {
-    const data = await readProblems();
-    const problems = data.problems;
+    const { userId } = req.query;
+    
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        error: 'userId is required'
+      });
+    }
+    
+    const problems = await getUserProblems(userId);
     
     // Calculate stats
     const total = problems.length;
