@@ -1240,6 +1240,9 @@ body {
     justify-content: center;
     z-index: 1000;
     animation: fadeIn 0.2s ease;
+    padding: 20px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 @keyframes fadeIn {
@@ -1253,8 +1256,12 @@ body {
     border-radius: 16px;
     width: 90%;
     max-width: 600px;
+    max-height: 90vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     box-shadow: var(--shadow-xl);
     animation: slideUp 0.3s ease;
+    margin: auto;
 }
 
 @keyframes slideUp {
@@ -1438,6 +1445,7 @@ body {
 
     .table-wrapper {
         overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
     }
 
     .problems-table {
@@ -1446,7 +1454,34 @@ body {
 
     .modal-content {
         width: 95%;
-        margin: 20px;
+        max-width: 95vw;
+        max-height: 85vh;
+        margin: 10px;
+    }
+    
+    .modal-body {
+        padding: 16px;
+        max-height: 60vh;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .modal-header {
+        padding: 16px;
+    }
+    
+    .modal-footer {
+        padding: 16px;
+    }
+    
+    /* Fix for iOS Safari */
+    body {
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    /* Prevent zoom on input focus */
+    input, select, textarea {
+        font-size: 16px !important;
     }
 }
 
