@@ -14,9 +14,10 @@ services:
         value: 5001
     healthCheckPath: /
 
-  # Frontend (Static Site)
-  - type: static
+  # Frontend (Static Site via Web Service)
+  - type: web
     name: leetcode-tracker-frontend
+    env: static
     plan: free
     buildCommand: echo "No build needed"
     staticPublishPath: .
