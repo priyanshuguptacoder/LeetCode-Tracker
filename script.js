@@ -1727,16 +1727,10 @@ function App() {
     if (loading) {
       return (
         <div className="app">
-          <div style={{
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            height: '100vh',
-            flexDirection: 'column',
-            gap: '20px'
-          }}>
-            <div style={{fontSize: '48px'}}>⏳</div>
-            <div style={{fontSize: '24px', color: 'var(--primary)'}}>Loading problems from API...</div>
+          <div className="loading-container">
+            <div className="loading-spinner"></div>
+            <div className="loading-text">Loading your problems...</div>
+            <div className="loading-subtext">Please wait</div>
           </div>
         </div>
       );
@@ -1746,32 +1740,15 @@ function App() {
     if (apiError) {
       return (
         <div className="app">
-          <div style={{
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            height: '100vh',
-            flexDirection: 'column',
-            gap: '20px'
-          }}>
-            <div style={{fontSize: '48px'}}>❌</div>
-            <div style={{fontSize: '24px', color: 'var(--danger)'}}>Failed to connect to API</div>
-            <div style={{fontSize: '16px', color: 'var(--text-secondary)'}}>{apiError}</div>
-            <div style={{fontSize: '14px', color: 'var(--text-muted)'}}>
-              Make sure backend is running on http://localhost:5001
-            </div>
+          <div className="error-container">
+            <div className="error-icon">⚠️</div>
+            <div className="error-title">Connection Error</div>
+            <div className="error-message">{apiError}</div>
             <button 
               onClick={() => window.location.reload()} 
-              style={{
-                padding: '10px 20px',
-                background: 'var(--primary)',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer'
-              }}
+              className="retry-button"
             >
-              Retry
+              🔄 Retry Connection
             </button>
           </div>
         </div>
