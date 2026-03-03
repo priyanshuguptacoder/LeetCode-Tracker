@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cache Check</title>
+    <style>
+        body {
+            font-family: monospace;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #00C896;
+        }
+        .check {
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            background: #0a0a0a;
+        }
+        .pass { border-left: 4px solid #00C896; }
+        .fail { border-left: 4px solid #ef4444; color: #ef4444; }
+        button {
+            background: #00C896;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            margin: 10px 5px;
+        }
+        button:hover { background: #00a076; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Cache & Configuration Check</h1>
+    
+    <div id="results"></div>
+    
+    <button onclick="runChecks()">Run Checks</button>
+    <button onclick="location.href='/'">Go to App</button>
+    <button onclick="location.href='/test-api-connection.html'">API Test</button>
+
+    <script src="api-config.js"></script>
+    <script>
+        function runChecks() {
+            const results = document.getElementById('results');
+            let html = '';
+            
+            // Check 1: API object exists
+            if (typeof window.API !== 'undefined') {
+                html += '<div class="check pass">✅ API object loaded</div>';
+            } else {
+                html += '<div class="check fail">❌ API object NOT loaded - cache issue!</div>';
+            }
+            
+            // Check 2: API_BASE_URL exists
+            if (typeof window.API_BASE_URL !== 'undefined') {
+                html += `<div class="check pass">✅ API_BASE_URL: ${window.API_BASE_URL}</div>`;
+            } else {
+                html += '<div class="check fail">❌ API_BASE_URL NOT defined</div>';
+            }
+            
+            // Check 3: Correct URL
+            if (window.API_BASE_URL === 'http://localhost:5001/api') {
+                html += '<div class="check pass">✅ Correct API URL for local development</div>';
+            } else {
+                html += `<div class="check fail">❌ Wrong API URL: ${window.API_BASE_URL}</div>`;
+            }
+            
+            // Check 4: Environment detection
+            const isLocal = window.location.hostname === 'localhost';
+            if (isLocal) {
+                html += '<div class="check pass">✅ Environment: LOCAL</div>';
+            } else {
+                html += '<div class="check fail">⚠️ Environment: PRODUCTION</div>';
+            }
+            
+            // Check 5: Backend connectivity
+            html += '<div class="check">⏳ Testing backend connection...</div>';
+            results.innerHTML = html;
+            
+            fetch('http://localhost:5001/')
+                .then(res => res.json())
+                .then(data => {
+                    html = html.replace('⏳ Testing backend connection...', 
+                        `✅ Backend connected: ${data.message}`);
+                    results.innerHTML = html;
+                    
+                    // Final verdict
+                    if (typeof window.API !== 'undefined' && 
+                        window.API_BASE_URL === 'http://localhost:5001/api') {
+                        html += '<div class="check pass"><strong>🎉 ALL CHECKS PASSED!</strong><br>Your cache is cleared. Go to the main app.</div>';
+                    } else {
+                        html += '<div class="check fail"><strong>⚠️ CACHE ISSUE DETECTED</strong><br>Press Cmd+Shift+R to hard refresh this page.</div>';
+                    }
+                    results.innerHTML = html;
+                })
+                .catch(err => {
+                    html = html.replace('⏳ Testing backend connection...', 
+                        `❌ Backend not responding: ${err.message}`);
+                    html += '<div class="check fail"><strong>Backend Issue</strong><br>Make sure backend is running: cd backend && npm start</div>';
+                    results.innerHTML = html;
+                });
+        }
+        
+        // Auto-run on load
+        window.addEventListener('load', runChecks);
+    </script>
+</body>
+</html>
