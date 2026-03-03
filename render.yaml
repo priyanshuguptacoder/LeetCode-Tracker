@@ -17,7 +17,6 @@ services:
   # Frontend (Static Site)
   - type: static
     name: leetcode-tracker-frontend
-    env: static
     plan: free
     buildCommand: echo "No build needed"
     staticPublishPath: .
