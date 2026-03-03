@@ -1,11 +1,3 @@
-backend/
-node_modules/
-.git/
-.DS_Store
-*.md
-!README.md
-.env
-.env.local
-package.json
-package-lock.json
-leetcode_full_dataset.js
+backend
+node_modules
+.git
