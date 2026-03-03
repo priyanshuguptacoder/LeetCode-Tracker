@@ -1,5 +1,5 @@
 services:
-  # Backend API
+  # Backend API (Web Service)
   - type: web
     name: leetcode-tracker-backend
     env: node
@@ -14,11 +14,10 @@ services:
         value: 5001
     healthCheckPath: /
 
-  # Frontend Static Site
-  - type: web
+  # Frontend (Static Site)
+  - type: static
     name: leetcode-tracker-frontend
     env: static
-    region: oregon
     plan: free
     buildCommand: echo "No build needed"
     staticPublishPath: .
