@@ -26,7 +26,32 @@ app.get('/', (req, res) => {
   res.json({
     success: true,
     message: 'LeetCode Tracker API is running',
-    version: '1.0.0'
+    version: '1.0.0',
+    endpoints: {
+      problems: '/api/problems',
+      stats: '/api/stats',
+      health: '/'
+    }
+  });
+});
+
+// Debug endpoint
+app.get('/debug', (req, res) => {
+  const fs = require('fs');
+  const path = require('path');
+  
+  res.json({
+    success: true,
+    cwd: process.cwd(),
+    files: {
+      problemsJson: fs.existsSync(path.join(__dirname, 'problems.json')),
+      controller: fs.existsSync(path.join(__dirname, 'controllers', 'problemController.js')),
+      routes: fs.existsSync(path.join(__dirname, 'routes', 'problemRoutes.js'))
+    },
+    env: {
+      NODE_ENV: process.env.NODE_ENV,
+      PORT: process.env.PORT || 5001
+    }
   });
 });
 
