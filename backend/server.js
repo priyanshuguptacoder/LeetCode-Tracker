@@ -18,6 +18,15 @@ app.use((req, res, next) => {
   next();
 });
 
+// Test route (direct, no controller)
+app.get('/api/test', (req, res) => {
+  res.json({
+    success: true,
+    message: 'API routes are working!',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Routes
 app.use('/api', problemRoutes);
 
@@ -78,6 +87,23 @@ app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📊 API: http://localhost:${PORT}/api`);
   console.log(`🏥 Health: http://localhost:${PORT}/`);
+  console.log(`🔍 Debug: http://localhost:${PORT}/debug`);
+  console.log(`🧪 Test: http://localhost:${PORT}/api/test`);
+  console.log(`📝 Problems: http://localhost:${PORT}/api/problems`);
+  
+  // Log all registered routes
+  console.log('\n📋 Registered routes:');
+  app._router.stack.forEach((middleware) => {
+    if (middleware.route) {
+      console.log(`  ${Object.keys(middleware.route.methods)} ${middleware.route.path}`);
+    } else if (middleware.name === 'router') {
+      middleware.handle.stack.forEach((handler) => {
+        if (handler.route) {
+          console.log(`  ${Object.keys(handler.route.methods)} ${handler.route.path}`);
+        }
+      });
+    }
+  });
 });
 
 module.exports = app;
