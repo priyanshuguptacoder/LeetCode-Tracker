@@ -2,8 +2,8 @@
 // For local development
 const LOCAL_API_URL = 'http://localhost:5001/api';
 
-// For Vercel deployment - API routes are on same domain
-const PRODUCTION_API_URL = window.location.origin + '/api';
+// For production - Render backend URL
+const PRODUCTION_API_URL = 'https://eetcode-tracker-backend.onrender.com/api';
 
 // Auto-detect environment
 const isLocalhost = window.location.hostname === 'localhost' || 
@@ -11,6 +11,13 @@ const isLocalhost = window.location.hostname === 'localhost' ||
                     window.location.hostname === '';
 
 const API_BASE_URL = isLocalhost ? LOCAL_API_URL : PRODUCTION_API_URL;
+
+// Log current configuration (for debugging)
+console.log('🔧 API Configuration:', {
+  environment: isLocalhost ? 'LOCAL' : 'PRODUCTION',
+  baseURL: API_BASE_URL,
+  hostname: window.location.hostname
+});
 
 const api = {
   // Get all problems
