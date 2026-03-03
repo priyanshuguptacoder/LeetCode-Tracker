@@ -2302,15 +2302,6 @@ function App() {
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="filter-input search-input"
                 />
-                {searchTerm && (
-                  <button 
-                    className="search-clear-btn"
-                    onClick={handleClearSearch}
-                    title="Clear search"
-                  >
-                    ✕
-                  </button>
-                )}
               </div>
             </div>
             <div className="filter-group">
