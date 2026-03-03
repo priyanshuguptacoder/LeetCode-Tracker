@@ -16,7 +16,25 @@ function App() {
         setLoading(true);
         const response = await window.API.getAllProblems();
         if (response.success) {
-          setApiProblems(response.data || []);
+          const problems = response.data || [];
+          setApiProblems(problems);
+          
+          // Sync solved dates from backend to state
+          const backendSolvedDates = {};
+          problems.forEach(problem => {
+            if (problem.status === 'Done' && problem.solvedDate) {
+              backendSolvedDates[problem.number] = problem.solvedDate;
+            }
+          });
+          
+          // Merge with existing localStorage dates (keep local if exists)
+          setState(prev => ({
+            ...prev,
+            solvedDates: {
+              ...backendSolvedDates,
+              ...prev.solvedDates // Local overrides backend
+            }
+          }));
         }
         setLoading(false);
       } catch (error) {
@@ -977,7 +995,24 @@ function App() {
       if (response.success) {
         // Refresh problems from API
         const allProblemsResponse = await window.API.getAllProblems();
-        setApiProblems(allProblemsResponse.data || []);
+        const problems = allProblemsResponse.data || [];
+        setApiProblems(problems);
+        
+        // Sync solved dates from backend
+        const backendSolvedDates = {};
+        problems.forEach(problem => {
+          if (problem.status === 'Done' && problem.solvedDate) {
+            backendSolvedDates[problem.number] = problem.solvedDate;
+          }
+        });
+        
+        setState(prev => ({
+          ...prev,
+          solvedDates: {
+            ...backendSolvedDates,
+            ...prev.solvedDates
+          }
+        }));
         
         showNotification(`✅ Problem #${problemNumber} added successfully!`, 'success');
         
@@ -1050,12 +1085,25 @@ function App() {
       if (response.success) {
         // Refresh problems from API
         const allProblemsResponse = await window.API.getAllProblems();
-        setApiProblems(allProblemsResponse.data || []);
+        const problems = allProblemsResponse.data || [];
+        setApiProblems(problems);
+        
+        // Sync solved dates from backend
+        const backendSolvedDates = {};
+        problems.forEach(problem => {
+          if (problem.status === 'Done' && problem.solvedDate) {
+            backendSolvedDates[problem.number] = problem.solvedDate;
+          }
+        });
         
         // Update localStorage for dates and flags
         setState(prev => {
           const newState = {
             ...prev,
+            solvedDates: {
+              ...backendSolvedDates,
+              ...prev.solvedDates
+            },
             statusOverrides: {
               ...prev.statusOverrides,
               [number]: newStatus
@@ -1123,14 +1171,22 @@ function App() {
       if (response.success) {
         // Refresh problems from API
         const allProblemsResponse = await window.API.getAllProblems();
-        setApiProblems(allProblemsResponse.data || []);
+        const problems = allProblemsResponse.data || [];
+        setApiProblems(problems);
         
-        // Update localStorage override
+        // Sync solved dates from backend
+        const backendSolvedDates = {};
+        problems.forEach(problem => {
+          if (problem.status === 'Done' && problem.solvedDate) {
+            backendSolvedDates[problem.number] = problem.solvedDate;
+          }
+        });
+        
         setState(prev => ({
           ...prev,
-          userDifficultyOverrides: {
-            ...(prev.userDifficultyOverrides || {}),
-            [number]: newDifficulty
+          solvedDates: {
+            ...backendSolvedDates,
+            ...prev.solvedDates
           }
         }));
         
@@ -1170,7 +1226,16 @@ function App() {
           if (response.success) {
             // Refresh problems from API
             const allProblemsResponse = await window.API.getAllProblems();
-            setApiProblems(allProblemsResponse.data || []);
+            const problems = allProblemsResponse.data || [];
+            setApiProblems(problems);
+            
+            // Sync solved dates from backend
+            const backendSolvedDates = {};
+            problems.forEach(problem => {
+              if (problem.status === 'Done' && problem.solvedDate) {
+                backendSolvedDates[problem.number] = problem.solvedDate;
+              }
+            });
             
             // Clean up localStorage data for this problem
             setState(prev => {
@@ -1180,7 +1245,10 @@ function App() {
               
               return {
                 ...prev,
-                solvedDates: remainingSolvedDates,
+                solvedDates: {
+                  ...backendSolvedDates,
+                  ...remainingSolvedDates
+                },
                 revisionFlags: remainingRevisionFlags,
                 solveTimes: remainingSolveTimes
               };
