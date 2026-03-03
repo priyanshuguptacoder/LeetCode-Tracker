@@ -4,7 +4,7 @@ const LOCAL_API_URL = 'http://localhost:5001/api';
 
 // For production - Render backend URL
 // This will be your backend service URL on Render
-const PRODUCTION_API_URL = 'https://leetcode-tracker-backend.onrender.com/api';
+const PRODUCTION_API_URL = 'https://leetcode-tracker-43rt.onrender.com/api';
 
 // Auto-detect environment
 const isLocalhost = window.location.hostname === 'localhost' || 
