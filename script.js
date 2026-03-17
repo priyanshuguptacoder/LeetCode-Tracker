@@ -1,5 +1,90 @@
 const { useState, useEffect, useRef } = React;
 
+// ============================================
+// ADMIN AUTH MODAL — session-based unlock
+// Password: '0' (UI-level lock only, not real security)
+// ============================================
+function AdminModal({ onClose, onUnlock, adminPassword }) {
+  const [pwVal, setPwVal] = React.useState('');
+  const [pwErr, setPwErr] = React.useState('');
+
+  const handleUnlock = () => {
+    if (pwVal === adminPassword) {
+      onUnlock();
+      onClose();
+    } else {
+      setPwErr('Incorrect password');
+      setPwVal('');
+    }
+  };
+
+  return (
+    <div className="pw-modal-overlay" onClick={onClose}>
+      <div className="pw-modal" onClick={e => e.stopPropagation()}>
+        <div className="admin-modal-icon">🔒</div>
+        <h3>Admin Access</h3>
+        <p>Enter password to modify data</p>
+        <input
+          type="password"
+          placeholder="Password"
+          value={pwVal}
+          autoFocus
+          onChange={e => { setPwVal(e.target.value); setPwErr(''); }}
+          onKeyDown={e => e.key === 'Enter' && handleUnlock()}
+        />
+        <div className="pw-modal-error">{pwErr}</div>
+        <div className="pw-modal-actions">
+          <button className="btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="btn-confirm" onClick={handleUnlock}>Unlock</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Legacy PwModal kept for delete confirmation (danger variant)
+function PwModal({ modal, adminPassword, onClose }) {
+  const [pwVal, setPwVal] = React.useState('');
+  const [pwErr, setPwErr] = React.useState('');
+
+  const handleConfirm = () => {
+    if (pwVal === adminPassword) {
+      modal.onConfirm();
+      onClose();
+    } else {
+      setPwErr('Incorrect password');
+      setPwVal('');
+    }
+  };
+
+  return (
+    <div className="pw-modal-overlay" onClick={onClose}>
+      <div className="pw-modal" onClick={e => e.stopPropagation()}>
+        <h3>{modal.title}</h3>
+        {modal.subtitle && <p>{modal.subtitle}</p>}
+        <input
+          type="password"
+          placeholder="Enter password"
+          value={pwVal}
+          autoFocus
+          onChange={e => { setPwVal(e.target.value); setPwErr(''); }}
+          onKeyDown={e => e.key === 'Enter' && handleConfirm()}
+        />
+        <div className="pw-modal-error">{pwErr}</div>
+        <div className="pw-modal-actions">
+          <button className="btn-secondary" onClick={onClose}>Cancel</button>
+          <button
+            className={modal.danger ? 'btn-danger' : 'btn-confirm'}
+            onClick={handleConfirm}
+          >
+            {modal.danger ? 'Delete' : 'Confirm'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   // ============================================
   // API DATA FETCHING
@@ -208,8 +293,54 @@ function App() {
   const [showAlignmentModal, setShowAlignmentModal] = useState(false);
   const [notification, setNotification] = useState(null);
 
-  // Password protection
+  // ── Password-confirm modal state (used for delete confirmation) ───────────
+  const [pwModal, setPwModal] = useState(null);
+  // pwModal = { title, subtitle, onConfirm, danger: bool } | null
+
+  const openPwModal = (title, subtitle, onConfirm, danger = false) => {
+    setPwModal({ title, subtitle, onConfirm, danger });
+  };
+  const closePwModal = () => setPwModal(null);
+
+  // ── Admin session state ───────────────────────────────────────────────────
+  // Session-based unlock: enter password once per tab, then all actions flow freely.
   const ADMIN_PASSWORD = '0';
+  const [isAdminUnlocked, setIsAdminUnlocked] = useState(
+    () => sessionStorage.getItem('admin') === 'true'
+  );
+  const [showAdminModal, setShowAdminModal] = useState(false);
+  const [pendingAction, setPendingAction] = useState(null);
+  const autoLockTimerRef = useRef(null);
+
+  const lockAdmin = () => {
+    setIsAdminUnlocked(false);
+    sessionStorage.removeItem('admin');
+  };
+
+  const unlockAdmin = () => {
+    setIsAdminUnlocked(true);
+    sessionStorage.setItem('admin', 'true');
+    if (autoLockTimerRef.current) clearTimeout(autoLockTimerRef.current);
+    autoLockTimerRef.current = setTimeout(lockAdmin, 30 * 60 * 1000);
+  };
+
+  // requireAdmin: if already unlocked → run action immediately, else show modal first
+  const requireAdmin = (action) => {
+    if (isAdminUnlocked) {
+      action();
+    } else {
+      setPendingAction(() => action);
+      setShowAdminModal(true);
+    }
+  };
+
+  const handleAdminUnlock = () => {
+    unlockAdmin();
+    if (pendingAction) {
+      pendingAction();
+      setPendingAction(null);
+    }
+  };
 
   // Form state for modal
   const [formData, setFormData] = useState({
@@ -735,15 +866,7 @@ function App() {
   // ============================================
   const problemExists = (number) => apiProblems.some(p => p.number === parseInt(number));
   
-  const verifyPassword = (action) => {
-    const password = prompt(`🔒 Enter password to ${action}:`);
-    if (password === ADMIN_PASSWORD) {
-      return true;
-    } else if (password !== null) {
-      showNotification('❌ Incorrect password', 'error');
-    }
-    return false;
-  };
+  // verifyPassword removed — replaced by requireAdmin() session-based system
 
   // ============================================
   // NOTIFICATION SYSTEM
@@ -760,30 +883,19 @@ function App() {
   
   const handleAddProblem = async (e) => {
     e.preventDefault();
-    
-    // Password verification
-    if (!verifyPassword('add this problem')) {
-      return;
-    }
-    
-    // Validation
+
+    // Validation first (no auth needed to validate)
     if (!formData.number || !formData.title || !formData.link) {
       showNotification('Please fill in all required fields', 'error');
       return;
     }
-
     const problemNumber = parseInt(formData.number);
-    
     if (problemNumber <= 0 || isNaN(problemNumber)) {
       showNotification('Problem number must be a positive integer', 'error');
       return;
     }
-
-    // Duplicate check
     if (problemExists(problemNumber)) {
       showNotification(`⚠️ Problem #${problemNumber} already exists!`, 'error');
-      
-      // Try to highlight the row if it's visible
       const tableRow = document.querySelector(`tr[data-problem-number="${problemNumber}"]`);
       if (tableRow) {
         tableRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -793,49 +905,39 @@ function App() {
       return;
     }
 
-    // Auto-detect pattern if not provided
-    const hasPattern = formData.pattern && formData.pattern.trim() !== '';
-    const detectedPattern = hasPattern ? formData.pattern : detectPattern(formData.title);
-
-    const newProblem = {
-      // Backend schema: id, title, difficulty, leetcodeLink, solved, solvedDate, topics
-      id: problemNumber,
-      title: formData.title,
-      difficulty: formData.difficulty,
-      topics: detectedPattern ? [detectedPattern] : [],
-      leetcodeLink: formData.link || `https://leetcode.com/problems/${problemNumber}/`,
-      solved: formData.type === 'Solved',
-      solvedDate: formData.type === 'Solved' ? toLocalDateStr(new Date()) : null
-    };
-
-    try {
-      // Add to API
-      const response = await window.API.createProblem(newProblem);
-      
-      if (response.success) {
-        // Update streak from backend response (3-case logic already applied server-side)
-        if (response.streak) setDbStreak(response.streak);
-
-        // Refetch problems — apiProblems update triggers all useMemo analytics automatically
-        const allProblemsResponse = await window.API.getAllProblems();
-        const problems = transformProblems(allProblemsResponse.data);
-        setApiProblems(problems);
-        
-        showNotification(`✅ Problem #${problemNumber} added successfully!${formData.type === 'Solved' ? ' — Streak updated!' : ''}`, 'success');
-        setShowModal(false);
-        setFormData({ number: '', title: '', difficulty: 'Medium', type: 'Solved', pattern: '', link: '' });
-        
-        setTimeout(() => {
-          const tableRow = document.querySelector(`tr[data-problem-number="${problemNumber}"]`);
-          if (tableRow) {
-            tableRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            tableRow.style.animation = 'highlightRow 2s ease';
-          }
-        }, 300);
+    requireAdmin(async () => {
+      const hasPattern = formData.pattern && formData.pattern.trim() !== '';
+      const detectedPattern = hasPattern ? formData.pattern : detectPattern(formData.title);
+      const newProblem = {
+        id: problemNumber,
+        title: formData.title,
+        difficulty: formData.difficulty,
+        topics: detectedPattern ? [detectedPattern] : [],
+        leetcodeLink: formData.link || `https://leetcode.com/problems/${problemNumber}/`,
+        solved: formData.type === 'Solved',
+        solvedDate: formData.type === 'Solved' ? toLocalDateStr(new Date()) : null
+      };
+      try {
+        const response = await window.API.createProblem(newProblem);
+        if (response.success) {
+          if (response.streak) setDbStreak(response.streak);
+          const allProblemsResponse = await window.API.getAllProblems();
+          setApiProblems(transformProblems(allProblemsResponse.data));
+          showNotification(`✅ Problem #${problemNumber} added!${formData.type === 'Solved' ? ' — Streak updated!' : ''}`, 'success');
+          setShowModal(false);
+          setFormData({ number: '', title: '', difficulty: 'Medium', type: 'Solved', pattern: '', link: '' });
+          setTimeout(() => {
+            const tableRow = document.querySelector(`tr[data-problem-number="${problemNumber}"]`);
+            if (tableRow) {
+              tableRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              tableRow.style.animation = 'highlightRow 2s ease';
+            }
+          }, 300);
+        }
+      } catch (error) {
+        showNotification(`❌ Error: ${error.message}`, 'error');
       }
-    } catch (error) {
-      showNotification(`❌ Error: ${error.message}`, 'error');
-    }
+    });
   };
 
   // ============================================
@@ -843,184 +945,129 @@ function App() {
   // ============================================
   
   const handleStatusChange = async (number, newStatus) => {
-    if (!verifyPassword('change status')) {
-      return;
-    }
-    
-    // Prompt for solve time when marking as Done
-    let solveTime = null;
-    if (newStatus === 'Done') {
-      const time = prompt('Enter solve time in minutes (optional, press Cancel to skip):');
-      if (time !== null && time.trim() !== '') {
-        const minutes = parseInt(time);
-        if (!isNaN(minutes) && minutes > 0) {
-          solveTime = minutes;
-          setState(prev => ({
-            ...prev,
-            solveTimes: {
-              ...prev.solveTimes,
-              [number]: minutes
-            }
-          }));
+    requireAdmin(async () => {
+      try {
+        const today = toLocalDateStr(new Date());
+        const updateData = {
+          solved: newStatus === 'Done',
+          inProgress: newStatus === 'In Progress',
+          solvedDate: newStatus === 'Done' ? today : null
+        };
+        const response = await window.API.updateProblem(number, updateData);
+        if (response.success) {
+          if (response.streak) setDbStreak(response.streak);
+          const allProblemsResponse = await window.API.getAllProblems();
+          setApiProblems(transformProblems(allProblemsResponse.data));
+          showNotification(newStatus === 'Done' ? '✓ Marked done — streak updated!' : `✓ Status → ${newStatus}`, 'success');
         }
+      } catch (error) {
+        showNotification(`❌ Error: ${error.message}`, 'error');
       }
-    }
-    
-    try {
-      const today = toLocalDateStr(new Date());
-      
-      // Backend schema: solved=true only for 'Done', inProgress=true for 'In Progress'
-      const updateData = {
-        solved: newStatus === 'Done',
-        inProgress: newStatus === 'In Progress',
-        solvedDate: newStatus === 'Done' ? today : null
-      };
-      
-      const response = await window.API.updateProblem(number, updateData);
-      
-      if (response.success) {
-        // Update streak from backend response if problem was marked solved
-        if (response.streak) setDbStreak(response.streak);
-
-        // Refetch — solvedDates useMemo recomputes automatically from apiProblems
-        const allProblemsResponse = await window.API.getAllProblems();
-        const problems = transformProblems(allProblemsResponse.data);
-        setApiProblems(problems);
-        
-        if (newStatus === 'Done') {
-          showNotification('✓ Problem marked done — streak updated!', 'success');
-        } else {
-          showNotification(`✓ Status changed to ${newStatus}`, 'success');
-        }
-      }
-    } catch (error) {
-      showNotification(`❌ Error: ${error.message}`, 'error');
-    }
+    });
   };
 
   const handleUserDifficultyChange = async (number, newDifficulty) => {
-    if (!verifyPassword('change difficulty')) {
-      return;
-    }
-    
-    try {
-      // Update via API
-      const response = await window.API.updateProblem(number, {
-        userDifficulty: newDifficulty
-      });
-      
-      if (response.success) {
-        const allProblemsResponse = await window.API.getAllProblems();
-        setApiProblems(transformProblems(allProblemsResponse.data));
-        showNotification(`✓ Difficulty updated to ${newDifficulty}`, 'success');
+    requireAdmin(async () => {
+      try {
+        const response = await window.API.updateProblem(number, { userDifficulty: newDifficulty });
+        if (response.success) {
+          const allProblemsResponse = await window.API.getAllProblems();
+          setApiProblems(transformProblems(allProblemsResponse.data));
+          showNotification(`✓ Difficulty → ${newDifficulty}`, 'success');
+        }
+      } catch (error) {
+        showNotification(`❌ Error: ${error.message}`, 'error');
       }
-    } catch (error) {
-      showNotification(`❌ Error: ${error.message}`, 'error');
-    }
+    });
   };
 
-  const handleDelete = async (number, isCustom) => {
-    if (!verifyPassword('delete this problem')) {
-      return;
-    }
-    
+  const handleDelete = (number, isCustom) => {
     const problem = allProblems.find(p => p.number === number);
-    const confirmMessage = problem 
-      ? `Are you sure you want to permanently delete:\n\n#${problem.number} - ${problem.title}\n\nThis action cannot be undone!`
-      : 'Are you sure you want to delete this problem?';
-    
-    if (!confirm(confirmMessage)) return;
-
-    // Optimistic fade-out
-    const tableRow = document.querySelector(`tr[data-problem-number="${number}"]`);
-    if (tableRow) {
-      tableRow.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
-      tableRow.style.opacity = '0';
-      tableRow.style.transform = 'translateX(-20px)';
-    }
-
-    try {
-      const response = await window.API.deleteProblem(number);
-      
-      if (response.success) {
-        // Refetch — all analytics recompute automatically
-        const allProblemsResponse = await window.API.getAllProblems();
-        const problems = transformProblems(allProblemsResponse.data);
-        setApiProblems(problems);
-        
-        // Clean up local-only state for this problem
-        setState(prev => {
-          const { [number]: _st, ...remainingSolveTimes } = prev.solveTimes || {};
-          return { ...prev, solveTimes: remainingSolveTimes };
-        });
-        
-        console.log('[DELETE]', { number, title: problem?.title, remaining: problems.length });
-        showNotification(`✅ Problem #${number} deleted${problem ? ` — ${problem.title}` : ''}`, 'success');
-      }
-    } catch (error) {
-      // Restore row visibility on failure
-      if (tableRow) {
-        tableRow.style.opacity = '1';
-        tableRow.style.transform = 'none';
-      }
-      showNotification(`❌ Delete failed: ${error.message}`, 'error');
-    }
+    requireAdmin(() => {
+      // After admin unlock, show delete confirmation via PwModal (danger style, no re-auth)
+      openPwModal(
+        `Delete #${number}${problem ? ` — ${problem.title}` : ''}`,
+        'This action cannot be undone.',
+        async () => {
+          const tableRow = document.querySelector(`tr[data-problem-number="${number}"]`);
+          if (tableRow) {
+            tableRow.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
+            tableRow.style.opacity = '0';
+            tableRow.style.transform = 'translateX(-16px)';
+          }
+          try {
+            const response = await window.API.deleteProblem(number);
+            if (response.success) {
+              const allProblemsResponse = await window.API.getAllProblems();
+              setApiProblems(transformProblems(allProblemsResponse.data));
+              setState(prev => {
+                const { [number]: _st, ...remainingSolveTimes } = prev.solveTimes || {};
+                return { ...prev, solveTimes: remainingSolveTimes };
+              });
+              showNotification(`✅ Problem #${number} deleted`, 'success');
+            }
+          } catch (error) {
+            if (tableRow) { tableRow.style.opacity = '1'; tableRow.style.transform = 'none'; }
+            showNotification(`❌ Delete failed: ${error.message}`, 'error');
+          }
+        },
+        true
+      );
+    });
   };
 
   const [revisingId, setRevisingId] = React.useState(null);
   const [unrevisingId, setUnrevisingId] = React.useState(null);
 
-  const handleRevise = async (number) => {
-    if (revisingId === number) return;
-    try {
-      setRevisingId(number);
-      const res = await window.API.reviseProblem(number);
-      if (res.success) {
-        setApiProblems(prev => prev.map(p =>
-          p.number === number
-            ? { ...p, revisionCount: res.data.revisionCount, lastRevisedAt: res.data.lastRevisedAt }
-            : p
-        ));
-        showNotification('Revision recorded ✅', 'success');
+  const handleRevise = (number) => {
+    requireAdmin(async () => {
+      if (revisingId === number) return;
+      try {
+        setRevisingId(number);
+        const res = await window.API.reviseProblem(number);
+        if (res.success) {
+          setApiProblems(prev => prev.map(p =>
+            p.number === number
+              ? { ...p, revisionCount: res.data.revisionCount, lastRevisedAt: res.data.lastRevisedAt }
+              : p
+          ));
+          showNotification('Revision recorded ✅', 'success');
+        }
+      } catch (err) {
+        showNotification(`❌ ${err.message}`, 'error');
+      } finally {
+        setRevisingId(null);
       }
-    } catch (err) {
-      showNotification(`❌ ${err.message}`, 'error');
-    } finally {
-      setRevisingId(null);
-    }
+    });
   };
 
-  const handleUnrevise = async (number) => {
-    if (unrevisingId === number) return;
-    try {
-      setUnrevisingId(number);
-      const res = await window.API.unreviseProblem(number);
-      if (res.success) {
-        setApiProblems(prev => prev.map(p =>
-          p.number === number
-            ? { ...p, revisionCount: res.data.revisionCount, lastRevisedAt: res.data.lastRevisedAt }
-            : p
-        ));
-        showNotification('Revision removed ✅', 'success');
+  const handleUnrevise = (number) => {
+    requireAdmin(async () => {
+      if (unrevisingId === number) return;
+      try {
+        setUnrevisingId(number);
+        const res = await window.API.unreviseProblem(number);
+        if (res.success) {
+          setApiProblems(prev => prev.map(p =>
+            p.number === number
+              ? { ...p, revisionCount: res.data.revisionCount, lastRevisedAt: res.data.lastRevisedAt }
+              : p
+          ));
+          showNotification('Revision removed ✅', 'success');
+        }
+      } catch (err) {
+        showNotification(`❌ ${err.message}`, 'error');
+      } finally {
+        setUnrevisingId(null);
       }
-    } catch (err) {
-      showNotification(`❌ ${err.message}`, 'error');
-    } finally {
-      setUnrevisingId(null);
-    }
+    });
   };
 
   // ============================================
   // MANUAL STAT OVERRIDE HANDLERS
   // ============================================
   const handleStatClick = (key, currentVal) => {
-    const label = key === 'currentStreak' ? 'Current Streak' : key === 'maxStreak' ? 'Max Streak' : 'Active Days';
-    const input = prompt(`Enter new value for ${label}:`, currentVal);
-    if (input === null) return;
-    const val = parseInt(input.trim());
-    if (isNaN(val) || val < 0) { showNotification('❌ Enter a valid number ≥ 0', 'error'); return; }
-    setState(prev => ({ ...prev, manualStats: { ...(prev.manualStats || {}), [key]: val } }));
-    showNotification(`✓ ${label} set to ${val}`, 'success');
+    // prompt() removed — stats are edited via the Setup/Edit modal
   };
 
   const handleStatReset = (key) => {
@@ -1553,129 +1600,86 @@ function App() {
   try {
     // Show loading state while fetching from API
     if (loading) {
-      // Skeleton layout — mirrors real dashboard structure
       const Sk = ({ w = '100%', h = 12, style = {} }) => (
-        <div className="skeleton sk-line" style={{ width: w, height: h, ...style }} />
+        <div className="skeleton" style={{ width: w, height: h, borderRadius: 6, ...style }} />
       );
       return (
-        <div className="app skeleton-page">
-          {/* Top loading bar */}
-          <div className="loading-bar" />
-
-          {/* Welcome overlay */}
-          <div className="welcome-overlay">
-            <div className="welcome-title">Welcome Priyanshu 👋</div>
-            <div className="welcome-sub">Entering the world of competitive programming...</div>
-          </div>
-
-          {/* Skeleton header */}
-          <div className="sk-header">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <Sk w={180} h={20} />
-              <Sk w={260} h={11} />
+        <div className="app">
+          {/* Real navbar — loads instantly */}
+          <header className="header">
+            <div className="header-content">
+              <div className="header-title">
+                <h1>Priyanshu Gupta</h1>
+                <p className="subtitle">
+                  Your Personal DSA Growth Engine
+                  <span className="live-indicator">
+                    <span className="live-dot"></span> 🟢 Real-time Sync
+                  </span>
+                </p>
+              </div>
+              <div className="header-actions">
+                <a href="https://leetcode.com/u/priyanshuguptacoder/" target="_blank" rel="noopener noreferrer" className="btn-profile">
+                  <span>LeetCode Profile</span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/>
+                  </svg>
+                </a>
+                <button className="theme-toggle">{darkMode ? '☀️' : '🌙'}</button>
+              </div>
             </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <Sk w={130} h={36} style={{ borderRadius: 8 }} />
-              <Sk w={42}  h={36} style={{ borderRadius: 8 }} />
-            </div>
-          </div>
+          </header>
 
-          <div className="container" style={{ paddingTop: 24 }}>
-            {/* Skeleton stats bar */}
-            <div className="sk-stats-bar">
+          <div className="container">
+            {/* Subtle sync label */}
+            <p className="sk-sync-label">Syncing your data...</p>
+
+            {/* Stats bar skeleton */}
+            <div className="sk-stats-bar" style={{ marginBottom: 16 }}>
               {[1,2,3,4].map(i => (
                 <div key={i} className="sk-stat-pill">
-                  <Sk w={48} h={22} />
-                  <Sk w={72} h={10} />
+                  <Sk w={44} h={20} />
+                  <Sk w={68} h={9} style={{ marginTop: 6 }} />
                 </div>
               ))}
             </div>
 
-            {/* Skeleton streak + monthly */}
-            <div className="sk-grid-2">
+            {/* Streak + Monthly skeleton */}
+            <div className="sk-grid-2" style={{ marginBottom: 16 }}>
               <div className="sk-card">
-                <Sk w={140} h={14} style={{ marginBottom: 20 }} />
-                <div style={{ display: 'flex', justifyContent: 'space-around', marginBottom: 20 }}>
+                <Sk w={130} h={13} style={{ marginBottom: 18 }} />
+                <div style={{ display: 'flex', justifyContent: 'space-around', marginBottom: 18 }}>
                   {[1,2,3].map(i => (
                     <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-                      <Sk w={48} h={32} />
-                      <Sk w={64} h={10} />
+                      <Sk w={44} h={28} />
+                      <Sk w={60} h={9} />
                     </div>
                   ))}
                 </div>
-                <Sk w="100%" h={36} style={{ borderRadius: 10 }} />
+                <Sk w="100%" h={34} style={{ borderRadius: 8 }} />
               </div>
               <div className="sk-card">
-                <Sk w={120} h={14} style={{ marginBottom: 16 }} />
-                <Sk w="100%" h={8}  style={{ marginBottom: 8 }} />
-                <Sk w="100%" h={10} style={{ marginBottom: 16 }} />
+                <Sk w={110} h={13} style={{ marginBottom: 14 }} />
+                <Sk w="100%" h={7} style={{ marginBottom: 8 }} />
+                <Sk w="55%" h={9} style={{ marginBottom: 14 }} />
                 <div style={{ display: 'flex', justifyContent: 'space-around' }}>
                   {[1,2,3].map(i => (
                     <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                      <Sk w={36} h={22} />
-                      <Sk w={52} h={9} />
+                      <Sk w={32} h={20} />
+                      <Sk w={48} h={8} />
                     </div>
                   ))}
                 </div>
               </div>
             </div>
 
-            {/* Skeleton analytics cards */}
-            <div className="sk-grid-4">
+            {/* Analytics cards skeleton */}
+            <div className="sk-grid-4" style={{ marginBottom: 16 }}>
               {[1,2,3,4].map(i => (
                 <div key={i} className="sk-card">
-                  <Sk w={100} h={13} style={{ marginBottom: 14 }} />
-                  <Sk w={60}  h={32} style={{ marginBottom: 10 }} />
-                  <Sk w="80%" h={10} style={{ marginBottom: 6 }} />
-                  <Sk w="60%" h={10} />
-                </div>
-              ))}
-            </div>
-
-            {/* Skeleton revision + recently solved */}
-            <div className="sk-grid-2">
-              <div className="sk-card">
-                <Sk w={160} h={14} style={{ marginBottom: 14 }} />
-                {[1,2,3,4].map(i => (
-                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1.5fr 1fr', gap: 10, marginBottom: 10, alignItems: 'center' }}>
-                    <Sk w="90%" h={11} />
-                    <Sk w="80%" h={11} />
-                    <Sk w="70%" h={28} style={{ borderRadius: 6 }} />
-                  </div>
-                ))}
-              </div>
-              <div className="sk-card">
-                <Sk w={140} h={14} style={{ marginBottom: 14 }} />
-                <div className="sk-grid-3" style={{ marginBottom: 0 }}>
-                  {[1,2,3,4,5,6].map(i => (
-                    <div key={i} className="sk-card" style={{ padding: 12, marginBottom: 0 }}>
-                      <Sk w={40}  h={10} style={{ marginBottom: 8 }} />
-                      <Sk w="90%" h={12} style={{ marginBottom: 6 }} />
-                      <Sk w="70%" h={10} style={{ marginBottom: 10 }} />
-                      <Sk w="100%" h={26} style={{ borderRadius: 6 }} />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Skeleton table */}
-            <div className="sk-card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-                <Sk w={120} h={14} />
-                <Sk w={80}  h={22} style={{ borderRadius: 20 }} />
-              </div>
-              {[1,2,3,4,5].map(i => (
-                <div key={i} style={{ display: 'grid', gridTemplateColumns: '40px 1fr 80px 60px 80px 80px 70px 90px 50px', gap: 12, marginBottom: 14, alignItems: 'center' }}>
-                  <Sk h={11} />
-                  <Sk h={11} />
-                  <Sk h={22} style={{ borderRadius: 6 }} />
-                  <Sk h={11} />
-                  <Sk h={11} />
-                  <Sk h={11} />
-                  <Sk h={26} style={{ borderRadius: 6 }} />
-                  <Sk h={26} style={{ borderRadius: 6 }} />
-                  <Sk h={26} style={{ borderRadius: 6 }} />
+                  <Sk w={90} h={12} style={{ marginBottom: 12 }} />
+                  <Sk w={52} h={28} style={{ marginBottom: 10 }} />
+                  <Sk w="75%" h={9} style={{ marginBottom: 6 }} />
+                  <Sk w="55%" h={9} />
                 </div>
               ))}
             </div>
@@ -1736,6 +1740,13 @@ function App() {
                 <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/>
               </svg>
             </a>
+            <button
+              className={`btn-admin-lock ${isAdminUnlocked ? 'unlocked' : 'locked'}`}
+              onClick={() => isAdminUnlocked ? lockAdmin() : setShowAdminModal(true)}
+              title={isAdminUnlocked ? 'Admin mode active — click to lock' : 'Click to unlock admin mode'}
+            >
+              {isAdminUnlocked ? '🔓' : '🔒'}
+            </button>
             <button 
               className="theme-toggle"
               onClick={() => setDarkMode(prev => !prev)}
@@ -1810,8 +1821,8 @@ function App() {
               {(() => {
                 const solvedToday = Object.values(solvedDates).includes(todayLocalStr);
                 return solvedToday
-                  ? <><span className="status-icon">✅</span> Solved Today — Streak Alive</>
-                  : <><span className="status-icon">❌</span> Solve 1 Problem to Keep Streak</>;
+                  ? <><span className="status-icon">✅</span> Solved Today — Consistency Maintained</>
+                  : <><span className="status-icon">🎯</span> Today's session pending — stay consistent</>;
               })()}
             </div>
 
@@ -2452,7 +2463,7 @@ function App() {
                   <th>#</th>
                   <th>Title</th>
                   <th>Difficulty</th>
-                  <th>🔁</th>
+                  <th>Rev</th>
                   <th>Solved On</th>
                   <th>Last Revised</th>
                   <th>Link</th>
@@ -2472,35 +2483,24 @@ function App() {
                         </span>
                       </td>
                       <td>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          <button
-                            onClick={() => handleUnrevise(problem.number)}
-                            disabled={(problem.revisionCount || 0) === 0 || unrevisingId === problem.number}
-                            style={{
-                              width: '20px', height: '20px', borderRadius: '4px', border: '1px solid var(--border)',
-                              background: 'transparent', color: (problem.revisionCount || 0) === 0 ? 'var(--text-secondary)' : 'var(--text-primary)',
-                              cursor: (problem.revisionCount || 0) === 0 ? 'not-allowed' : 'pointer', fontSize: '0.85rem', lineHeight: 1,
-                              opacity: (problem.revisionCount || 0) === 0 ? 0.3 : 1, padding: 0,
-                            }}
-                            title="Remove revision"
-                          >−</button>
-                          <span style={{
-                            padding: '0.15rem 0.4rem', borderRadius: '10px', fontSize: '0.8rem', fontWeight: 600,
-                            background: (problem.revisionCount || 0) > 0 ? 'rgba(99,102,241,0.15)' : 'rgba(255,255,255,0.05)',
-                            color: (problem.revisionCount || 0) > 0 ? 'var(--primary)' : 'var(--text-secondary)', minWidth: '28px', textAlign: 'center',
-                          }}>
-                            🔁 {problem.revisionCount || 0}
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                          <span className={`rev-chip${(problem.revisionCount || 0) === 0 ? ' zero' : ''}`}>
+                            {problem.revisionCount || 0}×
                           </span>
-                          <button
-                            onClick={() => handleRevise(problem.number)}
-                            disabled={revisingId === problem.number}
-                            style={{
-                              width: '20px', height: '20px', borderRadius: '4px', border: '1px solid var(--border)',
-                              background: 'transparent', color: 'var(--text-primary)',
-                              cursor: 'pointer', fontSize: '0.85rem', lineHeight: 1, padding: 0,
-                            }}
-                            title="Add revision"
-                          >+</button>
+                          <div className="rev-controls">
+                            <button
+                              className="rev-btn"
+                              onClick={() => handleUnrevise(problem.number)}
+                              disabled={(problem.revisionCount || 0) === 0 || unrevisingId === problem.number}
+                              title="Remove revision"
+                            >−</button>
+                            <button
+                              className="rev-btn"
+                              onClick={() => handleRevise(problem.number)}
+                              disabled={revisingId === problem.number}
+                              title="Add revision"
+                            >+</button>
+                          </div>
                         </div>
                       </td>
                       <td style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
@@ -2664,6 +2664,24 @@ function App() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Admin Auth Modal */}
+      {showAdminModal && (
+        <AdminModal
+          adminPassword={ADMIN_PASSWORD}
+          onClose={() => { setShowAdminModal(false); setPendingAction(null); }}
+          onUnlock={handleAdminUnlock}
+        />
+      )}
+
+      {/* Password Confirm Modal */}
+      {pwModal && (
+        <PwModal
+          modal={pwModal}
+          adminPassword={ADMIN_PASSWORD}
+          onClose={closePwModal}
+        />
       )}
 
       {/* Manual Stats Modal */}
