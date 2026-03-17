@@ -1258,14 +1258,14 @@ function App() {
 
   // ============================================
   // PHASE 4: TARGETED PROBLEMS ENGINE
-  // Combines unsolved weak-topic problems + solved problems needing revision.
-  // Each entry gets a reason tag and a numeric priority score for sorting.
+  // Only solved problems. Conditions: never revised, stale revision (>7d), or weak topic.
+  // Each entry gets a revision status label and a numeric priority score.
   // ============================================
   const targetedProblems = React.useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Weak topic threshold: topics with < 5 solved problems
+    // Weak topic: < 5 solved problems OR top-half by weaknessScore
     const WEAK_THRESHOLD = 5;
     const topicSolvedCount = {};
     allProblems.forEach(p => {
@@ -1277,10 +1277,9 @@ function App() {
     });
     const weakTopicSet = new Set(
       Object.entries(topicSolvedCount)
-        .filter(([, count]) => count < WEAK_THRESHOLD)
-        .map(([topic]) => topic)
+        .filter(([, c]) => c < WEAK_THRESHOLD)
+        .map(([t]) => t)
     );
-    // Also include top-half by weaknessScore from existing analysis
     weaknessAnalysis
       .slice(0, Math.max(1, Math.ceil(weaknessAnalysis.length / 2)))
       .forEach(w => weakTopicSet.add(w.topic));
@@ -1288,65 +1287,42 @@ function App() {
     const results = [];
 
     allProblems.forEach(p => {
+      if (p.status !== 'Done') return; // only solved problems
+
       const topics = p.topics || [p.pattern];
       const isWeakTopic = topics.some(t => weakTopicSet.has(t));
+      const revCount = p.revisionCount || 0;
+      const lastRevAt = p.lastRevisedAt ? new Date(p.lastRevisedAt) : null;
+      const daysSinceRevision = lastRevAt
+        ? Math.floor((today - lastRevAt) / 86400000)
+        : Infinity;
+
+      const neverRevised = revCount === 0;
+      const stale = daysSinceRevision > 7;
+
+      // Must meet at least one condition
+      if (!neverRevised && !stale && !isWeakTopic) return;
+
       const diffScore = p.difficulty === 'Hard' ? 3 : p.difficulty === 'Medium' ? 2 : 1;
 
-      if (p.status !== 'Done') {
-        // Unsolved — only include if in a weak topic
-        if (!isWeakTopic) return;
-        results.push({
-          ...p,
-          _reason: 'weak-topic',
-          _reasonLabel: '🔥 Weak Topic',
-          // Hard unsolved in weak topic = highest priority
-          _priority: 100 + diffScore * 10,
-        });
+      let statusLabel, priority;
+      if (neverRevised) {
+        statusLabel = '❌ Never Revised';
+        priority = 90 + diffScore * 10;
+      } else if (stale) {
+        statusLabel = `⚠️ Needs Revision`;
+        priority = 60 + diffScore * 5 + Math.min(daysSinceRevision, 365);
       } else {
-        // Solved — check revision conditions
-        const revCount = p.revisionCount || 0;
-        const lastRevAt = p.lastRevisedAt ? new Date(p.lastRevisedAt) : null;
-        const daysSinceRevision = lastRevAt
-          ? Math.floor((today - lastRevAt) / 86400000)
-          : Infinity;
-
-        const neverRevised = revCount === 0;
-        const staleRevision = daysSinceRevision > 7;
-
-        if (!neverRevised && !staleRevision && !isWeakTopic) return;
-
-        let reason, reasonLabel, priority;
-        if (neverRevised && isWeakTopic) {
-          reason = 'never-revised-weak';
-          reasonLabel = '⚠️ Never Revised · Weak Topic';
-          priority = 90 + diffScore * 10;
-        } else if (neverRevised) {
-          reason = 'never-revised';
-          reasonLabel = '⚠️ Never Revised';
-          priority = 70 + diffScore * 10;
-        } else if (staleRevision && isWeakTopic) {
-          reason = 'stale-weak';
-          reasonLabel = `🕒 ${daysSinceRevision}d ago · Weak Topic`;
-          priority = 60 + diffScore * 5;
-        } else if (staleRevision) {
-          reason = 'stale';
-          reasonLabel = `🕒 ${daysSinceRevision}d ago`;
-          priority = 40 + diffScore * 5;
-        } else {
-          reason = 'weak-topic-solved';
-          reasonLabel = '🔥 Weak Topic';
-          priority = 30 + diffScore * 3;
-        }
-
-        results.push({ ...p, _reason: reason, _reasonLabel: reasonLabel, _priority: priority });
+        statusLabel = '🔁 Recently Revised';
+        priority = 20 + diffScore * 3;
       }
+
+      results.push({ ...p, _statusLabel: statusLabel, _priority: priority, _daysSinceRevision: daysSinceRevision });
     });
 
-    // Sort by priority descending, then by difficulty (Hard first)
-    results.sort((a, b) => b._priority - a._priority || 0);
-
+    results.sort((a, b) => b._priority - a._priority);
     return results.slice(0, 10);
-  }, [allProblems, weaknessAnalysis, solvedDates]);
+  }, [allProblems, weaknessAnalysis]);
 
   // ============================================
   // PHASE 10: PERFORMANCE INSIGHTS
@@ -1594,7 +1570,7 @@ function App() {
           <div className="streak-card">
             <div className="streak-header">
               <h3 className="card-title">🔥 Streak Stats</h3>
-              <button 
+              <button
                 className="btn-align-activity"
                 onClick={() => setShowAlignmentModal(true)}
                 title={dbStreak.isSetup ? 'Edit streak stats' : 'Initial setup — set your streak'}
@@ -1602,39 +1578,23 @@ function App() {
                 {dbStreak.isSetup ? '✏️ Edit' : '⚙️ Setup'}
               </button>
             </div>
-            {/* Streak stats — click value to edit only if not yet set up via DB */}
-            {(() => {
-              const ms = state.manualStats || {};
-              const isDbSetup = dbStreak.isSetup;
-
-              const StatItem = ({ label, value, statKey, isManual }) => (
-                <div className="streak-item" style={{ cursor: isDbSetup ? 'default' : 'pointer' }}
-                  title={isDbSetup ? label : `Click to manually set ${label}`}>
-                  <div className="streak-value"
-                    onClick={() => !isDbSetup && handleStatClick(statKey, value)}
-                    style={{ userSelect: 'none' }}>
-                    {value}
-                    {!isDbSetup && isManual && (
-                      <span
-                        title="Manual — click to reset"
-                        onClick={(e) => { e.stopPropagation(); handleStatReset(statKey); }}
-                        style={{ fontSize: '0.55rem', marginLeft: '4px', verticalAlign: 'super', color: 'var(--accent, #6366f1)', cursor: 'pointer' }}
-                      >✏️</span>
-                    )}
-                  </div>
-                  <div className="streak-label">{label}</div>
-                </div>
-              );
-              return (
-                <div className="streak-stats">
-                  <StatItem label="Current Streak" value={displayCurrentStreak} statKey="currentStreak" isManual={ms.currentStreak != null} />
-                  <div className="streak-divider"></div>
-                  <StatItem label="Max Streak" value={displayMaxStreak} statKey="maxStreak" isManual={ms.maxStreak != null} />
-                  <div className="streak-divider"></div>
-                  <StatItem label="Active Days" value={displayActiveDays} statKey="activeDays" isManual={ms.activeDays != null} />
-                </div>
-              );
-            })()}
+            {/* Streak stats — read-only display, values come from DB */}
+            <div className="streak-stats">
+              <div className="streak-item">
+                <div className="streak-value">{displayCurrentStreak}</div>
+                <div className="streak-label">Current Streak</div>
+              </div>
+              <div className="streak-divider"></div>
+              <div className="streak-item">
+                <div className="streak-value">{displayMaxStreak}</div>
+                <div className="streak-label">Max Streak</div>
+              </div>
+              <div className="streak-divider"></div>
+              <div className="streak-item">
+                <div className="streak-value">{displayActiveDays}</div>
+                <div className="streak-label">Active Days</div>
+              </div>
+            </div>
 
             {/* Today Status */}
             <div className={`today-status ${(() => {
@@ -1732,36 +1692,28 @@ function App() {
               <div className="suggestion-section">
                 <div className="suggestion-header">
                   <span className="suggestion-icon">📊</span>
-                  <span className="suggestion-title">Daily Operations Target</span>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                    avg {targetSuggestion.avgLast30}/day (last 30d)
-                  </span>
+                  <span className="suggestion-title">Daily Target</span>
                 </div>
-                <div style={{ display: 'flex', gap: '1rem', margin: '0.5rem 0' }}>
-                  <div style={{ textAlign: 'center' }}>
-                    <div className="suggestion-value" style={{ fontSize: '1.4rem' }}>{targetSuggestion.moderate}</div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Moderate (×1.2)</div>
+                <div style={{ display: 'flex', gap: '1.5rem', margin: '0.5rem 0', alignItems: 'center' }}>
+                  <div>
+                    <div className="suggestion-value" style={{ fontSize: '1.6rem' }}>{targetSuggestion.dailyRequired}</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>required/day</div>
                   </div>
-                  <div style={{ textAlign: 'center' }}>
-                    <div className="suggestion-value" style={{ fontSize: '1.4rem' }}>{targetSuggestion.aggressive}</div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Aggressive (×1.5)</div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                    <div>Avg: <strong>{targetSuggestion.avgLast30}</strong>/day (last 30d)</div>
+                    <div>This month: <strong>{targetSuggestion.currentMonthCount}</strong> solved</div>
+                    <div>Days left: <strong>{targetSuggestion.remainingDays}</strong></div>
                   </div>
-                </div>
-                <div className="suggestion-tooltip">
-                  💡 Based on {targetSuggestion.last30Count} solves in last 30 days ({targetSuggestion.avgLast30}/day avg)
-                </div>
-                <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: 'rgba(99,102,241,0.1)', borderRadius: '8px', fontSize: '0.8rem' }}>
-                  📌 Daily Required: <strong>{targetSuggestion.dailyRequired}</strong>/day to hit monthly target ({targetSuggestion.moderateMonthlyTarget}) — {targetSuggestion.remainingDays} days left
                 </div>
               </div>
             ) : (
               <div className="suggestion-section">
                 <div className="suggestion-header">
                   <span className="suggestion-icon">📊</span>
-                  <span className="suggestion-title">Daily Operations Target</span>
+                  <span className="suggestion-title">Daily Target</span>
                 </div>
                 <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.5rem' }}>
-                  No Data — minimum 7 tracked days required.
+                  Need 7+ tracked days for target data.
                 </div>
               </div>
             )}
@@ -1920,22 +1872,115 @@ function App() {
           )}
         </div>
 
-        {/* Intelligent Revision (Phase 5) */}
+        {/* Needs Revision — grouped by urgency */}
+        {(() => {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+
+          // Use lastRevisedAt from DB if available, else fall back to daysSinceSolved
+          const withDays = intelligentRevision.map(p => {
+            const lastRev = p.lastRevisedAt ? new Date(p.lastRevisedAt) : null;
+            const daysSinceRevision = lastRev
+              ? Math.floor((today - lastRev) / 86400000)
+              : p.daysSinceSolved;
+            return { ...p, daysSinceRevision };
+          });
+
+          const urgent = withDays.filter(p => p.daysSinceRevision > 30);
+          const medium = withDays.filter(p => p.daysSinceRevision > 7 && p.daysSinceRevision <= 30);
+          const recent = withDays.filter(p => p.daysSinceRevision <= 7);
+
+          const RevRow = ({ p }) => (
+            <div className="revision-item">
+              <span className="revision-number">#{p.number}</span>
+              <span className="revision-title" style={{ flex: 1 }}>{p.title}</span>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginRight: '0.5rem' }}>
+                {p.daysSinceRevision}d ago
+              </span>
+              <span className={`badge badge-${(p.difficulty || 'Medium').toLowerCase()}`} style={{ marginRight: '0.5rem' }}>
+                {p.difficulty}
+              </span>
+              <button
+                className="btn-revised"
+                onClick={() => handleRevise(p.number)}
+                disabled={revisingId === p.number}
+              >
+                {revisingId === p.number ? '⏳' : '🔁 Revise'}
+              </button>
+            </div>
+          );
+
+          const total = withDays.length;
+          return (
+            <div className="revision-card" style={{ marginBottom: '1.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                <h3 className="card-title" style={{ margin: 0 }}>📌 Needs Revision ({total})</h3>
+                <div style={{ display: 'flex', gap: '0.5rem', fontSize: '0.75rem' }}>
+                  {urgent.length > 0 && <span style={{ color: 'var(--danger)' }}>🔥 {urgent.length} urgent</span>}
+                  {medium.length > 0 && <span style={{ color: 'var(--warning, #f59e0b)' }}>⚠️ {medium.length} medium</span>}
+                  {recent.length > 0 && <span style={{ color: 'var(--success)' }}>🟢 {recent.length} recent</span>}
+                </div>
+              </div>
+              {total > 0 ? (
+                <div className="revision-list">
+                  {urgent.length > 0 && (
+                    <>
+                      <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--danger)', padding: '0.2rem 0', marginBottom: '0.25rem', borderBottom: '1px solid rgba(239,68,68,0.2)' }}>
+                        🔥 Urgent — {'>'}30 days
+                      </div>
+                      {urgent.map(p => <RevRow key={p.number} p={p} />)}
+                    </>
+                  )}
+                  {medium.length > 0 && (
+                    <>
+                      <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--warning, #f59e0b)', padding: '0.2rem 0', marginTop: urgent.length ? '0.5rem' : 0, marginBottom: '0.25rem', borderBottom: '1px solid rgba(245,158,11,0.2)' }}>
+                        ⚠️ Medium — 7–30 days
+                      </div>
+                      {medium.map(p => <RevRow key={p.number} p={p} />)}
+                    </>
+                  )}
+                  {recent.length > 0 && (
+                    <>
+                      <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--success)', padding: '0.2rem 0', marginTop: (urgent.length || medium.length) ? '0.5rem' : 0, marginBottom: '0.25rem', borderBottom: '1px solid rgba(34,197,94,0.2)' }}>
+                        🟢 Recent — {'<'}7 days
+                      </div>
+                      {recent.map(p => <RevRow key={p.number} p={p} />)}
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-secondary)' }}>
+                  🎉 You're well revised!
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* Targeted Problems Engine */}
         <div className="revision-card" style={{ marginBottom: '1.5rem' }}>
-          <h3 className="card-title">📝 Needs Revision ({intelligentRevision.length})</h3>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '0.5rem' }}>
-            revisionScore = daysSinceSolved + (topicWeakness × 100). Problems not revisited in 7+ days.
-          </p>
-          {intelligentRevision.length > 0 ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+            <h3 className="card-title" style={{ margin: 0 }}>🎯 Targeted Problems ({targetedProblems.length})</h3>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+              Solved · needs revision or weak topic
+            </span>
+          </div>
+          {targetedProblems.length > 0 ? (
             <div className="revision-list">
-              {intelligentRevision.map(problem => (
+              {targetedProblems.map(problem => (
                 <div key={problem.number} className="revision-item">
                   <span className="revision-number">#{problem.number}</span>
                   <span className="revision-title" style={{ flex: 1 }}>{problem.title}</span>
-                  <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginRight: '0.5rem' }}>
-                    {problem.daysSinceSolved}d ago
+                  <span style={{
+                    fontSize: '0.7rem',
+                    color: problem._statusLabel.startsWith('❌') ? 'var(--danger)'
+                      : problem._statusLabel.startsWith('⚠') ? 'var(--warning, #f59e0b)'
+                      : 'var(--success)',
+                    marginRight: '0.5rem', whiteSpace: 'nowrap'
+                  }}>
+                    {problem._statusLabel}
                   </span>
-                  <span className={`badge badge-${(problem.difficulty || 'Medium').toLowerCase()}`} style={{ marginRight: '0.5rem' }}>
+                  <span className={`badge badge-${(problem.difficulty || 'medium').toLowerCase()}`} style={{ marginRight: '0.5rem' }}>
                     {problem.difficulty}
                   </span>
                   <button
@@ -1950,58 +1995,7 @@ function App() {
             </div>
           ) : (
             <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-secondary)' }}>
-              All problems revised recently ✅
-            </div>
-          )}
-        </div>
-
-        {/* Targeted Problems Engine */}
-        <div className="revision-card" style={{ marginBottom: '1.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-            <h3 className="card-title" style={{ margin: 0 }}>🎯 {targetedProblems.length} Targeted Problems</h3>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-              Weak topics · Never revised · Stale revisions
-            </span>
-          </div>
-          {targetedProblems.length > 0 ? (
-            <div className="revision-list">
-              {targetedProblems.map(problem => (
-                <div key={problem.number} className="revision-item">
-                  <span className="revision-number">#{problem.number}</span>
-                  <span className="revision-title" style={{ flex: 1 }}>{problem.title}</span>
-                  <span style={{
-                    fontSize: '0.7rem', color: 'var(--text-secondary)',
-                    marginRight: '0.5rem', whiteSpace: 'nowrap'
-                  }}>
-                    {problem._reasonLabel}
-                  </span>
-                  <span className={`badge badge-${(problem.difficulty || 'medium').toLowerCase()}`} style={{ marginRight: '0.5rem' }}>
-                    {problem.difficulty}
-                  </span>
-                  {problem.status === 'Done' ? (
-                    <button
-                      className="btn-revised"
-                      onClick={() => handleRevise(problem.number)}
-                      disabled={revisingId === problem.number}
-                    >
-                      {revisingId === problem.number ? '⏳' : '🔁 Revise'}
-                    </button>
-                  ) : (
-                    <a
-                      href={problem.link || `https://leetcode.com/problems/${problem.number}/`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="problem-link-btn"
-                    >
-                      🔗 Solve
-                    </a>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-secondary)' }}>
-              No targeted problems — keep solving to build data
+              🎉 You're well revised!
             </div>
           )}
         </div>
