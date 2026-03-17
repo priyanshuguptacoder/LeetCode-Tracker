@@ -218,4 +218,4 @@ const solvedSet = new Set(solvedProblemsFull.map(p => p.number));
 // Filters out any problem in `targetProblems` that you've already completed
 const duplicates = targetProblems.filter(p => solvedSet.has(p.number));
 
-console.log("Duplicate Check:", duplicates); // Should print [] to confirm you haven't solved these yet
+console.log("Duplicate Check:", duplicates); // Should print [] to confirm you haven't solved these yet 

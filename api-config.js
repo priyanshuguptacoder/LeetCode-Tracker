@@ -54,6 +54,20 @@ const api = {
     if (!r.ok) throw new Error('Failed to fetch stats');
     return r.json();
   },
+  getSettings: async () => {
+    const r = await fetch(`${API_BASE_URL}/problems/settings`);
+    if (!r.ok) throw new Error('Failed to fetch settings');
+    return r.json();
+  },
+  alignProblems: async (problems, timeZone) => {
+    const r = await fetch(`${API_BASE_URL}/problems/align`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ problems, timeZone }),
+    });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Align failed'); }
+    return r.json();
+  },
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
