@@ -3160,3 +3160,164 @@ body.light-mode .modal-overlay {
     background: var(--accent);
     transform: translateY(-2px);
 }
+
+/* ============================================
+   RECENTLY SOLVED SECTION
+   ============================================ */
+
+.recently-solved-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 32px;
+    box-shadow: var(--shadow-sm);
+    transition: all 0.25s ease;
+}
+
+.recently-solved-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+    border-color: rgba(0, 200, 150, 0.2);
+}
+
+.recently-solved-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.recently-solved-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: var(--bg-tertiary);
+    border-radius: 10px;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+}
+
+.recently-solved-item:hover {
+    background: var(--bg-primary);
+    border-color: rgba(0, 200, 150, 0.15);
+    transform: translateX(2px);
+}
+
+.recently-solved-number {
+    font-weight: 700;
+    color: var(--primary);
+    min-width: 48px;
+    font-size: 0.82rem;
+}
+
+.recently-solved-title {
+    flex: 1;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 280px;
+}
+
+.recently-solved-date {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+body.light-mode .recently-solved-card {
+    background: #fff;
+    border-color: #E2E8F0;
+}
+
+body.light-mode .recently-solved-item {
+    background: #F8FAFC;
+}
+
+body.light-mode .recently-solved-item:hover {
+    background: #F1F5F9;
+}
+
+/* Mobile: recently solved stacks cleanly */
+@media (max-width: 768px) {
+    .recently-solved-item {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .recently-solved-title {
+        max-width: 100%;
+        width: 100%;
+        order: -1;
+    }
+
+    .recently-solved-number {
+        order: -2;
+    }
+}
+
+/* ============================================
+   MOBILE TABLE CARDS
+   ============================================ */
+
+@media (max-width: 640px) {
+    .table-wrapper {
+        overflow-x: visible;
+    }
+
+    .problems-table,
+    .problems-table thead,
+    .problems-table tbody,
+    .problems-table th,
+    .problems-table td,
+    .problems-table tr {
+        display: block;
+    }
+
+    .problems-table thead {
+        display: none;
+    }
+
+    .problems-table tbody tr {
+        background: var(--bg-tertiary);
+        border-radius: 12px;
+        margin-bottom: 12px;
+        padding: 12px 14px;
+        border: 1px solid var(--border);
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 6px 12px;
+        align-items: center;
+    }
+
+    .problems-table tbody tr:hover {
+        border-color: rgba(0, 200, 150, 0.25);
+    }
+
+    .problems-table td {
+        padding: 2px 0;
+        font-size: 0.82rem;
+    }
+
+    /* #ID spans full width as header */
+    .problems-table td.problem-number {
+        grid-column: 1;
+        font-size: 0.75rem;
+    }
+
+    .problems-table td.problem-title {
+        grid-column: 2;
+        font-weight: 600;
+        max-width: none;
+        white-space: normal;
+    }
+
+    /* remaining cells span both columns */
+    .problems-table td:not(.problem-number):not(.problem-title) {
+        grid-column: 1 / -1;
+    }
+}

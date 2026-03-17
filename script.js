@@ -31,6 +31,16 @@ function App() {
       day: '2-digit'
     }).format(new Date(date));
   };
+
+  const formatDate = (date) => {
+    if (!date) return '—';
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return '—';
+    const days = Math.floor((Date.now() - d) / (1000 * 60 * 60 * 24));
+    if (days === 0) return 'Today';
+    if (days <= 7) return `${days}d ago`;
+    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' });
+  };
   const todayLocalStr = toLocalDateStr(new Date());
 
   const parseLocalDate = (dateStr) => {
@@ -2051,6 +2061,41 @@ function App() {
           );
         })()}
 
+        {/* Recently Solved */}
+        {(() => {
+          const recentProblems = [...allProblems]
+            .filter(p => p.status === 'Done')
+            .sort((a, b) => new Date(b._solvedDateISO || 0) - new Date(a._solvedDateISO || 0))
+            .slice(0, 10);
+          return (
+            <div className="recently-solved-card">
+              <h3 className="card-title">🆕 Recently Solved ({recentProblems.length})</h3>
+              {recentProblems.length > 0 ? (
+                <div className="recently-solved-list">
+                  {recentProblems.map(p => (
+                    <div key={p.number} className="recently-solved-item">
+                      <span className="recently-solved-number">#{p.number}</span>
+                      <span className="recently-solved-title">{p.title}</span>
+                      <span className={`badge badge-${(p.difficulty || 'medium').toLowerCase()}`}>{p.difficulty}</span>
+                      <span className="recently-solved-date">📅 {formatDate(p._solvedDateISO)}</span>
+                      <a
+                        href={p.link || `https://leetcode.com/problems/${p.number}/`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="problem-link-btn"
+                      >🔗 Open</a>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-secondary)' }}>
+                  Start solving to see activity
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {/* Progress Section */}
         <div className="progress-card">
           <div className="progress-header">
@@ -2253,8 +2298,9 @@ function App() {
                   <th>#</th>
                   <th>Title</th>
                   <th>Difficulty</th>
-                  <th>User Difficulty</th>
-                  <th>Revisions</th>
+                  <th>🔁</th>
+                  <th>Solved On</th>
+                  <th>Last Revised</th>
                   <th>Link</th>
                   <th>Status</th>
                   <th>Actions</th>
@@ -2272,63 +2318,42 @@ function App() {
                         </span>
                       </td>
                       <td>
-                        <select
-                          className={`difficulty-select difficulty-${(problem.userDifficulty || 'medium').toLowerCase()}`}
-                          value={problem.userDifficulty}
-                          onChange={(e) => handleUserDifficultyChange(problem.number, e.target.value)}
-                        >
-                          <option>Easy</option>
-                          <option>Medium</option>
-                          <option>Hard</option>
-                        </select>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <button
+                            onClick={() => handleUnrevise(problem.number)}
+                            disabled={(problem.revisionCount || 0) === 0 || unrevisingId === problem.number}
+                            style={{
+                              width: '20px', height: '20px', borderRadius: '4px', border: '1px solid var(--border)',
+                              background: 'transparent', color: (problem.revisionCount || 0) === 0 ? 'var(--text-secondary)' : 'var(--text-primary)',
+                              cursor: (problem.revisionCount || 0) === 0 ? 'not-allowed' : 'pointer', fontSize: '0.85rem', lineHeight: 1,
+                              opacity: (problem.revisionCount || 0) === 0 ? 0.3 : 1, padding: 0,
+                            }}
+                            title="Remove revision"
+                          >−</button>
+                          <span style={{
+                            padding: '0.15rem 0.4rem', borderRadius: '10px', fontSize: '0.8rem', fontWeight: 600,
+                            background: (problem.revisionCount || 0) > 0 ? 'rgba(99,102,241,0.15)' : 'rgba(255,255,255,0.05)',
+                            color: (problem.revisionCount || 0) > 0 ? 'var(--primary)' : 'var(--text-secondary)', minWidth: '28px', textAlign: 'center',
+                          }}>
+                            🔁 {problem.revisionCount || 0}
+                          </span>
+                          <button
+                            onClick={() => handleRevise(problem.number)}
+                            disabled={revisingId === problem.number}
+                            style={{
+                              width: '20px', height: '20px', borderRadius: '4px', border: '1px solid var(--border)',
+                              background: 'transparent', color: 'var(--text-primary)',
+                              cursor: 'pointer', fontSize: '0.85rem', lineHeight: 1, padding: 0,
+                            }}
+                            title="Add revision"
+                          >+</button>
+                        </div>
                       </td>
-                      <td>
-                        {(() => {
-                          const count = problem.revisionCount || 0;
-                          const last = problem.lastRevisedAt;
-                          const daysAgo = last
-                            ? Math.floor((Date.now() - new Date(last)) / 86400000)
-                            : null;
-                          const label = daysAgo === null ? null
-                            : daysAgo === 0 ? 'Today'
-                            : daysAgo === 1 ? '1d ago'
-                            : `${daysAgo}d ago`;
-                          return (
-                            <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <button
-                                  onClick={() => handleUnrevise(problem.number)}
-                                  disabled={count === 0 || unrevisingId === problem.number}
-                                  style={{
-                                    width: '20px', height: '20px', borderRadius: '4px', border: '1px solid var(--border)',
-                                    background: 'transparent', color: count === 0 ? 'var(--text-secondary)' : 'var(--text-primary)',
-                                    cursor: count === 0 ? 'not-allowed' : 'pointer', fontSize: '0.85rem', lineHeight: 1,
-                                    opacity: count === 0 ? 0.3 : 1, padding: 0,
-                                  }}
-                                  title="Remove revision"
-                                >−</button>
-                                <span style={{
-                                  padding: '0.15rem 0.4rem', borderRadius: '10px', fontSize: '0.8rem', fontWeight: 600,
-                                  background: count > 0 ? 'rgba(99,102,241,0.15)' : 'rgba(255,255,255,0.05)',
-                                  color: count > 0 ? 'var(--primary)' : 'var(--text-secondary)', minWidth: '28px', textAlign: 'center',
-                                }}>
-                                  🔁 {count}
-                                </span>
-                                <button
-                                  onClick={() => handleRevise(problem.number)}
-                                  disabled={revisingId === problem.number}
-                                  style={{
-                                    width: '20px', height: '20px', borderRadius: '4px', border: '1px solid var(--border)',
-                                    background: 'transparent', color: 'var(--text-primary)',
-                                    cursor: 'pointer', fontSize: '0.85rem', lineHeight: 1, padding: 0,
-                                  }}
-                                  title="Add revision"
-                                >+</button>
-                              </div>
-                              {label && <span style={{ fontSize: '0.62rem', color: 'var(--text-secondary)', opacity: 0.75 }}>{label}</span>}
-                            </div>
-                          );
-                        })()}
+                      <td style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                        {problem.status === 'Done' ? formatDate(problem._solvedDateISO) : '—'}
+                      </td>
+                      <td style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                        {(problem.revisionCount || 0) === 0 ? '—' : formatDate(problem.lastRevisedAt)}
                       </td>
                       <td>
                         <a 
@@ -2367,7 +2392,7 @@ function App() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="8" className="empty-state">
+                    <td colSpan="9" className="empty-state">
                       {allProblems.length === 0 ? (
                         <>
                           <div className="empty-icon">📚</div>
