@@ -163,13 +163,14 @@ function App() {
         return {
           revisionFlags: parsed.revisionFlags || {},
           solveTimes: parsed.solveTimes || {},
+          manualStats: parsed.manualStats || { currentStreak: null, maxStreak: null, activeDays: null },
         };
       }
     } catch (error) {
       console.error('Error loading state from localStorage:', error);
       localStorage.removeItem('priyanshu-leetcode-state');
     }
-    return { revisionFlags: {}, solveTimes: {} };
+    return { revisionFlags: {}, solveTimes: {}, manualStats: { currentStreak: null, maxStreak: null, activeDays: null } };
   };
 
   const [state, setState] = useState(getInitialState());
@@ -181,6 +182,7 @@ function App() {
   const [showModal, setShowModal] = useState(false);
   const [showAlignmentModal, setShowAlignmentModal] = useState(false);
   const [notification, setNotification] = useState(null);
+  const [editingStatKey, setEditingStatKey] = useState(null); // 'currentStreak' | 'maxStreak' | 'activeDays' | null
 
   // Password protection
   const ADMIN_PASSWORD = '0';
@@ -1669,22 +1671,63 @@ function App() {
                 ⚙️ Align
               </button>
             </div>
-            <div className="streak-stats">
-              <div className="streak-item">
-                <div className="streak-value">{heatmapData.currentStreak}</div>
-                <div className="streak-label">Current Streak</div>
-              </div>
-              <div className="streak-divider"></div>
-              <div className="streak-item">
-                <div className="streak-value">{heatmapData.maxStreak}</div>
-                <div className="streak-label">Max Streak</div>
-              </div>
-              <div className="streak-divider"></div>
-              <div className="streak-item">
-                <div className="streak-value">{heatmapData.activeDays}</div>
-                <div className="streak-label">Active Days</div>
-              </div>
-            </div>
+            {/* Editable streak stats — click any value to override manually */}
+            {(() => {
+              const ms = state.manualStats || {};
+              const displayStreak = ms.currentStreak != null ? ms.currentStreak : heatmapData.currentStreak;
+              const displayMax    = ms.maxStreak    != null ? ms.maxStreak    : heatmapData.maxStreak;
+              const displayActive = ms.activeDays   != null ? ms.activeDays   : heatmapData.activeDays;
+
+              const handleStatClick = (key, currentVal) => {
+                const input = prompt(`Enter new value for ${key === 'currentStreak' ? 'Current Streak' : key === 'maxStreak' ? 'Max Streak' : 'Active Days'}:`, currentVal);
+                if (input === null) return; // cancelled
+                const val = parseInt(input.trim());
+                if (isNaN(val) || val < 0) { showNotification('❌ Enter a valid number ≥ 0', 'error'); return; }
+                setState(prev => ({
+                  ...prev,
+                  manualStats: { ...(prev.manualStats || {}), [key]: val }
+                }));
+                showNotification(`✓ ${key === 'currentStreak' ? 'Current Streak' : key === 'maxStreak' ? 'Max Streak' : 'Active Days'} set to ${val}`, 'success');
+              };
+
+              const handleStatReset = (key) => {
+                setState(prev => ({
+                  ...prev,
+                  manualStats: { ...(prev.manualStats || {}), [key]: null }
+                }));
+                showNotification('↩ Reset to auto-computed value', 'success');
+              };
+
+              const StatItem = ({ label, value, statKey, isManual }) => (
+                <div className="streak-item" style={{ position: 'relative', cursor: 'pointer' }} title={`Click to manually set ${label}`}>
+                  <div
+                    className="streak-value"
+                    onClick={() => handleStatClick(statKey, value)}
+                    style={{ userSelect: 'none' }}
+                  >
+                    {value}
+                    {isManual && (
+                      <span
+                        title="Manual override — click to reset to auto"
+                        onClick={(e) => { e.stopPropagation(); handleStatReset(statKey); }}
+                        style={{ fontSize: '0.55rem', marginLeft: '4px', verticalAlign: 'super', color: 'var(--accent, #6366f1)', cursor: 'pointer' }}
+                      >✏️</span>
+                    )}
+                  </div>
+                  <div className="streak-label">{label}</div>
+                </div>
+              );
+
+              return (
+                <div className="streak-stats">
+                  <StatItem label="Current Streak" value={displayStreak} statKey="currentStreak" isManual={ms.currentStreak != null} />
+                  <div className="streak-divider"></div>
+                  <StatItem label="Max Streak" value={displayMax} statKey="maxStreak" isManual={ms.maxStreak != null} />
+                  <div className="streak-divider"></div>
+                  <StatItem label="Active Days" value={displayActive} statKey="activeDays" isManual={ms.activeDays != null} />
+                </div>
+              );
+            })()}
 
             {/* Today Status */}
             <div className={`today-status ${(() => {
@@ -1741,38 +1784,31 @@ function App() {
             </div>
 
             {/* Next Milestone */}
-            <div className="streak-milestone">
-              <div className="milestone-header">
-                <span className="milestone-label">Next Milestone</span>
-                <span className="milestone-target">
-                  {heatmapData.currentStreak < 50 ? '50 Days' : '100 Days'}
-                </span>
-              </div>
-              <div className="milestone-progress-bar">
-                <div 
-                  className="milestone-progress-fill"
-                  style={{ 
-                    width: `${heatmapData.currentStreak < 50 
-                      ? (heatmapData.currentStreak / 50) * 100 
-                      : ((heatmapData.currentStreak - 50) / 50) * 100}%` 
-                  }}
-                ></div>
-              </div>
-              <div className="milestone-text">
-                {heatmapData.currentStreak < 50 
-                  ? `${heatmapData.currentStreak} / 50 days`
-                  : `${heatmapData.currentStreak} / 100 days`}
-              </div>
-            </div>
+            {(() => {
+              const cs = (state.manualStats?.currentStreak != null ? state.manualStats.currentStreak : heatmapData.currentStreak);
+              return (
+                <div className="streak-milestone">
+                  <div className="milestone-header">
+                    <span className="milestone-label">Next Milestone</span>
+                    <span className="milestone-target">{cs < 50 ? '50 Days' : '100 Days'}</span>
+                  </div>
+                  <div className="milestone-progress-bar">
+                    <div className="milestone-progress-fill" style={{ width: `${cs < 50 ? (cs / 50) * 100 : ((cs - 50) / 50) * 100}%` }}></div>
+                  </div>
+                  <div className="milestone-text">{cs < 50 ? `${cs} / 50 days` : `${cs} / 100 days`}</div>
+                </div>
+              );
+            })()}
 
             {/* Motivation Message */}
-            <div className="motivation-message">
-              {heatmapData.currentStreak >= 30 
-                ? '🔥 Discipline Level: Elite'
-                : heatmapData.currentStreak >= 15
-                ? '⚡ Momentum Building'
-                : '🚀 Build Your Streak'}
-            </div>
+            {(() => {
+              const cs = (state.manualStats?.currentStreak != null ? state.manualStats.currentStreak : heatmapData.currentStreak);
+              return (
+                <div className="motivation-message">
+                  {cs >= 30 ? '🔥 Discipline Level: Elite' : cs >= 15 ? '⚡ Momentum Building' : '🚀 Build Your Streak'}
+                </div>
+              );
+            })()}
           </div>
 
           <div className="monthly-card">
