@@ -49,6 +49,11 @@ const api = {
     if (!r.ok) throw new Error('Failed to delete problem');
     return r.json();
   },
+  reviseProblem: async (id) => {
+    const r = await fetch(`${API_BASE_URL}/problems/${id}/revise`, { method: 'POST' });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Failed to record revision'); }
+    return r.json();
+  },
   getStats: async () => {
     const r = await fetch(`${API_BASE_URL}/problems/stats`);
     if (!r.ok) throw new Error('Failed to fetch stats');

@@ -6,6 +6,7 @@ const {
   createProblem,
   updateProblem,
   deleteProblem,
+  reviseProblem,
   getStats,
   getSettings,
   alignProblems,
@@ -23,6 +24,7 @@ router.get('/:id', getProblem);
 router.post('/align', alignProblems);
 router.post('/', createProblem);
 router.put('/:id', updateProblem);
+router.post('/:id/revise', reviseProblem);
 router.delete('/:id', deleteProblem);
 
 module.exports = router;

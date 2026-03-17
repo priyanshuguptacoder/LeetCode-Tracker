@@ -865,14 +865,6 @@ function App() {
         const problems = transformProblems(allProblemsResponse.data);
         setApiProblems(problems);
         
-        // Remove revision flag when unmarking as Done (local-only state)
-        if (newStatus !== 'Done' && state.revisionFlags?.[number]) {
-          setState(prev => {
-            const { [number]: _removed, ...remainingFlags } = prev.revisionFlags;
-            return { ...prev, revisionFlags: remainingFlags };
-          });
-        }
-        
         if (newStatus === 'Done') {
           showNotification('✓ Problem marked done — streak updated!', 'success');
         } else {
@@ -936,9 +928,8 @@ function App() {
         
         // Clean up local-only state for this problem
         setState(prev => {
-          const { [number]: _rev, ...remainingRevisionFlags } = prev.revisionFlags || {};
           const { [number]: _st, ...remainingSolveTimes } = prev.solveTimes || {};
-          return { ...prev, revisionFlags: remainingRevisionFlags, solveTimes: remainingSolveTimes };
+          return { ...prev, solveTimes: remainingSolveTimes };
         });
         
         console.log('[DELETE]', { number, title: problem?.title, remaining: problems.length });
@@ -954,47 +945,27 @@ function App() {
     }
   };
 
-  const handleToggleRevision = (number) => {
-    if (!verifyPassword('toggle revision flag')) {
-      return;
-    }
-    
-    setState(prev => {
-      const current = prev.revisionFlags[number] || { needsRevision: false, revisionCount: 0 };
-      return {
-        ...prev,
-        revisionFlags: {
-          ...prev.revisionFlags,
-          [number]: {
-            ...current,
-            needsRevision: !current.needsRevision
-          }
-        }
-      };
-    });
-  };
+  const [revisingId, setRevisingId] = React.useState(null);
 
-  const handleMarkRevised = (number) => {
-    if (!verifyPassword('mark as revised')) {
-      return;
+  const handleRevise = async (number) => {
+    if (revisingId === number) return; // prevent double-click
+    try {
+      setRevisingId(number);
+      const res = await window.API.reviseProblem(number);
+      if (res.success) {
+        // Patch only the revised problem in state — no full refetch needed
+        setApiProblems(prev => prev.map(p =>
+          p.number === number
+            ? { ...p, revisionCount: res.data.revisionCount, lastRevisedAt: res.data.lastRevisedAt }
+            : p
+        ));
+        showNotification('Revision recorded ✅', 'success');
+      }
+    } catch (err) {
+      showNotification(`❌ ${err.message}`, 'error');
+    } finally {
+      setRevisingId(null);
     }
-    
-    setState(prev => {
-      const current = prev.revisionFlags[number] || { needsRevision: false, revisionCount: 0 };
-      return {
-        ...prev,
-        revisionFlags: {
-          ...prev.revisionFlags,
-          [number]: {
-            needsRevision: false,
-            revisionCount: current.revisionCount + 1,
-            lastRevisedDate: toLocalDateStr(new Date())
-          }
-        }
-      };
-    });
-    
-    showNotification('✓ Marked as revised', 'success');
   };
 
   // ============================================
@@ -1455,20 +1426,15 @@ function App() {
   }, []);
 
   // Clean up orphan local state (revisionFlags / solveTimes) for deleted problems.
-  // solvedDates is no longer in state — it's a useMemo derived from apiProblems.
+  // Clean up orphan solveTimes for deleted problems.
   useEffect(() => {
     const validProblemNumbers = new Set(allProblems.map(p => p.number));
-    const revisionFlagsKeys = Object.keys(state.revisionFlags || {}).map(Number);
-    const solveTimesKeys = Object.keys(state.solveTimes || {}).map(Number);
-    const orphanRevisionFlags = revisionFlagsKeys.filter(num => !validProblemNumbers.has(num));
-    const orphanSolveTimes = solveTimesKeys.filter(num => !validProblemNumbers.has(num));
-    if (orphanRevisionFlags.length > 0 || orphanSolveTimes.length > 0) {
+    const orphanSolveTimes = Object.keys(state.solveTimes || {}).map(Number).filter(num => !validProblemNumbers.has(num));
+    if (orphanSolveTimes.length > 0) {
       setState(prev => {
-        const newRevisionFlags = { ...prev.revisionFlags };
         const newSolveTimes = { ...prev.solveTimes };
-        orphanRevisionFlags.forEach(num => delete newRevisionFlags[num]);
         orphanSolveTimes.forEach(num => delete newSolveTimes[num]);
-        return { ...prev, revisionFlags: newRevisionFlags, solveTimes: newSolveTimes };
+        return { ...prev, solveTimes: newSolveTimes };
       });
     }
   }, [allProblems.length]);
@@ -1929,7 +1895,13 @@ function App() {
                   <span className={`badge badge-${(problem.difficulty || 'Medium').toLowerCase()}`} style={{ marginRight: '0.5rem' }}>
                     {problem.difficulty}
                   </span>
-                  <button className="btn-revised" onClick={() => handleMarkRevised(problem.number)}>✓ Revised</button>
+                  <button
+                    className="btn-revised"
+                    onClick={() => handleRevise(problem.number)}
+                    disabled={revisingId === problem.number}
+                  >
+                    {revisingId === problem.number ? '⏳' : '🔁 Revise'}
+                  </button>
                 </div>
               ))}
             </div>
@@ -2208,17 +2180,29 @@ function App() {
                         </select>
                       </td>
                       <td>
-                        <span style={{
-                          display: 'inline-block',
-                          padding: '0.2rem 0.6rem',
-                          borderRadius: '12px',
-                          fontSize: '0.8rem',
-                          fontWeight: '600',
-                          background: (problem.revisionCount || 0) > 0 ? 'rgba(99,102,241,0.15)' : 'rgba(255,255,255,0.05)',
-                          color: (problem.revisionCount || 0) > 0 ? 'var(--primary)' : 'var(--text-secondary)'
-                        }}>
-                          {problem.revisionCount || 0}×
-                        </span>
+                        {(() => {
+                          const count = problem.revisionCount || 0;
+                          const last = problem.lastRevisedAt;
+                          const daysAgo = last
+                            ? Math.floor((Date.now() - new Date(last)) / 86400000)
+                            : null;
+                          const label = daysAgo === null ? null
+                            : daysAgo === 0 ? 'Today'
+                            : daysAgo === 1 ? '1 day ago'
+                            : `${daysAgo} days ago`;
+                          return (
+                            <span style={{
+                              display: 'inline-flex', flexDirection: 'column', alignItems: 'center',
+                              padding: '0.2rem 0.5rem', borderRadius: '12px', fontSize: '0.8rem', fontWeight: '600',
+                              background: count > 0 ? 'rgba(99,102,241,0.15)' : 'rgba(255,255,255,0.05)',
+                              color: count > 0 ? 'var(--primary)' : 'var(--text-secondary)',
+                              lineHeight: 1.3,
+                            }} title={label ? `Last revised: ${label}` : 'Not revised yet'}>
+                              🔁 {count}
+                              {label && <span style={{ fontSize: '0.65rem', opacity: 0.75 }}>{label}</span>}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td>
                         <a 
@@ -2245,15 +2229,16 @@ function App() {
                       <td>
                         <div className="action-buttons">
                           {problem.status === 'Done' && (
-                            <button 
-                              className={`btn-revision ${state.revisionFlags[problem.number]?.needsRevision ? 'active' : ''}`}
-                              onClick={() => handleToggleRevision(problem.number)}
-                              title={state.revisionFlags[problem.number]?.needsRevision ? 'Remove revision flag' : 'Mark for revision'}
+                            <button
+                              className="btn-revision"
+                              onClick={() => handleRevise(problem.number)}
+                              disabled={revisingId === problem.number}
+                              title="Record a revision"
                             >
-                              📝
+                              {revisingId === problem.number ? '⏳' : '🔁'}
                             </button>
                           )}
-                          <button 
+                          <button
                             className="btn-delete"
                             onClick={() => handleDelete(problem.number, problem.isCustom)}
                             title="Delete problem"

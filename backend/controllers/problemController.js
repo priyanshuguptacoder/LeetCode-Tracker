@@ -186,8 +186,25 @@ exports.updateProblem = async (req, res) => {
   }
 };
 
+// ─── POST /api/problems/:id/revise ───────────────────────────────────────────
+exports.reviseProblem = async (req, res) => {
+  try {
+    const problem = await Problem.findOneAndUpdate(
+      { id: parseInt(req.params.id) },
+      { $inc: { revisionCount: 1 }, $set: { lastRevisedAt: new Date() } },
+      { new: true, runValidators: true }
+    );
+    if (!problem) return res.status(404).json({ success: false, error: 'Problem not found' });
+    res.json({
+      success: true,
+      data: { id: problem.id, revisionCount: problem.revisionCount, lastRevisedAt: problem.lastRevisedAt },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Failed to record revision', message: err.message });
+  }
+};
+
 // ─── DELETE /api/problems/:id ─────────────────────────────────────────────────
-// Streak is NOT modified on delete (per spec).
 exports.deleteProblem = async (req, res) => {
   try {
     const problem = await Problem.findOneAndDelete({ id: parseInt(req.params.id) });
