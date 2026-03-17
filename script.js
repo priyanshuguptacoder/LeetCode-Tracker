@@ -446,6 +446,7 @@ function App() {
 
     let thisWeekCount = 0;
     let lastWeekCount = 0;
+    const thisWeekDays = new Set();
 
     problems.forEach(problem => {
       if (problem && problem.status === 'Done' && problem.number && solvedDates[problem.number]) {
@@ -453,6 +454,7 @@ function App() {
         solvedDate.setHours(0, 0, 0, 0);
         if (solvedDate >= thisMonday) {
           thisWeekCount++;
+          thisWeekDays.add(solvedDates[problem.number]);
         } else if (solvedDate >= lastMonday && solvedDate < lastSunday) {
           lastWeekCount++;
         }
@@ -463,11 +465,16 @@ function App() {
       ? parseFloat((((thisWeekCount - lastWeekCount) / lastWeekCount) * 100).toFixed(1))
       : thisWeekCount > 0 ? 100 : 0;
 
+    const thisWeekAvgPerDay = thisWeekDays.size > 0 ? (thisWeekCount / thisWeekDays.size).toFixed(1) : '0';
+    const contextLabel = change <= -30 ? 'Below normal' : change >= 20 ? 'Good pace' : 'On track';
+
     return {
       thisWeek: thisWeekCount,
       lastWeek: lastWeekCount,
       change,
-      trend: change > 0 ? '📈' : change < 0 ? '📉' : '➡️'
+      trend: change > 0 ? '📈' : change < 0 ? '📉' : '➡️',
+      thisWeekAvgPerDay,
+      contextLabel
     };
   };
 
@@ -515,6 +522,22 @@ function App() {
     
     const last7Avg = last7Days.size > 0 ? (last7Count / last7Days.size).toFixed(2) : 0;
     const prev7Avg = prev7Days.size > 0 ? (prev7Count / prev7Days.size).toFixed(2) : 0;
+
+    // Last 30 days avg
+    const last30Start = new Date(today);
+    last30Start.setDate(last30Start.getDate() - 30);
+    let last30Count = 0;
+    const last30Days = new Set();
+    problems.forEach(problem => {
+      if (problem && problem.status === 'Done' && problem.number && solvedDates[problem.number]) {
+        const solvedDate = parseLocalDate(solvedDates[problem.number]);
+        if (solvedDate >= last30Start) {
+          last30Count++;
+          last30Days.add(solvedDates[problem.number]);
+        }
+      }
+    });
+    const last30Avg = last30Days.size > 0 ? (last30Count / last30Days.size).toFixed(2) : 0;
     
     let trend = 'Stable';
     if (last7Avg > prev7Avg) trend = 'Improving';
@@ -524,45 +547,35 @@ function App() {
       overallAvg,
       last7Avg,
       prev7Avg,
+      last30Avg,
       trend,
       arrow: trend === 'Improving' ? '📈' : trend === 'Declining' ? '📉' : '➡️'
     };
   };
 
-  // 6️⃣ STRONGEST DAY
   const calculateStrongestDay = (solvedDates) => {
-    if (!solvedDates) {
-      return {
-        count: 0,
-        date: 'N/A'
-      };
-    }
-    
+    if (!solvedDates) return { count: 0, date: 'N/A', topDays: [] };
+
     const dateCounts = {};
-    
     Object.values(solvedDates).forEach(dateStr => {
-      if (dateStr) {
-        dateCounts[dateStr] = (dateCounts[dateStr] || 0) + 1;
-      }
+      if (dateStr) dateCounts[dateStr] = (dateCounts[dateStr] || 0) + 1;
     });
-    
-    let maxCount = 0;
-    let bestDate = null;
-    
-    Object.entries(dateCounts).forEach(([date, count]) => {
-      if (count > maxCount) {
-        maxCount = count;
-        bestDate = date;
-      }
-    });
-    
+
+    const sorted = Object.entries(dateCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3);
+
+    const topDays = sorted.map(([date, count]) => ({
+      count,
+      label: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    }));
+
     return {
-      count: maxCount,
-      date: bestDate ? new Date(bestDate).toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric', 
-        year: 'numeric' 
-      }) : 'N/A'
+      count: topDays[0]?.count || 0,
+      date: topDays[0]
+        ? new Date(sorted[0][0]).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+        : 'N/A',
+      topDays,
     };
   };
 
@@ -1734,104 +1747,117 @@ function App() {
 
           <div className="monthly-card">
             <h3 className="card-title">📅 Monthly Planner</h3>
-            <div className="monthly-header">
-              <div className="current-month">
-                {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-              </div>
-              {bestMonth && (
-                <div className="best-month-badge">
-                  🏆 Best: {new Date(bestMonth.year, bestMonth.month).toLocaleDateString('en-US', { month: 'short' })} ({bestMonth.count})
-                </div>
-              )}
-            </div>
 
-            {/* Core metrics — compact grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', margin: '0.75rem 0' }}>
-              <div style={{ background: 'rgba(99,102,241,0.1)', borderRadius: '8px', padding: '0.5rem 0.75rem' }}>
-                <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--primary)' }}>{currentMonthStats.count}</div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>solved this month</div>
+            {/* ── SECTION 1: Progress Overview ── */}
+            <div className="mp-section">
+              <div className="mp-month-row">
+                <span className="mp-month-name">{new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
+                {bestMonth && (
+                  <span className="best-month-badge">🏆 Best: {new Date(bestMonth.year, bestMonth.month).toLocaleDateString('en-US', { month: 'short' })} ({bestMonth.count})</span>
+                )}
               </div>
               {targetSuggestion.hasData ? (
                 <>
-                  <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '8px', padding: '0.5rem 0.75rem' }}>
-                    <div style={{ fontSize: '1.4rem', fontWeight: 700 }}>{targetSuggestion.moderateMonthlyTarget}</div>
-                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>monthly target</div>
+                  {/* Progress bar */}
+                  <div className="mp-progress-bar-track">
+                    <div
+                      className="mp-progress-bar-fill"
+                      style={{ width: `${Math.min(100, Math.round((currentMonthStats.count / targetSuggestion.moderateMonthlyTarget) * 100))}%` }}
+                    />
                   </div>
-                  <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '8px', padding: '0.5rem 0.75rem' }}>
-                    <div style={{ fontSize: '1.4rem', fontWeight: 700 }}>{targetSuggestion.avgLast30}</div>
-                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>avg/day (30d)</div>
+                  <div className="mp-progress-label">
+                    <span><strong style={{ color: 'var(--primary)' }}>{currentMonthStats.count}</strong> / {targetSuggestion.moderateMonthlyTarget} solved</span>
+                    <span style={{ color: 'var(--text-muted)' }}>{Math.min(100, Math.round((currentMonthStats.count / targetSuggestion.moderateMonthlyTarget) * 100))}%</span>
                   </div>
-                  <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '8px', padding: '0.5rem 0.75rem' }}>
-                    <div style={{ fontSize: '1.4rem', fontWeight: 700, color: parseFloat(targetSuggestion.dailyRequired) > parseFloat(targetSuggestion.avgLast30) ? 'var(--warning, #f59e0b)' : 'var(--success)' }}>{targetSuggestion.dailyRequired}</div>
-                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>required/day · {targetSuggestion.remainingDays}d left</div>
+                  {/* Mini stats row */}
+                  <div className="mp-stats-row">
+                    <div className="mp-stat">
+                      <span className="mp-stat-val">{targetSuggestion.avgLast30}</span>
+                      <span className="mp-stat-lbl">avg/day</span>
+                    </div>
+                    <div className="mp-stat-divider" />
+                    <div className="mp-stat">
+                      <span className="mp-stat-val" style={{ color: parseFloat(targetSuggestion.dailyRequired) > parseFloat(targetSuggestion.avgLast30) ? 'var(--warning, #f59e0b)' : 'var(--success)' }}>
+                        {targetSuggestion.dailyRequired}
+                      </span>
+                      <span className="mp-stat-lbl">needed/day</span>
+                    </div>
+                    <div className="mp-stat-divider" />
+                    <div className="mp-stat">
+                      <span className="mp-stat-val">{targetSuggestion.remainingDays}</span>
+                      <span className="mp-stat-lbl">days left</span>
+                    </div>
                   </div>
                 </>
               ) : (
-                <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '8px', padding: '0.5rem 0.75rem', gridColumn: 'span 1' }}>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Need 7+ days of data</div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', padding: '0.5rem 0' }}>
+                  <strong style={{ color: 'var(--primary)' }}>{currentMonthStats.count}</strong> solved · Need 7+ days of data for targets
                 </div>
               )}
             </div>
 
-            {/* 🎯 Today's Plan */}
+            {/* ── SECTION 2: Today's Plan (primary focus) ── */}
             {targetSuggestion.hasData && (() => {
               const solveTarget = Math.max(1, Math.ceil(parseFloat(targetSuggestion.dailyRequired)));
               const reviseTarget = Math.min(3, targetedProblems.totalCount);
               const focusTopics = weaknessAnalysis.slice(0, 2).map(w => w.topic);
               return (
-                <div style={{ background: 'rgba(99,102,241,0.08)', borderRadius: '8px', padding: '0.6rem 0.75rem', marginBottom: '0.75rem' }}>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)', marginBottom: '0.4rem' }}>🎯 Today's Plan</div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-primary)', lineHeight: 1.8 }}>
-                    <div>Solve: <strong>{solveTarget}</strong> &nbsp;·&nbsp; Revise: <strong>{reviseTarget}</strong></div>
-                    {focusTopics.length > 0 && (
-                      <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
-                        Focus: {focusTopics.join(' · ')}
-                      </div>
-                    )}
+                <div className="mp-today-plan">
+                  <div className="mp-today-title">🎯 Today's Plan</div>
+                  <div className="mp-today-numbers">
+                    <div className="mp-today-num">
+                      <span className="mp-today-big">{solveTarget}</span>
+                      <span className="mp-today-sub">solve</span>
+                    </div>
+                    <div className="mp-today-sep">·</div>
+                    <div className="mp-today-num">
+                      <span className="mp-today-big">{reviseTarget}</span>
+                      <span className="mp-today-sub">revise</span>
+                    </div>
                   </div>
+                  {focusTopics.length > 0 && (
+                    <div className="mp-today-focus">
+                      Focus: {focusTopics.join(' · ')}
+                    </div>
+                  )}
                 </div>
               );
             })()}
 
-            {/* 🚨 What to Focus */}
+            {/* ── SECTION 3: Action Insights ── */}
             {(() => {
-              const focusItems = [];
+              const urgent = [], improve = [], positive = [];
 
-              // Inactive topics > 14 days
-              weaknessAnalysis
-                .filter(w => w.daysSinceLast >= 14)
-                .slice(0, 2)
-                .forEach(w => {
-                  focusItems.push({ icon: '🔴', msg: `${w.topic} inactive for ${w.daysSinceLast} days` });
-                });
+              weaknessAnalysis.filter(w => w.daysSinceLast >= 14).slice(0, 2)
+                .forEach(w => urgent.push(`${w.topic} inactive ${w.daysSinceLast}d`));
 
-              // Weekly drop
-              if (weeklyPerformance.lastWeek > 0 && weeklyPerformance.change < -20) {
-                focusItems.push({ icon: '📉', msg: `Solving dropped ${Math.abs(weeklyPerformance.change)}% this week` });
-              }
+              if (weeklyPerformance.lastWeek > 0 && weeklyPerformance.change < -20)
+                improve.push(`Solving ↓${Math.abs(weeklyPerformance.change)}% this week`);
 
-              // Low hard %
               const totalD = easyCount + mediumCount + hardCount;
-              if (totalD > 0 && hardCount / totalD < 0.1) {
-                focusItems.push({ icon: '⚠️', msg: `Only ${Math.round((hardCount / totalD) * 100)}% Hard problems` });
-              }
+              if (totalD > 0 && hardCount / totalD < 0.1)
+                improve.push(`Only ${Math.round((hardCount / totalD) * 100)}% Hard problems`);
 
-              // Positive signal
-              if (consistencyScore.score >= 70) {
-                focusItems.push({ icon: '🔥', msg: `${consistencyScore.score}% consistency — keep it up` });
-              }
+              if (consistencyScore.score >= 70)
+                positive.push(`${consistencyScore.score}% consistency`);
+              if (weeklyPerformance.change > 20)
+                positive.push(`Solving ↑${weeklyPerformance.change}% this week`);
 
-              if (focusItems.length === 0) return null;
+              const hasAny = urgent.length || improve.length || positive.length;
+              if (!hasAny) return null;
+
               return (
-                <div>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.35rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>🚨 What to Focus</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-                    {focusItems.map((item, i) => (
-                      <div key={i} style={{ fontSize: '0.8rem', color: 'var(--text-primary)', display: 'flex', gap: '0.4rem', alignItems: 'flex-start' }}>
-                        <span>{item.icon}</span><span>{item.msg}</span>
-                      </div>
-                    ))}
-                  </div>
+                <div className="mp-section mp-insights">
+                  <div className="mp-insights-title">Insights</div>
+                  {urgent.map((m, i) => (
+                    <div key={`u${i}`} className="mp-insight-row mp-insight-urgent">🔥 {m}</div>
+                  ))}
+                  {improve.map((m, i) => (
+                    <div key={`i${i}`} className="mp-insight-row mp-insight-improve">⚠️ {m}</div>
+                  ))}
+                  {positive.map((m, i) => (
+                    <div key={`p${i}`} className="mp-insight-row mp-insight-positive">🟢 {m}</div>
+                  ))}
                 </div>
               );
             })()}
@@ -1871,23 +1897,27 @@ function App() {
           {/* Weekly Performance */}
           <div className="analytics-card weekly-card">
             <h3 className="card-title">📊 Weekly Performance</h3>
-            <div className="weekly-content">
-              <div className="weekly-comparison">
-                <div className="weekly-item">
-                  <div className="weekly-label">This Week</div>
-                  <div className="weekly-value">{weeklyPerformance.thisWeek}</div>
+            <div className="compact-card-body">
+              <div className="compact-main-row">
+                <div className="compact-stat">
+                  <span className="compact-big">{weeklyPerformance.thisWeek}</span>
+                  <span className="compact-lbl">this week</span>
                 </div>
-                <div className="weekly-divider"></div>
-                <div className="weekly-item">
-                  <div className="weekly-label">Last Week</div>
-                  <div className="weekly-value">{weeklyPerformance.lastWeek}</div>
+                <div className="compact-divider" />
+                <div className="compact-stat">
+                  <span className="compact-big">{weeklyPerformance.lastWeek}</span>
+                  <span className="compact-lbl">last week</span>
                 </div>
               </div>
-              <div className="weekly-change">
-                <span className="change-icon">{weeklyPerformance.trend}</span>
-                <span className="change-value" style={{ color: weeklyPerformance.change > 0 ? 'var(--success)' : weeklyPerformance.change < 0 ? 'var(--danger)' : 'var(--text-secondary)' }}>
-                  {weeklyPerformance.change > 0 ? '+' : ''}{weeklyPerformance.change}%
+              <div className="compact-sub-row">
+                <span style={{ color: weeklyPerformance.change > 0 ? 'var(--success)' : weeklyPerformance.change < 0 ? 'var(--danger)' : 'var(--text-secondary)', fontWeight: 700 }}>
+                  {weeklyPerformance.trend} {weeklyPerformance.change > 0 ? '+' : ''}{weeklyPerformance.change}%
                 </span>
+                <span className="compact-context">{weeklyPerformance.contextLabel}</span>
+              </div>
+              <div className="compact-sub-row">
+                <span className="compact-muted">Avg this week:</span>
+                <span className="compact-muted-val">{weeklyPerformance.thisWeekAvgPerDay}/day</span>
               </div>
             </div>
           </div>
@@ -1895,20 +1925,23 @@ function App() {
           {/* Daily Average */}
           <div className="analytics-card daily-avg-card">
             <h3 className="card-title">📈 Daily Average</h3>
-            <div className="daily-avg-content">
-              <div className="daily-avg-main">
-                <div className="daily-avg-value">{dailyAverage.overallAvg}</div>
-                <div className="daily-avg-label">Problems per Active Day</div>
+            <div className="compact-card-body">
+              <div className="compact-hero">
+                <span className="compact-hero-num">{dailyAverage.overallAvg}</span>
+                <span className="compact-hero-sub">overall avg/active day</span>
               </div>
-              <div className="daily-avg-trend">
-                <div className="trend-item">
-                  <span className="trend-label">Last 7 Days:</span>
-                  <span className="trend-value">{dailyAverage.last7Avg}</span>
-                </div>
-                <div className="trend-status">
-                  <span className="trend-arrow">{dailyAverage.arrow}</span>
-                  <span className="trend-text">{dailyAverage.trend}</span>
-                </div>
+              <div className="compact-sub-row">
+                <span className="compact-muted">Last 7d:</span>
+                <span className="compact-muted-val">{dailyAverage.last7Avg}</span>
+              </div>
+              <div className="compact-sub-row">
+                <span className="compact-muted">Last 30d:</span>
+                <span className="compact-muted-val">{dailyAverage.last30Avg}</span>
+              </div>
+              <div className="compact-sub-row">
+                <span style={{ color: dailyAverage.trend === 'Improving' ? 'var(--success)' : dailyAverage.trend === 'Declining' ? 'var(--danger)' : 'var(--text-secondary)', fontWeight: 600, fontSize: '0.8rem' }}>
+                  {dailyAverage.arrow} {dailyAverage.trend}
+                </span>
               </div>
             </div>
           </div>
@@ -1916,10 +1949,24 @@ function App() {
           {/* Strongest Day */}
           <div className="analytics-card strongest-day-card">
             <h3 className="card-title">🔥 Best Day Record</h3>
-            <div className="strongest-day-content">
-              <div className="strongest-day-count">{strongestDay.count}</div>
-              <div className="strongest-day-label">Problems Solved</div>
-              <div className="strongest-day-date">{strongestDay.date}</div>
+            <div className="compact-card-body">
+              <div className="compact-hero">
+                <span className="compact-hero-num" style={{ background: 'linear-gradient(135deg, var(--warning), #F97316)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                  {strongestDay.count}
+                </span>
+                <span className="compact-hero-sub">problems in one day</span>
+              </div>
+              {strongestDay.topDays.length > 0 && (
+                <div style={{ marginTop: '8px' }}>
+                  <div className="compact-muted" style={{ marginBottom: '4px' }}>Top days:</div>
+                  {strongestDay.topDays.map((d, i) => (
+                    <div key={i} className="compact-sub-row">
+                      <span className="compact-muted">{d.label}</span>
+                      <span className="compact-muted-val">{d.count} solved</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
