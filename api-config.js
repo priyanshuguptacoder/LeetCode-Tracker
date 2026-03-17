@@ -59,6 +59,20 @@ const api = {
     if (!r.ok) throw new Error('Failed to fetch settings');
     return r.json();
   },
+  getStreak: async () => {
+    const r = await fetch(`${API_BASE_URL}/problems/streak`);
+    if (!r.ok) throw new Error('Failed to fetch streak');
+    return r.json();
+  },
+  updateStreak: async (data) => {
+    const r = await fetch(`${API_BASE_URL}/problems/streak`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Failed to update streak'); }
+    return r.json();
+  },
   alignProblems: async (problems, timeZone) => {
     const r = await fetch(`${API_BASE_URL}/problems/align`, {
       method: 'POST',

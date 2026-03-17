@@ -9,10 +9,15 @@ const {
   getStats,
   getSettings,
   alignProblems,
+  getStreak,
+  updateStreak,
 } = require('../controllers/problemController');
 
+// Static routes MUST come before /:id
 router.get('/stats', getStats);
 router.get('/settings', getSettings);
+router.get('/streak', getStreak);
+router.put('/streak', updateStreak);
 router.get('/', getAllProblems);
 router.get('/:id', getProblem);
 router.post('/align', alignProblems);

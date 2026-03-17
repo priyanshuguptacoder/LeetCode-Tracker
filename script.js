@@ -12,6 +12,17 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState(null);
 
+  // ── DB-backed streak state ────────────────────────────────────────────────
+  // Source of truth lives in MongoDB Settings document.
+  // Fetched on mount, updated after every createProblem/updateProblem (solved).
+  const [dbStreak, setDbStreak] = useState({
+    currentStreak: 0,
+    maxStreak: 0,
+    activeDays: 0,
+    lastSolvedDate: null,
+    isSetup: false,
+  });
+
   const toLocalDateStr = (date) => {
     return new Intl.DateTimeFormat('en-CA', {
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -129,15 +140,17 @@ function App() {
     };
   });
 
-  // Fetch problems from API on mount
+  // Fetch problems + streak from API on mount
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const probRes = await window.API.getAllProblems();
-        if (probRes.success) {
-          setApiProblems(transformProblems(probRes.data));
-        }
+        const [probRes, streakRes] = await Promise.all([
+          window.API.getAllProblems(),
+          window.API.getStreak(),
+        ]);
+        if (probRes.success) setApiProblems(transformProblems(probRes.data));
+        if (streakRes.success) setDbStreak(streakRes.data);
         setLoading(false);
       } catch (error) {
         console.error('Failed to fetch data:', error);
@@ -778,23 +791,13 @@ function App() {
       const response = await window.API.createProblem(newProblem);
       
       if (response.success) {
-        console.log('✅ Problem added to backend:', {
-          number: problemNumber,
-          title: formData.title,
-          solved: newProblem.solved,
-          solvedDate: newProblem.solvedDate
-        });
-        
-        // Refetch — apiProblems update triggers all useMemo analytics automatically
+        // Update streak from backend response (3-case logic already applied server-side)
+        if (response.streak) setDbStreak(response.streak);
+
+        // Refetch problems — apiProblems update triggers all useMemo analytics automatically
         const allProblemsResponse = await window.API.getAllProblems();
         const problems = transformProblems(allProblemsResponse.data);
         setApiProblems(problems);
-        
-        console.log('[ADD] Refreshed:', {
-          totalProblems: problems.length,
-          totalSolved: problems.filter(p => p.status === 'Done').length,
-          newProblemExists: problems.some(p => p.number === problemNumber),
-        });
         
         showNotification(`✅ Problem #${problemNumber} added successfully!${formData.type === 'Solved' ? ' — Streak updated!' : ''}`, 'success');
         setShowModal(false);
@@ -854,6 +857,9 @@ function App() {
       const response = await window.API.updateProblem(number, updateData);
       
       if (response.success) {
+        // Update streak from backend response if problem was marked solved
+        if (response.streak) setDbStreak(response.streak);
+
         // Refetch — solvedDates useMemo recomputes automatically from apiProblems
         const allProblemsResponse = await window.API.getAllProblems();
         const problems = transformProblems(allProblemsResponse.data);
@@ -1010,14 +1016,16 @@ function App() {
   };
 
   // ============================================
-  // ALIGN — Re-fetch from backend, all stats recompute automatically
+  // ALIGN — Re-fetch problems + streak from backend
   // ============================================
   const handleAlignHistoricalActivity = async () => {
     try {
-      const response = await window.API.getAllProblems();
-      if (response.success) {
-        setApiProblems(transformProblems(response.data));
-      }
+      const [probRes, streakRes] = await Promise.all([
+        window.API.getAllProblems(),
+        window.API.getStreak(),
+      ]);
+      if (probRes.success) setApiProblems(transformProblems(probRes.data));
+      if (streakRes.success) setDbStreak(streakRes.data);
     } catch (err) {
       console.error('Align failed:', err);
     }
@@ -1074,10 +1082,15 @@ function App() {
   const last100Progress = totalSolved % 100;
   const rollingProgressPercentage = last100Progress;
 
-  // Resolved display values — manual override takes priority over auto-computed
-  const displayCurrentStreak = state.manualStats?.currentStreak != null ? state.manualStats.currentStreak : heatmapData.currentStreak;
-  const displayMaxStreak     = state.manualStats?.maxStreak     != null ? state.manualStats.maxStreak     : heatmapData.maxStreak;
-  const displayActiveDays    = state.manualStats?.activeDays    != null ? state.manualStats.activeDays    : heatmapData.activeDays;
+  // Resolved display values:
+  // Priority: dbStreak (from MongoDB) > manualStats (localStorage override) > heatmapData (auto-computed)
+  // Once isSetup=true, dbStreak is always authoritative.
+  const displayCurrentStreak = dbStreak.isSetup ? dbStreak.currentStreak
+    : (state.manualStats?.currentStreak != null ? state.manualStats.currentStreak : heatmapData.currentStreak);
+  const displayMaxStreak = dbStreak.isSetup ? dbStreak.maxStreak
+    : (state.manualStats?.maxStreak != null ? state.manualStats.maxStreak : heatmapData.maxStreak);
+  const displayActiveDays = dbStreak.isSetup ? dbStreak.activeDays
+    : (state.manualStats?.activeDays != null ? state.manualStats.activeDays : heatmapData.activeDays);
 
   // Advanced Analytics
   const consistencyScore = React.useMemo(() => {
@@ -1422,17 +1435,17 @@ function App() {
   // (auto-update for new month/day removed — state.lastUpdate no longer exists;
   //  monthly stats recompute automatically from apiProblems via useMemo)
 
-  // Periodic sync with backend — keeps apiProblems fresh across devices.
-  // solvedDates useMemo recomputes automatically from apiProblems. No setState needed.
+  // Periodic sync — keeps problems + streak fresh across devices
   useEffect(() => {
     const syncWithBackend = async () => {
       try {
-        const response = await window.API.getAllProblems();
-        if (response.success) {
-          const problems = transformProblems(response.data);
-          setApiProblems(problems);
-          console.log('✅ Synced with backend:', { problems: problems.length });
-        }
+        const [probRes, streakRes] = await Promise.all([
+          window.API.getAllProblems(),
+          window.API.getStreak(),
+        ]);
+        if (probRes.success) setApiProblems(transformProblems(probRes.data));
+        if (streakRes.success) setDbStreak(streakRes.data);
+        console.log('✅ Synced with backend');
       } catch (error) {
         console.error('Background sync failed:', error);
       }
@@ -1575,19 +1588,24 @@ function App() {
               <button 
                 className="btn-align-activity"
                 onClick={() => setShowAlignmentModal(true)}
-                title="Adjust Historical Activity"
+                title={dbStreak.isSetup ? 'Edit streak stats' : 'Initial setup — set your streak'}
               >
-                ⚙️ Align
+                {dbStreak.isSetup ? '✏️ Edit' : '⚙️ Setup'}
               </button>
             </div>
-            {/* Editable streak stats — click any value to override manually */}
+            {/* Streak stats — click value to edit only if not yet set up via DB */}
             {(() => {
               const ms = state.manualStats || {};
+              const isDbSetup = dbStreak.isSetup;
+
               const StatItem = ({ label, value, statKey, isManual }) => (
-                <div className="streak-item" style={{ cursor: 'pointer' }} title={`Click to manually set ${label}`}>
-                  <div className="streak-value" onClick={() => handleStatClick(statKey, value)} style={{ userSelect: 'none' }}>
+                <div className="streak-item" style={{ cursor: isDbSetup ? 'default' : 'pointer' }}
+                  title={isDbSetup ? label : `Click to manually set ${label}`}>
+                  <div className="streak-value"
+                    onClick={() => !isDbSetup && handleStatClick(statKey, value)}
+                    style={{ userSelect: 'none' }}>
                     {value}
-                    {isManual && (
+                    {!isDbSetup && isManual && (
                       <span
                         title="Manual — click to reset"
                         onClick={(e) => { e.stopPropagation(); handleStatReset(statKey); }}
@@ -2370,8 +2388,10 @@ function App() {
 
       {/* Manual Stats Modal */}
       {showAlignmentModal && (() => {
+        const isDbSetup = dbStreak.isSetup;
         const ms = state.manualStats || {};
-        const handleSave = (e) => {
+
+        const handleSave = async (e) => {
           e.preventDefault();
           const form = e.target;
           const parse = (name) => {
@@ -2381,71 +2401,80 @@ function App() {
           const cs = parse('currentStreak');
           const mx = parse('maxStreak');
           const ad = parse('activeDays');
-          if ((cs !== null && (isNaN(cs) || cs < 0)) ||
-              (mx !== null && (isNaN(mx) || mx < 0)) ||
-              (ad !== null && (isNaN(ad) || ad < 0))) {
-            showNotification('❌ Values must be numbers ≥ 0', 'error');
-            return;
+
+          if (cs === null || mx === null || ad === null) {
+            showNotification('❌ All three fields are required', 'error'); return;
           }
-          setState(prev => ({
-            ...prev,
-            manualStats: { currentStreak: cs, maxStreak: mx, activeDays: ad }
-          }));
-          setShowAlignmentModal(false);
-          showNotification('✓ Stats updated', 'success');
+          if (cs < 0 || mx < 0 || ad < 0) {
+            showNotification('❌ Values must be ≥ 0', 'error'); return;
+          }
+          if (mx < cs) {
+            showNotification('❌ Max Streak must be ≥ Current Streak', 'error'); return;
+          }
+          if (ad < cs) {
+            showNotification('❌ Active Days must be ≥ Current Streak', 'error'); return;
+          }
+
+          try {
+            const payload = { currentStreak: cs, maxStreak: mx, activeDays: ad };
+            if (isDbSetup) payload.force = true; // editing after setup
+            const res = await window.API.updateStreak(payload);
+            if (res.success) {
+              setDbStreak(res.data);
+              // Also clear any localStorage manual overrides — DB is now authoritative
+              setState(prev => ({ ...prev, manualStats: { currentStreak: null, maxStreak: null, activeDays: null } }));
+              setShowAlignmentModal(false);
+              showNotification('✓ Stats saved to database', 'success');
+            }
+          } catch (err) {
+            showNotification(`❌ ${err.message}`, 'error');
+          }
         };
-        const handleReset = () => {
-          setState(prev => ({ ...prev, manualStats: { currentStreak: null, maxStreak: null, activeDays: null } }));
-          setShowAlignmentModal(false);
-          showNotification('↩ Stats reset to auto-computed', 'success');
-        };
+
         return (
           <div className="modal-overlay" onClick={() => setShowAlignmentModal(false)}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
-                <h2>✏️ Set Stats Manually</h2>
+                <h2>{isDbSetup ? '✏️ Edit Stats' : '⚙️ Initial Setup — Set Your Stats'}</h2>
                 <button className="modal-close" onClick={() => setShowAlignmentModal(false)}>×</button>
               </div>
               <form onSubmit={handleSave}>
                 <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  {!isDbSetup && (
+                    <div className="form-hint" style={{ background: 'rgba(99,102,241,0.1)', padding: '0.6rem 0.8rem', borderRadius: '8px' }}>
+                      🚀 First-time setup — enter your current stats from LeetCode. After this, streak updates automatically when you add solved problems.
+                    </div>
+                  )}
+                  {isDbSetup && (
+                    <div className="form-hint" style={{ background: 'rgba(245,158,11,0.1)', padding: '0.6rem 0.8rem', borderRadius: '8px' }}>
+                      ⚠️ Stats are auto-managed. Only edit if you need to correct a mistake.
+                    </div>
+                  )}
                   <div className="form-group">
                     <label className="form-label">Current Streak (days)</label>
-                    <input
-                      name="currentStreak"
-                      type="number"
-                      min="0"
-                      className="form-input"
-                      defaultValue={ms.currentStreak != null ? ms.currentStreak : ''}
-                      placeholder="Leave blank to auto-compute"
-                    />
+                    <input name="currentStreak" type="number" min="0" className="form-input"
+                      defaultValue={isDbSetup ? dbStreak.currentStreak : (ms.currentStreak != null ? ms.currentStreak : '')}
+                      placeholder="e.g. 12" required />
                   </div>
                   <div className="form-group">
                     <label className="form-label">Max Streak (days)</label>
-                    <input
-                      name="maxStreak"
-                      type="number"
-                      min="0"
-                      className="form-input"
-                      defaultValue={ms.maxStreak != null ? ms.maxStreak : ''}
-                      placeholder="Leave blank to auto-compute"
-                    />
+                    <input name="maxStreak" type="number" min="0" className="form-input"
+                      defaultValue={isDbSetup ? dbStreak.maxStreak : (ms.maxStreak != null ? ms.maxStreak : '')}
+                      placeholder="e.g. 30" required />
                   </div>
                   <div className="form-group">
                     <label className="form-label">Active Days</label>
-                    <input
-                      name="activeDays"
-                      type="number"
-                      min="0"
-                      className="form-input"
-                      defaultValue={ms.activeDays != null ? ms.activeDays : ''}
-                      placeholder="Leave blank to auto-compute"
-                    />
+                    <input name="activeDays" type="number" min="0" className="form-input"
+                      defaultValue={isDbSetup ? dbStreak.activeDays : (ms.activeDays != null ? ms.activeDays : '')}
+                      placeholder="e.g. 45" required />
                   </div>
-                  <div className="form-hint">💡 Leave a field blank to let it auto-compute from your solved problems.</div>
+                  <div className="form-hint">
+                    💡 Rules: Max Streak ≥ Current Streak, Active Days ≥ Current Streak
+                  </div>
                 </div>
                 <div className="modal-footer">
-                  <button type="button" className="btn-secondary" onClick={handleReset}>↩ Reset All</button>
-                  <button type="submit" className="btn-primary">✓ Save</button>
+                  <button type="button" className="btn-secondary" onClick={() => setShowAlignmentModal(false)}>Cancel</button>
+                  <button type="submit" className="btn-primary">✓ Save to Database</button>
                 </div>
               </form>
             </div>
