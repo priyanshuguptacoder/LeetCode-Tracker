@@ -1257,53 +1257,96 @@ function App() {
   }, [allProblems, solvedDates, weaknessAnalysis]);
 
   // ============================================
-  // PHASE 4: TARGETED PROBLEMS ENGINE (REAL)
-  // Uses weaknessAnalysis to find unsolved problems in weak topics
-  // Distribution: 60% Medium, 20% Easy, 20% Hard
+  // PHASE 4: TARGETED PROBLEMS ENGINE
+  // Combines unsolved weak-topic problems + solved problems needing revision.
+  // Each entry gets a reason tag and a numeric priority score for sorting.
   // ============================================
   const targetedProblems = React.useMemo(() => {
-    if (weaknessAnalysis.length === 0) return [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-    // Top weak topics (top half by weakness score)
+    // Weak topic threshold: topics with < 5 solved problems
+    const WEAK_THRESHOLD = 5;
+    const topicSolvedCount = {};
+    allProblems.forEach(p => {
+      if (p.status === 'Done') {
+        (p.topics || [p.pattern]).forEach(t => {
+          topicSolvedCount[t] = (topicSolvedCount[t] || 0) + 1;
+        });
+      }
+    });
     const weakTopicSet = new Set(
-      weaknessAnalysis
-        .slice(0, Math.max(1, Math.ceil(weaknessAnalysis.length / 2)))
-        .map(w => w.topic)
+      Object.entries(topicSolvedCount)
+        .filter(([, count]) => count < WEAK_THRESHOLD)
+        .map(([topic]) => topic)
     );
+    // Also include top-half by weaknessScore from existing analysis
+    weaknessAnalysis
+      .slice(0, Math.max(1, Math.ceil(weaknessAnalysis.length / 2)))
+      .forEach(w => weakTopicSet.add(w.topic));
 
-    // Candidates: unsolved problems that have at least one weak topic
-    const candidates = allProblems.filter(p => {
-      if (p.status === 'Done') return false;
+    const results = [];
+
+    allProblems.forEach(p => {
       const topics = p.topics || [p.pattern];
-      return topics.some(t => weakTopicSet.has(t));
+      const isWeakTopic = topics.some(t => weakTopicSet.has(t));
+      const diffScore = p.difficulty === 'Hard' ? 3 : p.difficulty === 'Medium' ? 2 : 1;
+
+      if (p.status !== 'Done') {
+        // Unsolved — only include if in a weak topic
+        if (!isWeakTopic) return;
+        results.push({
+          ...p,
+          _reason: 'weak-topic',
+          _reasonLabel: '🔥 Weak Topic',
+          // Hard unsolved in weak topic = highest priority
+          _priority: 100 + diffScore * 10,
+        });
+      } else {
+        // Solved — check revision conditions
+        const revCount = p.revisionCount || 0;
+        const lastRevAt = p.lastRevisedAt ? new Date(p.lastRevisedAt) : null;
+        const daysSinceRevision = lastRevAt
+          ? Math.floor((today - lastRevAt) / 86400000)
+          : Infinity;
+
+        const neverRevised = revCount === 0;
+        const staleRevision = daysSinceRevision > 7;
+
+        if (!neverRevised && !staleRevision && !isWeakTopic) return;
+
+        let reason, reasonLabel, priority;
+        if (neverRevised && isWeakTopic) {
+          reason = 'never-revised-weak';
+          reasonLabel = '⚠️ Never Revised · Weak Topic';
+          priority = 90 + diffScore * 10;
+        } else if (neverRevised) {
+          reason = 'never-revised';
+          reasonLabel = '⚠️ Never Revised';
+          priority = 70 + diffScore * 10;
+        } else if (staleRevision && isWeakTopic) {
+          reason = 'stale-weak';
+          reasonLabel = `🕒 ${daysSinceRevision}d ago · Weak Topic`;
+          priority = 60 + diffScore * 5;
+        } else if (staleRevision) {
+          reason = 'stale';
+          reasonLabel = `🕒 ${daysSinceRevision}d ago`;
+          priority = 40 + diffScore * 5;
+        } else {
+          reason = 'weak-topic-solved';
+          reasonLabel = '🔥 Weak Topic';
+          priority = 30 + diffScore * 3;
+        }
+
+        results.push({ ...p, _reason: reason, _reasonLabel: reasonLabel, _priority: priority });
+      }
     });
 
-    if (candidates.length === 0) return [];
+    // Sort by priority descending, then by difficulty (Hard first)
+    results.sort((a, b) => b._priority - a._priority || 0);
 
-    const TARGET_COUNT = 15;
-    const easy = candidates.filter(p => p.difficulty === 'Easy');
-    const medium = candidates.filter(p => p.difficulty === 'Medium');
-    const hard = candidates.filter(p => p.difficulty === 'Hard');
-
-    const shuffle = (arr) => [...arr].sort(() => Math.random() - 0.5);
-    const nMedium = Math.round(TARGET_COUNT * 0.6);
-    const nEasy = Math.round(TARGET_COUNT * 0.2);
-    const nHard = TARGET_COUNT - nMedium - nEasy;
-
-    const picked = [
-      ...shuffle(medium).slice(0, nMedium),
-      ...shuffle(easy).slice(0, nEasy),
-      ...shuffle(hard).slice(0, nHard),
-    ];
-
-    if (picked.length < TARGET_COUNT) {
-      const pickedNums = new Set(picked.map(p => p.number));
-      const extras = shuffle(candidates.filter(p => !pickedNums.has(p.number)));
-      picked.push(...extras.slice(0, TARGET_COUNT - picked.length));
-    }
-
-    return picked.slice(0, TARGET_COUNT);
-  }, [allProblems, weaknessAnalysis]);
+    return results.slice(0, 10);
+  }, [allProblems, weaknessAnalysis, solvedDates]);
 
   // ============================================
   // PHASE 10: PERFORMANCE INSIGHTS
@@ -1912,38 +1955,53 @@ function App() {
           )}
         </div>
 
-        {/* Targeted Problems Engine (Phase 4) */}
+        {/* Targeted Problems Engine */}
         <div className="revision-card" style={{ marginBottom: '1.5rem' }}>
-          <h3 className="card-title">🎯 Targeted Problems Engine</h3>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '0.75rem' }}>
-            Unsolved problems from your weakest topics. Distribution: 60% Medium, 20% Easy, 20% Hard.
-          </p>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+            <h3 className="card-title" style={{ margin: 0 }}>🎯 {targetedProblems.length} Targeted Problems</h3>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+              Weak topics · Never revised · Stale revisions
+            </span>
+          </div>
           {targetedProblems.length > 0 ? (
             <div className="revision-list">
               {targetedProblems.map(problem => (
                 <div key={problem.number} className="revision-item">
                   <span className="revision-number">#{problem.number}</span>
                   <span className="revision-title" style={{ flex: 1 }}>{problem.title}</span>
+                  <span style={{
+                    fontSize: '0.7rem', color: 'var(--text-secondary)',
+                    marginRight: '0.5rem', whiteSpace: 'nowrap'
+                  }}>
+                    {problem._reasonLabel}
+                  </span>
                   <span className={`badge badge-${(problem.difficulty || 'medium').toLowerCase()}`} style={{ marginRight: '0.5rem' }}>
                     {problem.difficulty}
                   </span>
-                  <span className="badge badge-pattern" style={{ marginRight: '0.5rem' }}>
-                    {problem.pattern}
-                  </span>
-                  <a
-                    href={problem.link || `https://leetcode.com/problems/${problem.number}/`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="problem-link-btn"
-                  >
-                    🔗 Solve
-                  </a>
+                  {problem.status === 'Done' ? (
+                    <button
+                      className="btn-revised"
+                      onClick={() => handleRevise(problem.number)}
+                      disabled={revisingId === problem.number}
+                    >
+                      {revisingId === problem.number ? '⏳' : '🔁 Revise'}
+                    </button>
+                  ) : (
+                    <a
+                      href={problem.link || `https://leetcode.com/problems/${problem.number}/`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="problem-link-btn"
+                    >
+                      🔗 Solve
+                    </a>
+                  )}
                 </div>
               ))}
             </div>
           ) : (
             <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-secondary)' }}>
-              No unsolved problems found for weak topics
+              No targeted problems — keep solving to build data
             </div>
           )}
         </div>
