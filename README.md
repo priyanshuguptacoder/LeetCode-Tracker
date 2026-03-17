@@ -1,228 +1,104 @@
-# LeetCode Tracker - Full Stack Application
+# LeetCode Tracker — MERN Stack
 
-A full-stack LeetCode problem tracking application with React frontend and Node.js backend, deployed on Vercel.
+A full-stack DSA problem tracker with MongoDB, Express, vanilla JS frontend.
 
-## Features
+## Stack
 
-- 📊 Track 147+ LeetCode problems
-- ✅ Mark problems as Done/In Progress/Not Started
-- 🎯 Filter by difficulty, pattern, and status
-- 📈 View statistics and progress
-- 🔥 Track streaks and consistency
-- 🌓 Dark/Light mode
-- 💾 JSON file storage (no database required)
-- 🚀 Deployed on Vercel
-
-## Tech Stack
-
-**Frontend:**
-- React (in-browser Babel)
-- Vanilla CSS
-- Fetch API
-
-**Backend:**
-- Node.js
-- Express.js
-- JSON file storage
-- Vercel Serverless Functions
-
-## Quick Start (Local Development)
-
-### 1. Clone Repository
-
-```bash
-git clone https://github.com/yourusername/leetcode-tracker.git
-cd leetcode-tracker
-```
-
-### 2. Install Dependencies
-
-```bash
-cd backend
-npm install
-cd ..
-```
-
-### 3. Start Backend
-
-```bash
-cd backend
-npm start
-```
-
-Backend runs on `http://localhost:5001`
-
-### 4. Start Frontend
-
-```bash
-# From project root
-python3 -m http.server 8000
-```
-
-Frontend runs on `http://localhost:8000`
-
-### 5. Open Application
-
-```
-http://localhost:8000
-```
-
-## Deploy to Vercel
-
-### One-Click Deploy
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/yourusername/leetcode-tracker)
-
-### Manual Deploy
-
-1. **Install Vercel CLI**
-   ```bash
-   npm install -g vercel
-   ```
-
-2. **Login to Vercel**
-   ```bash
-   vercel login
-   ```
-
-3. **Deploy**
-   ```bash
-   vercel
-   ```
-
-4. **Deploy to Production**
-   ```bash
-   vercel --prod
-   ```
-
-### Deploy via GitHub
-
-1. Push code to GitHub
-2. Go to https://vercel.com
-3. Click "Import Project"
-4. Select your GitHub repository
-5. Click "Deploy"
-
-That's it! Vercel will automatically:
-- Build and deploy your app
-- Set up serverless functions for the backend
-- Provide a production URL
-- Enable automatic deployments on push
+- **Frontend:** Vanilla JS + React (CDN) — deployed on Netlify
+- **Backend:** Node.js + Express + Mongoose — deployed on Render
+- **Database:** MongoDB Atlas
 
 ## Project Structure
 
 ```
 .
-├── backend/
-│   ├── controllers/
-│   │   └── problemController.js
-│   ├── routes/
-│   │   └── problemRoutes.js
-│   ├── server.js              # Express server
-│   ├── problems.json          # Database (147 problems)
-│   └── package.json
-├── index.html                 # Main page
-├── script.js                  # React app
-├── style.css                  # Styles
-├── api-config.js              # API configuration
-├── vercel.json                # Vercel configuration
-└── package.json
+├── index.html              # Frontend entry
+├── script.js               # React app
+├── style.css               # Styles
+├── api-config.js           # API URL config (update PRODUCTION_API_URL here)
+├── leetcode_full_dataset.js # Source dataset
+├── netlify.toml            # Netlify config
+├── render.yaml             # Render config
+└── backend/
+    ├── server.js           # Express + MongoDB
+    ├── seed.js             # Seed DB from dataset
+    ├── models/Problem.js   # Mongoose schema
+    ├── routes/problems.js  # REST routes
+    ├── controllers/problemController.js
+    ├── .env.example        # Env template
+    └── package.json
 ```
 
 ## API Endpoints
 
-- `GET /api/problems` - Get all problems
-- `GET /api/stats` - Get statistics
-- `POST /api/problems` - Create new problem
-- `PUT /api/problems/:number` - Update problem
-- `DELETE /api/problems/:number` - Delete problem
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | /api/problems | All problems |
+| GET | /api/problems/:id | Single problem |
+| GET | /api/problems/stats | Aggregated stats |
+| POST | /api/problems | Add problem |
+| PUT | /api/problems/:id | Update problem |
+| DELETE | /api/problems/:id | Delete problem |
 
-## Environment Variables
+---
 
-No environment variables needed! The app works out of the box.
+## Local Development
 
-For custom configuration, create `backend/.env`:
+### 1. Backend
 
-```env
-PORT=5001
-NODE_ENV=development
-```
-
-## Features
-
-✅ Track 147+ LeetCode problems  
-✅ Add/Update/Delete problems  
-✅ Filter by difficulty/pattern/status  
-✅ Search problems  
-✅ View statistics  
-✅ Track streaks  
-✅ Dark/Light mode  
-✅ Responsive design  
-✅ Multi-device sync  
-✅ Serverless deployment  
-
-## How It Works
-
-### Local Development
-- Backend runs on Express server (port 5001)
-- Frontend served via Python HTTP server (port 8000)
-- API calls go to `http://localhost:5001/api`
-
-### Production (Vercel)
-- Backend runs as Vercel Serverless Functions
-- Frontend served via Vercel CDN
-- API calls go to same domain `/api`
-- Automatic HTTPS
-- Global CDN distribution
-
-## Vercel Configuration
-
-The `vercel.json` file configures:
-- Backend as serverless function
-- Frontend as static site
-- API routes to `/api/*`
-- Automatic routing
-
-## Troubleshooting
-
-### Local Development
-
-**Backend not starting:**
 ```bash
 cd backend
+cp .env.example .env   # fill in MONGO_URI
 npm install
-npm start
+npm run dev            # runs on http://localhost:5001
 ```
 
-**Frontend not loading:**
+### 2. Seed Database
+
 ```bash
-python3 -m http.server 8000
+cd backend
+npm run seed
 ```
 
-### Vercel Deployment
+### 3. Frontend
 
-**Build fails:**
-- Check `vercel.json` configuration
-- Verify `backend/package.json` has all dependencies
-- Check Vercel build logs
+```bash
+# from project root
+python3 -m http.server 8000
+# open http://localhost:8000
+```
 
-**API not working:**
-- Verify routes in `vercel.json`
-- Check serverless function logs in Vercel dashboard
-- Ensure `backend/server.js` exports the app
+---
 
-**CORS errors:**
-- CORS is configured to allow all Vercel domains
-- Check browser console for specific errors
+## Deploy — Backend (Render)
 
-## License
+1. Push repo to GitHub
+2. Go to [render.com](https://render.com) → New Web Service
+3. Connect your GitHub repo
+4. Set **Root Directory** to `backend`
+5. Build command: `npm install`
+6. Start command: `npm start`
+7. Add environment variables:
+   - `MONGO_URI` — your MongoDB Atlas connection string
+   - `FRONTEND_URL` — your Netlify URL (e.g. `https://your-app.netlify.app`)
+   - `NODE_ENV` — `production`
+8. Deploy — copy the Render URL (e.g. `https://leetcode-tracker-xxxx.onrender.com`)
 
-MIT License
+---
 
-## Author
+## Deploy — Frontend (Netlify)
 
-Priyanshu Gupta
+1. Update `PRODUCTION_API_URL` in `api-config.js` with your Render URL
+2. Go to [netlify.com](https://netlify.com) → Add new site → Import from GitHub
+3. Set **Publish directory** to `.` (root)
+4. Deploy
 
-## Contributing
+---
 
-Pull requests are welcome! For major changes, please open an issue first.
+## MongoDB Atlas Setup
+
+1. Go to [cloud.mongodb.com](https://cloud.mongodb.com) → Create free M0 cluster
+2. Database Access → Add user with password
+3. Network Access → Allow `0.0.0.0/0`
+4. Connect → Drivers → copy connection string
+5. Replace `<password>` and set database name to `leetcode-tracker`

@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: leetcode-tracker-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGO_URI
+        sync: false   # set manually in Render dashboard
+      - key: FRONTEND_URL
+        sync: false   # set to your Netlify URL

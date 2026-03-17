@@ -3,11 +3,45 @@ const { useState, useEffect, useRef } = React;
 function App() {
   // ============================================
   // API DATA FETCHING
+  // CRITICAL: Backend (problems.json) is the SINGLE SOURCE OF TRUTH
+  // - All problem data comes from backend API
+  // - Solved dates are stored in backend and synced to localStorage
+  // - Changes on one device appear on all devices after sync
+  // - Periodic sync every 5 minutes ensures consistency
   // ============================================
   
   const [apiProblems, setApiProblems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState(null);
+
+  // Parse "DD-MMM" → ISO date string "YYYY-MM-DD"
+  const MONTH_MAP = {
+    Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',
+    Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'
+  };
+  const parseDDMMM = (str) => {
+    if (!str) return null;
+    const [day, mon] = str.split('-');
+    if (!MONTH_MAP[mon]) return null;
+    return `2026-${MONTH_MAP[mon]}-${day.padStart(2,'0')}`;
+  };
+
+  // Transform MongoDB schema → frontend schema
+  const transformProblems = (data) => (data || []).map(p => {
+    // Prefer ISO solvedDate from MongoDB, fall back to parsing "DD-MMM" date field
+    const solvedDateISO = p.solvedDate
+      ? new Date(p.solvedDate).toISOString().split('T')[0]
+      : parseDDMMM(p.date);
+    return {
+      ...p,
+      number: p.id ?? p.number,
+      status: p.solved ? 'Done' : (p.status || 'Not Started'),
+      userDifficulty: p.userDifficulty || p.difficulty || 'Medium',
+      pattern: (p.topics && p.topics.length > 0) ? p.topics[0] : (p.pattern || 'Miscellaneous'),
+      link: p.leetcodeLink || p.link || '',
+      _solvedDateISO: solvedDateISO, // used to build solvedDates map
+    };
+  });
 
   // Fetch problems from API on mount
   useEffect(() => {
@@ -16,24 +50,20 @@ function App() {
         setLoading(true);
         const response = await window.API.getAllProblems();
         if (response.success) {
-          const problems = response.data || [];
+          const problems = transformProblems(response.data);
           setApiProblems(problems);
           
-          // Sync solved dates from backend to state
+          // Build solvedDates map from real dates (backend is source of truth)
           const backendSolvedDates = {};
           problems.forEach(problem => {
-            if (problem.status === 'Done' && problem.solvedDate) {
-              backendSolvedDates[problem.number] = problem.solvedDate;
+            if (problem.status === 'Done' && problem._solvedDateISO) {
+              backendSolvedDates[problem.number] = problem._solvedDateISO;
             }
           });
           
-          // Merge with existing localStorage dates (keep local if exists)
           setState(prev => ({
             ...prev,
-            solvedDates: {
-              ...backendSolvedDates,
-              ...prev.solvedDates // Local overrides backend
-            }
+            solvedDates: backendSolvedDates
           }));
         }
         setLoading(false);
@@ -993,28 +1023,58 @@ function App() {
       const response = await window.API.createProblem(newProblem);
       
       if (response.success) {
+        console.log('✅ Problem added to backend:', {
+          number: problemNumber,
+          title: formData.title,
+          status: newProblem.status,
+          solvedDate: newProblem.solvedDate
+        });
+        
         // Refresh problems from API
         const allProblemsResponse = await window.API.getAllProblems();
-        const problems = allProblemsResponse.data || [];
+        const problems = transformProblems(allProblemsResponse.data);
         setApiProblems(problems);
         
-        // Sync solved dates from backend
+        console.log('🔄 Refreshed from backend:', {
+          totalProblems: problems.length,
+          newProblemExists: problems.some(p => p.number === problemNumber)
+        });
+        
+        // Sync solved dates from backend (backend is source of truth)
         const backendSolvedDates = {};
         problems.forEach(problem => {
-          if (problem.status === 'Done' && problem.solvedDate) {
-            backendSolvedDates[problem.number] = problem.solvedDate;
+          if (problem.status === 'Done' && problem._solvedDateISO) {
+            backendSolvedDates[problem.number] = problem._solvedDateISO;
           }
         });
         
-        setState(prev => ({
-          ...prev,
-          solvedDates: {
-            ...backendSolvedDates,
-            ...prev.solvedDates
-          }
-        }));
+        console.log('📅 Synced dates from backend:', {
+          totalSolvedDates: Object.keys(backendSolvedDates).length,
+          newProblemDate: backendSolvedDates[problemNumber]
+        });
         
-        showNotification(`✅ Problem #${problemNumber} added successfully!`, 'success');
+        // Update calendar activity dates if problem was marked as solved
+        const today = new Date().toISOString().split('T')[0];
+        
+        setState(prev => {
+          let updatedCalendarDates = prev.calendarActivityDates || [];
+          
+          if (formData.type === 'Solved') {
+            const currentDates = new Set(updatedCalendarDates);
+            if (!currentDates.has(today)) {
+              updatedCalendarDates = [...updatedCalendarDates, today];
+              console.log('🔥 Streak updated - added today to calendar');
+            }
+          }
+          
+          return {
+            ...prev,
+            solvedDates: backendSolvedDates, // Backend is ONLY source of truth
+            calendarActivityDates: updatedCalendarDates
+          };
+        });
+        
+        showNotification(`✅ Problem #${problemNumber} added successfully!${formData.type === 'Solved' ? ' — Streak updated!' : ''}`, 'success');
         
         // Close modal
         setShowModal(false);
@@ -1085,14 +1145,14 @@ function App() {
       if (response.success) {
         // Refresh problems from API
         const allProblemsResponse = await window.API.getAllProblems();
-        const problems = allProblemsResponse.data || [];
+        const problems = transformProblems(allProblemsResponse.data);
         setApiProblems(problems);
         
-        // Sync solved dates from backend
+        // Sync solved dates from backend (backend is source of truth)
         const backendSolvedDates = {};
         problems.forEach(problem => {
-          if (problem.status === 'Done' && problem.solvedDate) {
-            backendSolvedDates[problem.number] = problem.solvedDate;
+          if (problem.status === 'Done' && problem._solvedDateISO) {
+            backendSolvedDates[problem.number] = problem._solvedDateISO;
           }
         });
         
@@ -1100,24 +1160,16 @@ function App() {
         setState(prev => {
           const newState = {
             ...prev,
-            solvedDates: {
-              ...backendSolvedDates,
-              ...prev.solvedDates
-            },
+            solvedDates: backendSolvedDates, // Backend is ONLY source of truth
             statusOverrides: {
               ...prev.statusOverrides,
               [number]: newStatus
             }
           };
           
-          // Auto-assign date when marking as Done
+          // Update calendar activity dates when marking as Done
           if (newStatus === 'Done') {
-            if (!prev.solvedDates[number]) {
-              newState.solvedDates = {
-                ...prev.solvedDates,
-                [number]: today
-              };
-            }
+            const today = new Date().toISOString().split('T')[0];
             
             // Update calendar activity dates
             if (prev.calendarActivityDates) {
@@ -1125,18 +1177,15 @@ function App() {
               if (!currentDates.has(today)) {
                 newState.calendarActivityDates = [...prev.calendarActivityDates, today];
               }
+            } else {
+              newState.calendarActivityDates = [today];
             }
           }
           
-          // Remove date and revision flag when unmarking as Done
+          // Remove revision flag when unmarking as Done
           if (newStatus !== 'Done') {
-            if (prev.solvedDates[number]) {
-              const { [number]: removed, ...remainingDates } = prev.solvedDates;
-              newState.solvedDates = remainingDates;
-            }
-            
             // Remove revision flag
-            if (prev.revisionFlags[number]) {
+            if (prev.revisionFlags && prev.revisionFlags[number]) {
               const { [number]: removed, ...remainingFlags } = prev.revisionFlags;
               newState.revisionFlags = remainingFlags;
             }
@@ -1171,23 +1220,20 @@ function App() {
       if (response.success) {
         // Refresh problems from API
         const allProblemsResponse = await window.API.getAllProblems();
-        const problems = allProblemsResponse.data || [];
+        const problems = transformProblems(allProblemsResponse.data);
         setApiProblems(problems);
         
-        // Sync solved dates from backend
+        // Sync solved dates from backend (backend is source of truth)
         const backendSolvedDates = {};
         problems.forEach(problem => {
-          if (problem.status === 'Done' && problem.solvedDate) {
-            backendSolvedDates[problem.number] = problem.solvedDate;
+          if (problem.status === 'Done' && problem._solvedDateISO) {
+            backendSolvedDates[problem.number] = problem._solvedDateISO;
           }
         });
         
         setState(prev => ({
           ...prev,
-          solvedDates: {
-            ...backendSolvedDates,
-            ...prev.solvedDates
-          }
+          solvedDates: backendSolvedDates // Backend is ONLY source of truth
         }));
         
         showNotification(`✓ Difficulty updated to ${newDifficulty}`, 'success');
@@ -1226,29 +1272,25 @@ function App() {
           if (response.success) {
             // Refresh problems from API
             const allProblemsResponse = await window.API.getAllProblems();
-            const problems = allProblemsResponse.data || [];
+            const problems = transformProblems(allProblemsResponse.data);
             setApiProblems(problems);
             
-            // Sync solved dates from backend
+            // Sync solved dates from backend (backend is source of truth)
             const backendSolvedDates = {};
             problems.forEach(problem => {
-              if (problem.status === 'Done' && problem.solvedDate) {
-                backendSolvedDates[problem.number] = problem.solvedDate;
+              if (problem.status === 'Done' && problem._solvedDateISO) {
+                backendSolvedDates[problem.number] = problem._solvedDateISO;
               }
             });
             
             // Clean up localStorage data for this problem
             setState(prev => {
-              const { [number]: removedDate, ...remainingSolvedDates } = prev.solvedDates || {};
               const { [number]: removedRevision, ...remainingRevisionFlags } = prev.revisionFlags || {};
               const { [number]: removedSolveTime, ...remainingSolveTimes } = prev.solveTimes || {};
               
               return {
                 ...prev,
-                solvedDates: {
-                  ...backendSolvedDates,
-                  ...remainingSolvedDates
-                },
+                solvedDates: backendSolvedDates, // Backend is ONLY source of truth
                 revisionFlags: remainingRevisionFlags,
                 solveTimes: remainingSolveTimes
               };
@@ -1601,7 +1643,7 @@ function App() {
       const matchesSearch = 
         searchTerm.trim() === '' ||
         problem.number.toString().includes(searchTerm) ||
-        problem.title.toLowerCase().includes(searchTerm.toLowerCase());
+        (problem.title || '').toLowerCase().includes(searchTerm.toLowerCase());
       
       const matchesDifficulty = 
         difficultyFilter === 'All' || problem.difficulty === difficultyFilter;
@@ -1675,6 +1717,44 @@ function App() {
     const interval = setInterval(checkDateUpdate, 60 * 60 * 1000);
     return () => clearInterval(interval);
   }, [state.lastUpdate]);
+
+  // Periodic sync with backend to ensure data consistency across devices
+  useEffect(() => {
+    const syncWithBackend = async () => {
+      try {
+        const response = await window.API.getAllProblems();
+        if (response.success) {
+          const problems = transformProblems(response.data);
+          setApiProblems(problems);
+          
+          // Sync solved dates from backend (backend is source of truth)
+          const backendSolvedDates = {};
+          problems.forEach(problem => {
+            if (problem.status === 'Done' && problem._solvedDateISO) {
+              backendSolvedDates[problem.number] = problem._solvedDateISO;
+            }
+          });
+          
+          setState(prev => ({
+            ...prev,
+            solvedDates: backendSolvedDates
+          }));
+          
+          console.log('✅ Synced with backend:', {
+            problems: problems.length,
+            solvedDates: Object.keys(backendSolvedDates).length
+          });
+        }
+      } catch (error) {
+        console.error('Background sync failed:', error);
+      }
+    };
+    
+    // Sync every 5 minutes to catch changes from other devices
+    const syncInterval = setInterval(syncWithBackend, 5 * 60 * 1000);
+    
+    return () => clearInterval(syncInterval);
+  }, []);
 
   // Clean up orphan data on mount
   useEffect(() => {
@@ -1990,7 +2070,7 @@ function App() {
               <div className="ai-suggestion-header">
                 <span className="ai-icon">🤖</span>
                 <span className="ai-title">AI Suggested Target</span>
-                <span className={`growth-mode-badge ${aiTargetSuggestion.growthMode.toLowerCase()}`}>
+                <span className={`growth-mode-badge ${(aiTargetSuggestion.growthMode || '').toLowerCase()}`}>
                   {aiTargetSuggestion.growthMode}
                 </span>
               </div>
@@ -2361,13 +2441,13 @@ function App() {
                       <td className="problem-number">{problem.number}</td>
                       <td className="problem-title">{problem.title}</td>
                       <td>
-                        <span className={`badge badge-${problem.difficulty.toLowerCase()}`}>
+                        <span className={`badge badge-${(problem.difficulty || 'medium').toLowerCase()}`}>
                           {problem.difficulty}
                         </span>
                       </td>
                       <td>
                         <select
-                          className={`difficulty-select difficulty-${problem.userDifficulty.toLowerCase()}`}
+                          className={`difficulty-select difficulty-${(problem.userDifficulty || 'medium').toLowerCase()}`}
                           value={problem.userDifficulty}
                           onChange={(e) => handleUserDifficultyChange(problem.number, e.target.value)}
                         >
@@ -2394,7 +2474,7 @@ function App() {
                       </td>
                       <td>
                         <select
-                          className={`status-select status-${problem.status.toLowerCase().replace(' ', '-')}`}
+                          className={`status-select status-${(problem.status || 'not-started').toLowerCase().replace(' ', '-')}`}
                           value={problem.status}
                           onChange={(e) => handleStatusChange(problem.number, e.target.value)}
                         >

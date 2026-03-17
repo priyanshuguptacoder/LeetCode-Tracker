@@ -1,85 +1,91 @@
-// API Configuration
-// For local development
+// ─── API Configuration ───────────────────────────────────────────────────────
+// LOCAL: http://localhost:5001/api
+// PRODUCTION: your Render backend URL — update PRODUCTION_API_URL below
+
 const LOCAL_API_URL = 'http://localhost:5001/api';
+const PRODUCTION_API_URL = 'https://leetcode-tracker-43rt.onrender.com/api'; // 👈 update after Render deploy
 
-// For production - Render backend URL
-const PRODUCTION_API_URL = 'https://leetcode-tracker-43rt.onrender.com/api';
-
-// Auto-detect environment
-const isLocalhost = window.location.hostname === 'localhost' || 
-                    window.location.hostname === '127.0.0.1' ||
-                    window.location.hostname === '';
+const isLocalhost =
+  window.location.hostname === 'localhost' ||
+  window.location.hostname === '127.0.0.1' ||
+  window.location.hostname === '';
 
 const API_BASE_URL = isLocalhost ? LOCAL_API_URL : PRODUCTION_API_URL;
 
-// Log current configuration (for debugging)
-console.log('🔧 API Configuration:', {
-  environment: isLocalhost ? 'LOCAL' : 'PRODUCTION',
-  baseURL: API_BASE_URL,
-  hostname: window.location.hostname
-});
+console.log('🔧 API:', API_BASE_URL);
 
+// ─── Core API ────────────────────────────────────────────────────────────────
 const api = {
-  // Get all problems
   getAllProblems: async () => {
-    const response = await fetch(`${API_BASE_URL}/problems`);
-    if (!response.ok) throw new Error('Failed to fetch problems');
-    return response.json();
+    const r = await fetch(`${API_BASE_URL}/problems`);
+    if (!r.ok) throw new Error('Failed to fetch problems');
+    return r.json();
   },
-
-  // Get single problem
-  getProblem: async (number) => {
-    const response = await fetch(`${API_BASE_URL}/problems/${number}`);
-    if (!response.ok) throw new Error('Failed to fetch problem');
-    return response.json();
+  getProblem: async (id) => {
+    const r = await fetch(`${API_BASE_URL}/problems/${id}`);
+    if (!r.ok) throw new Error('Failed to fetch problem');
+    return r.json();
   },
-
-  // Create problem
-  createProblem: async (problemData) => {
-    const response = await fetch(`${API_BASE_URL}/problems`, {
+  createProblem: async (data) => {
+    const r = await fetch(`${API_BASE_URL}/problems`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(problemData),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
     });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to create problem');
-    }
-    return response.json();
+    if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Failed to create problem'); }
+    return r.json();
   },
-
-  // Update problem
-  updateProblem: async (number, updates) => {
-    const response = await fetch(`${API_BASE_URL}/problems/${number}`, {
+  updateProblem: async (id, updates) => {
+    const r = await fetch(`${API_BASE_URL}/problems/${id}`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
     });
-    if (!response.ok) throw new Error('Failed to update problem');
-    return response.json();
+    if (!r.ok) throw new Error('Failed to update problem');
+    return r.json();
   },
-
-  // Delete problem
-  deleteProblem: async (number) => {
-    const response = await fetch(`${API_BASE_URL}/problems/${number}`, {
-      method: 'DELETE',
-    });
-    if (!response.ok) throw new Error('Failed to delete problem');
-    return response.json();
+  deleteProblem: async (id) => {
+    const r = await fetch(`${API_BASE_URL}/problems/${id}`, { method: 'DELETE' });
+    if (!r.ok) throw new Error('Failed to delete problem');
+    return r.json();
   },
-
-  // Get stats
   getStats: async () => {
-    const response = await fetch(`${API_BASE_URL}/stats`);
-    if (!response.ok) throw new Error('Failed to fetch stats');
-    return response.json();
+    const r = await fetch(`${API_BASE_URL}/problems/stats`);
+    if (!r.ok) throw new Error('Failed to fetch stats');
+    return r.json();
   },
 };
 
-// Export for use in script.js
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+async function fetchProblems() {
+  const loadingEl = document.getElementById('loading');
+  const errorEl = document.getElementById('error-msg');
+  if (loadingEl) loadingEl.style.display = 'block';
+  if (errorEl) errorEl.style.display = 'none';
+  try {
+    const res = await api.getAllProblems();
+    return res.data || [];
+  } catch (err) {
+    console.error('fetchProblems error:', err);
+    if (errorEl) { errorEl.textContent = `Failed to load: ${err.message}`; errorEl.style.display = 'block'; }
+    return [];
+  } finally {
+    if (loadingEl) loadingEl.style.display = 'none';
+  }
+}
+
+async function markSolved(id, solved = true) {
+  const res = await api.updateProblem(id, { solved, solvedDate: solved ? new Date().toISOString() : null });
+  return res.data;
+}
+
+async function updateNotes(id, note) {
+  const res = await api.updateProblem(id, { notes: note });
+  return res.data;
+}
+
 window.API = api;
 window.API_BASE_URL = API_BASE_URL;
+window.fetchProblems = fetchProblems;
+window.markSolved = markSolved;
+window.updateNotes = updateNotes;

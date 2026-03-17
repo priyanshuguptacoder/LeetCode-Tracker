@@ -1,221 +1,28 @@
-# ============================================
-# LeetCode Performance Engine - .gitignore
-# ============================================
-
-# ============================================
-# Operating System Files
-# ============================================
-
-# macOS
-.DS_Store
-.AppleDouble
-.LSOverride
-Icon
-._*
-.DocumentRevisions-V100
-.fseventsd
-.Spotlight-V100
-.TemporaryItems
-.Trashes
-.VolumeIcon.icns
-.com.apple.timemachine.donotpresent
-.AppleDB
-.AppleDesktop
-Network Trash Folder
-Temporary Items
-.apdisk
-
-# Windows
-Thumbs.db
-Thumbs.db:encryptable
-ehthumbs.db
-ehthumbs_vista.db
-*.stackdump
-[Dd]esktop.ini
-$RECYCLE.BIN/
-*.cab
-*.msi
-*.msix
-*.msm
-*.msp
-*.lnk
-
-# Linux
-*~
-.fuse_hidden*
-.directory
-.Trash-*
-.nfs*
-
-# ============================================
-# IDE and Editor Files
-# ============================================
-
-# Visual Studio Code
-.vscode/
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
-*.code-workspace
-.history/
-
-# JetBrains IDEs (WebStorm, IntelliJ, etc.)
-.idea/
-*.iml
-*.iws
-*.ipr
-out/
-.idea_modules/
-
-# Sublime Text
-*.sublime-project
-*.sublime-workspace
-
-# Vim
-[._]*.s[a-v][a-z]
-[._]*.sw[a-p]
-[._]s[a-rt-v][a-z]
-[._]ss[a-gi-z]
-[._]sw[a-p]
-Session.vim
-Sessionx.vim
-.netrwhist
-*~
-tags
-[._]*.un~
-
-# Emacs
-*~
-\#*\#
-/.emacs.desktop
-/.emacs.desktop.lock
-*.elc
-auto-save-list
-tramp
-.\#*
-
-# Atom
-.atom/
-
-# ============================================
-# Build and Dependency Directories
-# ============================================
-
-# Node modules (if you add npm later)
+# Dependencies
 node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-lerna-debug.log*
-.pnpm-debug.log*
-
-# Build outputs
-dist/
-build/
-out/
-.cache/
-
-# ============================================
-# Environment and Configuration
-# ============================================
+backend/node_modules/
 
 # Environment variables
 .env
 .env.local
-.env.development.local
-.env.test.local
-.env.production.local
+backend/.env
 
-# Configuration files with sensitive data
-config.local.js
-secrets.json
+# macOS
+.DS_Store
+.AppleDouble
 
-# ============================================
 # Logs
-# ============================================
-
-logs/
 *.log
 npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-lerna-debug.log*
-pnpm-debug.log*
 
-# ============================================
-# Testing
-# ============================================
+# Build
+dist/
+build/
 
-# Coverage reports
-coverage/
-*.lcov
-.nyc_output/
+# IDE
+.vscode/
+.idea/
 
-# Test results
-test-results/
-junit.xml
-
-# ============================================
-# Temporary Files
-# ============================================
-
-# Temporary files
+# Temp
 *.tmp
-*.temp
-*.swp
-*.swo
 *.bak
-*.backup
-*~
-
-# Cache files
-.cache/
-*.cache
-
-# ============================================
-# Project Specific
-# ============================================
-
-# Backup files
-*.backup.js
-*.backup.css
-*.backup.html
-
-# Personal notes (if you keep them in project)
-notes.txt
-TODO.txt
-personal-notes/
-
-# Local development files
-dev/
-scratch/
-experiments/
-
-# User-specific dataset backups
-leetcode_dataset_backup_*.js
-
-# ============================================
-# Archives
-# ============================================
-
-*.zip
-*.tar
-*.tar.gz
-*.rar
-*.7z
-
-# ============================================
-# Optional: Keep These Commented Out
-# ============================================
-
-# Uncomment if you want to ignore your personal dataset
-# leetcode_full_dataset.js
-
-# Uncomment if you want to ignore documentation
-# *.md
-# !README.md
-
-# Uncomment if you want to ignore all HTML except index
-# *.html
-# !index.html
