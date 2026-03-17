@@ -516,12 +516,20 @@ function App() {
     () => sessionStorage.getItem('admin') === 'true'
   );
   const [showScrollTop, setShowScrollTop] = React.useState(false);
+  const [showScrollBottom, setShowScrollBottom] = React.useState(true);
   React.useEffect(() => {
-    const onScroll = () => setShowScrollTop(window.scrollY > 400);
+    const onScroll = () => {
+      const scrolled = window.scrollY;
+      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      setShowScrollTop(scrolled > 400);
+      setShowScrollBottom(scrolled < maxScroll - 100);
+    };
     window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll(); // run once on mount
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+  const scrollToBottom = () => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
 
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [pendingAction, setPendingAction] = useState(null);
@@ -2825,12 +2833,15 @@ function App() {
 
 
 
-      {/* Scroll to Top */}
-      {showScrollTop && (
-        <button className="scroll-to-top" onClick={scrollToTop} title="Back to top">
-          ↑
-        </button>
-      )}
+      {/* Scroll buttons */}
+      <div className="scroll-btns">
+        {showScrollTop && (
+          <button className="scroll-btn" onClick={scrollToTop} title="Back to top">↑</button>
+        )}
+        {showScrollBottom && (
+          <button className="scroll-btn scroll-btn-down" onClick={scrollToBottom} title="Scroll to bottom">↓</button>
+        )}
+      </div>
 
 
 
