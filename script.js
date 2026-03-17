@@ -217,70 +217,10 @@ function App() {
   };
 
   // ============================================
-  // HISTORICAL DATE GENERATION
+  // HISTORICAL DATE GENERATION — DISABLED
+  // Real dates come from MongoDB solvedDate field.
+  // Synthetic date generation removed to prevent fake stats.
   // ============================================
-  
-  const generateHistoricalDates = (solvedProblems) => {
-    const ACTIVE_DAYS = 40;
-    const MAX_STREAK = 37;
-    const totalProblems = solvedProblems.length;
-    
-    // Generate 40 active days with gaps for realistic streak
-    const today = new Date();
-    const activeDates = [];
-    let currentDate = new Date(today);
-    let consecutiveDays = 0;
-    let daysAdded = 0;
-    
-    while (daysAdded < ACTIVE_DAYS) {
-      // Add streak breaks to match max streak of 37
-      if (consecutiveDays >= MAX_STREAK) {
-        // Add 1-3 day gap
-        const gap = Math.floor(Math.random() * 3) + 1;
-        currentDate.setDate(currentDate.getDate() - gap);
-        consecutiveDays = 0;
-      }
-      
-      activeDates.push(new Date(currentDate));
-      currentDate.setDate(currentDate.getDate() - 1);
-      consecutiveDays++;
-      daysAdded++;
-    }
-    
-    // Distribute problems across active days
-    const dateAssignments = {};
-    let problemIndex = 0;
-    
-    for (const date of activeDates) {
-      if (problemIndex >= totalProblems) break;
-      
-      // Random problems per day: 2-6, weighted towards 3-5
-      const weights = [1, 3, 5, 5, 3, 1]; // for 2,3,4,5,6 problems
-      const randomWeight = Math.random() * weights.reduce((a, b) => a + b, 0);
-      let problemsPerDay = 2;
-      let cumulative = 0;
-      
-      for (let i = 0; i < weights.length; i++) {
-        cumulative += weights[i];
-        if (randomWeight <= cumulative) {
-          problemsPerDay = i + 2;
-          break;
-        }
-      }
-      
-      // Don't exceed remaining problems
-      problemsPerDay = Math.min(problemsPerDay, totalProblems - problemIndex);
-      
-      const dateStr = date.toISOString().split('T')[0];
-      
-      for (let i = 0; i < problemsPerDay && problemIndex < totalProblems; i++) {
-        dateAssignments[solvedProblems[problemIndex].number] = dateStr;
-        problemIndex++;
-      }
-    }
-    
-    return dateAssignments;
-  };
 
   // ============================================
   // MONTHLY ANALYTICS
@@ -384,15 +324,17 @@ function App() {
   
   const calculateHeatmapAndStreak = (solvedDates, calendarActivityDates) => {
     try {
-      // Use calendarActivityDates as source of truth if it exists
+      // Always use real solvedDates as source of truth for streak/active days.
+      // calendarActivityDates (from Align modal) is only used as a fallback
+      // when no real solved dates exist at all.
       let uniqueDates = [];
       
-      if (calendarActivityDates && Array.isArray(calendarActivityDates) && calendarActivityDates.length > 0) {
-        // Use calendar activity dates
-        uniqueDates = [...new Set(calendarActivityDates)].filter(d => d).sort();
-      } else if (solvedDates && typeof solvedDates === 'object') {
-        // Use solved dates
+      if (solvedDates && typeof solvedDates === 'object' && Object.keys(solvedDates).length > 0) {
+        // Prefer real solved dates from MongoDB
         uniqueDates = [...new Set(Object.values(solvedDates))].filter(d => d).sort();
+      } else if (calendarActivityDates && Array.isArray(calendarActivityDates) && calendarActivityDates.length > 0) {
+        // Fall back to calendar activity dates only if no real data
+        uniqueDates = [...new Set(calendarActivityDates)].filter(d => d).sort();
       }
       
       if (uniqueDates.length === 0) {
@@ -508,7 +450,7 @@ function App() {
     
     let consistency = (activeDays / totalDaysTracked) * 100;
     
-    // Boost if solving 3+ problems per active day
+    // Boost if solving 3+ problems per active day (but cap at 100%)
     if (averageProblemsPerActiveDay >= 3) {
       consistency = Math.min(100, consistency * 1.1);
     }
@@ -750,17 +692,13 @@ function App() {
     };
   };
 
-  // 8️⃣ AI-BASED MONTHLY TARGET SUGGESTION
+  // 8️⃣ MONTHLY TARGET SUGGESTION (data-driven, no hardcoded floors)
   const calculateAITargetSuggestion = (problems, solvedDates, consistencyScore) => {
     const now = new Date();
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
     
-    // Get problems solved in last 1, 2, 3 months
-    const getMonthStart = (monthsAgo) => {
-      const d = new Date(currentYear, currentMonth - monthsAgo, 1);
-      return d;
-    };
+    const getMonthStart = (monthsAgo) => new Date(currentYear, currentMonth - monthsAgo, 1);
     
     const last1MonthStart = getMonthStart(1);
     const last2MonthStart = getMonthStart(2);
@@ -775,85 +713,72 @@ function App() {
     problems.forEach(problem => {
       if (problem.status === 'Done' && solvedDates[problem.number]) {
         const solvedDate = new Date(solvedDates[problem.number]);
-        
-        if (solvedDate >= currentMonthStart) {
-          currentMonthCount++;
-        }
-        if (solvedDate >= last1MonthStart && solvedDate < currentMonthStart) {
-          last1MonthCount++;
-        }
-        if (solvedDate >= last2MonthStart && solvedDate < last1MonthStart) {
-          last2MonthCount++;
-        }
-        if (solvedDate >= last3MonthStart && solvedDate < last2MonthStart) {
-          last3MonthCount++;
-        }
+        if (solvedDate >= currentMonthStart) currentMonthCount++;
+        if (solvedDate >= last1MonthStart && solvedDate < currentMonthStart) last1MonthCount++;
+        if (solvedDate >= last2MonthStart && solvedDate < last1MonthStart) last2MonthCount++;
+        if (solvedDate >= last3MonthStart && solvedDate < last2MonthStart) last3MonthCount++;
       }
     });
     
-    // Calculate averages
-    const averageLast3Months = Math.round((last1MonthCount + last2MonthCount + last3MonthCount) / 3);
+    // Need at least 1 month of real data to suggest a target
+    const monthsWithData = [last1MonthCount, last2MonthCount, last3MonthCount].filter(c => c > 0).length;
+    if (monthsWithData === 0) {
+      return {
+        suggestedTarget: null,
+        growthMode: 'No Data',
+        last1MonthCount, last2MonthCount, last3MonthCount,
+        averageLast3Months: 0,
+        currentMonthCount,
+        currentPace: 0,
+        reasoning: 'Not enough history — solve problems for at least 1 month'
+      };
+    }
     
-    // Current month pace
+    const averageLast3Months = Math.round(
+      (last1MonthCount + last2MonthCount + last3MonthCount) / Math.max(1, monthsWithData)
+    );
+    
     const daysIntoMonth = now.getDate();
     const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-    const currentPace = daysIntoMonth > 0 ? (currentMonthCount / daysIntoMonth) * daysInMonth : 0;
+    const currentPace = daysIntoMonth > 0 ? Math.round((currentMonthCount / daysIntoMonth) * daysInMonth) : 0;
     
-    // Base suggestion (10% increase)
+    // Base: 10% above average
     let suggestedTarget = Math.round(averageLast3Months * 1.10);
     
-    // Adjust based on current pace
+    // Pace adjustment
     if (currentPace > averageLast3Months * 1.2) {
-      // Strong pace - increase by 10%
       suggestedTarget = Math.round(suggestedTarget * 1.10);
     } else if (currentPace < averageLast3Months * 0.7) {
-      // Weak pace - decrease by 10%
       suggestedTarget = Math.round(suggestedTarget * 0.90);
     }
     
-    // Growth mode detection
+    // Growth trend
     const isGrowthTrend = last1MonthCount > last2MonthCount && last2MonthCount > last3MonthCount;
     const isInconsistent = Math.abs(last1MonthCount - last2MonthCount) > 10 || Math.abs(last2MonthCount - last3MonthCount) > 10;
+    if (isGrowthTrend) suggestedTarget = Math.round(suggestedTarget * 1.15);
+    else if (isInconsistent) suggestedTarget = averageLast3Months;
     
-    if (isGrowthTrend) {
-      // Aggressive growth
-      suggestedTarget = Math.round(suggestedTarget * 1.15);
-    } else if (isInconsistent) {
-      // Stable target
-      suggestedTarget = averageLast3Months;
-    }
+    // Consistency bonus
+    if (consistencyScore.score > 75) suggestedTarget = Math.round(suggestedTarget * 1.10);
     
-    // High consistency bonus
-    if (consistencyScore.score > 75) {
-      suggestedTarget = Math.round(suggestedTarget * 1.10);
-    }
-    
-    // Round to nearest 5
+    // Round to nearest 5, cap at 1.5x average (no artificial floor)
     suggestedTarget = Math.round(suggestedTarget / 5) * 5;
-    
-    // Apply constraints
-    suggestedTarget = Math.max(20, suggestedTarget);
     suggestedTarget = Math.min(suggestedTarget, Math.round(averageLast3Months * 1.5));
-    suggestedTarget = Math.max(suggestedTarget, last1MonthCount);
+    suggestedTarget = Math.max(suggestedTarget, last1MonthCount); // at least match last month
+    suggestedTarget = Math.max(suggestedTarget, 1); // sanity: never 0
     
-    // Determine growth mode
     let growthMode = 'Balanced';
-    if (suggestedTarget >= averageLast3Months * 1.3) {
-      growthMode = 'Aggressive';
-    } else if (suggestedTarget <= averageLast3Months * 1.05) {
-      growthMode = 'Conservative';
-    }
+    if (suggestedTarget >= averageLast3Months * 1.3) growthMode = 'Aggressive';
+    else if (suggestedTarget <= averageLast3Months * 1.05) growthMode = 'Conservative';
     
     return {
       suggestedTarget,
       growthMode,
-      last1MonthCount,
-      last2MonthCount,
-      last3MonthCount,
+      last1MonthCount, last2MonthCount, last3MonthCount,
       averageLast3Months,
       currentMonthCount,
-      currentPace: Math.round(currentPace),
-      reasoning: `Based on ${averageLast3Months} avg/month over last 3 months`
+      currentPace,
+      reasoning: `Based on ${averageLast3Months} avg/month (${monthsWithData} month${monthsWithData > 1 ? 's' : ''} of data)`
     };
   };
 
@@ -872,36 +797,7 @@ function App() {
   // HISTORICAL DATE GENERATION (ONE-TIME)
   // ============================================
   
-  useEffect(() => {
-    try {
-      // Guard against invalid state
-      if (!state || typeof state !== 'object') return;
-      if (!Array.isArray(allProblems)) return;
-      if (!state.solvedDates || typeof state.solvedDates !== 'object') return;
-      if (state.historicalDatesGenerated) return;
-      
-      const solvedProblemsWithoutDates = allProblems.filter(
-        p => p && p.status === 'Done' && p.number && !state.solvedDates[p.number]
-      );
-      
-      if (solvedProblemsWithoutDates.length > 0) {
-        const historicalDates = generateHistoricalDates(solvedProblemsWithoutDates);
-        
-        if (historicalDates && typeof historicalDates === 'object') {
-          setState(prev => ({
-            ...prev,
-            solvedDates: {
-              ...(prev.solvedDates || {}),
-              ...historicalDates
-            },
-            historicalDatesGenerated: true
-          }));
-        }
-      }
-    } catch (error) {
-      console.error('Error in historical date generation:', error);
-    }
-  }, [state.historicalDatesGenerated, allProblems.length]);
+  // Historical date generation removed — real dates come from MongoDB.
 
   // ============================================
   // CALCULATE ANALYTICS
@@ -1374,6 +1270,10 @@ function App() {
   };
 
   const handleAdoptSuggestedTarget = () => {
+    if (!aiTargetSuggestion.suggestedTarget) {
+      showNotification('No suggestion available yet — solve problems for at least 1 month', 'error');
+      return;
+    }
     if (!verifyPassword('adopt suggested target')) {
       return;
     }
@@ -1496,10 +1396,17 @@ function App() {
   
   const totalSolved = allProblems.filter(p => p.status === 'Done').length;
   const totalProblems = allProblems.length;
-  const totalTarget = allProblems.filter(p => p.status !== 'Done').length;
+  const totalRemaining = allProblems.filter(p => p.status !== 'Done').length;
   
-  // Rolling 100 Progress (last 100 solved problems)
-  const last100Progress = totalSolved % 100;
+  // Rolling 100 Progress — track the last 100 solved problems by date
+  const last100Progress = (() => {
+    const solvedWithDates = allProblems
+      .filter(p => p.status === 'Done' && state.solvedDates[p.number])
+      .map(p => ({ number: p.number, date: state.solvedDates[p.number] }))
+      .sort((a, b) => new Date(b.date) - new Date(a.date)); // newest first
+    const last100 = solvedWithDates.slice(0, 100);
+    return last100.length; // progress within current cycle of 100
+  })();
   const completedCycles = Math.floor(totalSolved / 100);
   const rollingProgressPercentage = last100Progress;
   
@@ -1536,10 +1443,7 @@ function App() {
     const safeActiveDays = Math.min(activeDays, totalDaysTracked);
     let consistency = (safeActiveDays / totalDaysTracked) * 100;
     
-    // Boost if solving 3+ problems per active day (but cap at 100%)
-    if (averageProblemsPerActiveDay >= 3) {
-      consistency = Math.min(100, consistency * 1.1);
-    }
+    // No artificial boost — raw ratio is the honest score
     
     let status, label;
     if (consistency < 40) {
@@ -1634,6 +1538,58 @@ function App() {
   // Weakness detection
   const hardCoverage = totalHard > 0 ? (hardCount / totalHard) * 100 : 0;
   const weakPatterns = patternArray.filter(p => p.percentage < 50 && p.total > 0);
+
+  // ============================================
+  // TARGETED PROBLEMS ENGINE
+  // Recommends unsolved problems from weak topics
+  // Mix: 60% Medium, 20% Easy, 20% Hard
+  // ============================================
+  const targetedProblems = React.useMemo(() => {
+    const WEAK_THRESHOLD = 50; // topic solved% below this = weak
+    const TARGET_COUNT = 15;
+
+    // Identify weak topics (pattern coverage < threshold)
+    const weakTopics = new Set(
+      patternArray
+        .filter(p => p.percentage < WEAK_THRESHOLD && p.total > 0)
+        .map(p => p.pattern)
+    );
+
+    // Get unsolved problems from weak topics
+    const candidates = allProblems.filter(p =>
+      p.status !== 'Done' && weakTopics.has(p.pattern)
+    );
+
+    if (candidates.length === 0) return [];
+
+    // Split by difficulty
+    const easy   = candidates.filter(p => p.difficulty === 'Easy');
+    const medium = candidates.filter(p => p.difficulty === 'Medium');
+    const hard   = candidates.filter(p => p.difficulty === 'Hard');
+
+    // Shuffle helper
+    const shuffle = (arr) => [...arr].sort(() => Math.random() - 0.5);
+
+    // Pick proportionally: 60% medium, 20% easy, 20% hard
+    const nMedium = Math.round(TARGET_COUNT * 0.6);
+    const nEasy   = Math.round(TARGET_COUNT * 0.2);
+    const nHard   = TARGET_COUNT - nMedium - nEasy;
+
+    const picked = [
+      ...shuffle(medium).slice(0, nMedium),
+      ...shuffle(easy).slice(0, nEasy),
+      ...shuffle(hard).slice(0, nHard),
+    ];
+
+    // If we didn't hit TARGET_COUNT, fill from remaining candidates
+    if (picked.length < TARGET_COUNT) {
+      const pickedNums = new Set(picked.map(p => p.number));
+      const extras = shuffle(candidates.filter(p => !pickedNums.has(p.number)));
+      picked.push(...extras.slice(0, TARGET_COUNT - picked.length));
+    }
+
+    return picked.slice(0, TARGET_COUNT);
+  }, [allProblems, patternArray]);
 
   // Filters
   const patterns = ['All', ...new Set(allProblems.map(p => p.pattern))].sort();
@@ -1892,8 +1848,8 @@ function App() {
           <div className="stat-card stat-secondary">
             <div className="stat-icon">🎯</div>
             <div className="stat-content">
-              <div className="stat-value">{totalTarget}</div>
-              <div className="stat-label">Target</div>
+              <div className="stat-value">{totalRemaining}</div>
+              <div className="stat-label">Remaining</div>
             </div>
           </div>
           <div className="stat-card stat-accent">
@@ -2065,26 +2021,36 @@ function App() {
               </div>
             </div>
             
-            {/* AI Target Suggestion */}
+            {/* Suggested Target */}
             <div className="ai-suggestion-section">
               <div className="ai-suggestion-header">
-                <span className="ai-icon">🤖</span>
-                <span className="ai-title">AI Suggested Target</span>
-                <span className={`growth-mode-badge ${(aiTargetSuggestion.growthMode || '').toLowerCase()}`}>
-                  {aiTargetSuggestion.growthMode}
-                </span>
+                <span className="ai-icon">📊</span>
+                <span className="ai-title">Suggested Target</span>
+                {aiTargetSuggestion.suggestedTarget !== null && (
+                  <span className={`growth-mode-badge ${(aiTargetSuggestion.growthMode || '').toLowerCase()}`}>
+                    {aiTargetSuggestion.growthMode}
+                  </span>
+                )}
               </div>
-              <div className="ai-suggestion-value">{aiTargetSuggestion.suggestedTarget}</div>
-              <div className="ai-suggestion-reason">{aiTargetSuggestion.reasoning}</div>
-              <button 
-                className="btn-adopt-target"
-                onClick={handleAdoptSuggestedTarget}
-              >
-                Adopt Suggested Target
-              </button>
-              <div className="ai-tooltip">
-                💡 Based on last 3 months average ({aiTargetSuggestion.averageLast3Months}), current pace ({aiTargetSuggestion.currentPace}/month), and consistency score.
-              </div>
+              {aiTargetSuggestion.suggestedTarget !== null ? (
+                <>
+                  <div className="ai-suggestion-value">{aiTargetSuggestion.suggestedTarget}</div>
+                  <div className="ai-suggestion-reason">{aiTargetSuggestion.reasoning}</div>
+                  <button 
+                    className="btn-adopt-target"
+                    onClick={handleAdoptSuggestedTarget}
+                  >
+                    Adopt Suggested Target
+                  </button>
+                  <div className="ai-tooltip">
+                    💡 Based on last 3 months average ({aiTargetSuggestion.averageLast3Months}), current pace ({aiTargetSuggestion.currentPace}/month), and consistency score.
+                  </div>
+                </>
+              ) : (
+                <div className="ai-suggestion-reason" style={{ marginTop: '0.5rem' }}>
+                  📭 No Data — {aiTargetSuggestion.reasoning}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -2110,7 +2076,7 @@ function App() {
                 </div>
               </div>
               <div className="consistency-tooltip">
-                💡 Score = (Active Days / Total Days) × 100. Bonus for 3+ problems/day.
+                💡 Score = (Active Days / Total Days) × 100. Higher = more consistent daily practice.
               </div>
             </div>
           </div>
@@ -2220,6 +2186,38 @@ function App() {
           </div>
         )}
 
+        {/* Targeted Problems Engine */}
+        {targetedProblems.length > 0 && (
+          <div className="revision-card" style={{ marginBottom: '1.5rem' }}>
+            <h3 className="card-title">🎯 Targeted Problems ({targetedProblems.length})</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '0.75rem' }}>
+              Unsolved problems from your weak topics — focus here to improve coverage.
+            </p>
+            <div className="revision-list">
+              {targetedProblems.map(problem => (
+                <div key={problem.number} className="revision-item">
+                  <span className="revision-number">#{problem.number}</span>
+                  <span className="revision-title" style={{ flex: 1 }}>{problem.title}</span>
+                  <span className={`badge badge-${(problem.difficulty || 'medium').toLowerCase()}`} style={{ marginRight: '0.5rem' }}>
+                    {problem.difficulty}
+                  </span>
+                  <span className="badge badge-pattern" style={{ marginRight: '0.5rem' }}>
+                    {problem.pattern}
+                  </span>
+                  <a
+                    href={problem.link || `https://leetcode.com/problems/${problem.number}/`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="problem-link-btn"
+                  >
+                    🔗 Solve
+                  </a>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Progress Section */}
         <div className="progress-card">
           <div className="progress-header">
@@ -2258,8 +2256,8 @@ function App() {
             </div>
             <div className="rolling-stat-divider"></div>
             <div className="rolling-stat-item">
-              <span className="rolling-stat-label">Target:</span>
-              <span className="rolling-stat-value target">{totalTarget}</span>
+              <span className="rolling-stat-label">Remaining:</span>
+              <span className="rolling-stat-value target">{totalRemaining}</span>
             </div>
           </div>
         </div>
