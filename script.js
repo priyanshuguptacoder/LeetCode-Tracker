@@ -44,6 +44,126 @@ function StatCard({ value, label, icon, gradient, delay = 0, isReady }) {
 }
 
 // ============================================
+// PROBLEM CARD — unified reusable card
+// Used by: Recently Solved, Needs Revision, Targeted Problems
+// variant: 'solved' | 'revision' | 'targeted'
+// ============================================
+function ProblemCard({ p, variant, onRevise, revisingId, formatDate }) {
+  const diffLower = (p.difficulty || 'medium').toLowerCase();
+  const userDiff = p.userDifficulty || p.difficulty || 'Medium';
+
+  // User difficulty label
+  const userDiffLabel = userDiff === 'Easy'
+    ? 'Solved quickly'
+    : userDiff === 'Hard'
+    ? 'Struggled'
+    : 'Moderate effort';
+
+  const userDiffColor = userDiff === 'Easy'
+    ? 'var(--success)'
+    : userDiff === 'Hard'
+    ? 'var(--danger)'
+    : 'var(--warning)';
+
+  return (
+    <div className="pc-card">
+      {/* Top row: ID + user difficulty tag */}
+      <div className="pc-top-row">
+        <span className="pc-id">#{p.number}</span>
+        <span className="pc-user-diff" style={{ color: userDiffColor }}>
+          {userDiffLabel}
+        </span>
+      </div>
+
+      {/* Title */}
+      <div className="pc-title">{p.title}</div>
+
+      {/* Meta: difficulty badge + variant-specific info */}
+      <div className="pc-meta">
+        <span className={`badge badge-${diffLower}`}>{p.difficulty}</span>
+        {variant === 'revision' && (p.revisionCount || 0) > 0 && (
+          <span className="pc-rev-badge">
+            🔁 Revised {p.revisionCount}×
+          </span>
+        )}        {variant === 'targeted' && p._statusLabel && (
+          <span className="pc-status-label">{p._statusLabel}</span>
+        )}
+        {variant === 'solved' && p._solvedDateISO && (
+          <span className="pc-date">📅 {formatDate(p._solvedDateISO)}</span>
+        )}
+      </div>
+
+      {/* Secondary info row */}
+      {variant === 'revision' && p.daysSinceSolved && (
+        <div className="pc-sub-info">Solved {p.daysSinceSolved}d ago</div>
+      )}
+      {variant === 'revision' && p.lastRevisedAt && (
+        <div className="pc-sub-info">Last revised: {formatDate(p.lastRevisedAt)}</div>
+      )}
+      {variant === 'targeted' && p._daysSinceRevision !== Infinity && (
+        <div className="pc-sub-info">{p._daysSinceRevision}d since last revision</div>
+      )}
+
+      {/* Actions */}
+      <div className="pc-actions">
+        <a
+          href={p.link || `https://leetcode.com/problems/${p.number}/`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="pc-btn pc-btn-open"
+        >Open ↗</a>
+        {(variant === 'revision' || variant === 'targeted') && (
+          <button
+            className="pc-btn pc-btn-revise"
+            onClick={() => onRevise(p.number)}
+            disabled={revisingId === p.number}
+          >
+            {revisingId === p.number ? '⏳' : '🔁 Revise'}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Grid class based on item count
+function getPcGridClass(count) {
+  if (count <= 2) return 'pc-grid pc-grid-stretch';
+  if (count <= 4) return 'pc-grid pc-grid-mid';
+  return 'pc-grid';
+}
+
+// Reusable section renderer
+function ProblemSection({ title, items, variant, emptyIcon, emptyMsg, emptyHint, onRevise, revisingId, formatDate }) {
+  const gridClass = getPcGridClass(items.length);
+  return (
+    <div className="pc-section">
+      <h3 className="card-title">{title} ({items.length})</h3>
+      {items.length > 0 ? (
+        <div className={gridClass}>
+          {items.map(p => (
+            <ProblemCard
+              key={p.number}
+              p={p}
+              variant={variant}
+              onRevise={onRevise}
+              revisingId={revisingId}
+              formatDate={formatDate}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="pc-empty">
+          <div className="pc-empty-icon">{emptyIcon}</div>
+          <div>{emptyMsg}</div>
+          <small>{emptyHint}</small>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================
 // ADMIN AUTH MODAL — session-based unlock
 // Password: '0' (UI-level lock only, not real security)
 // ============================================
@@ -86,12 +206,13 @@ function AdminModal({ onClose, onUnlock, adminPassword }) {
 }
 
 // Legacy PwModal kept for delete confirmation (danger variant)
+// When modal.noAuth = true, skips password and just shows confirm/cancel
 function PwModal({ modal, adminPassword, onClose }) {
   const [pwVal, setPwVal] = React.useState('');
   const [pwErr, setPwErr] = React.useState('');
 
   const handleConfirm = () => {
-    if (pwVal === adminPassword) {
+    if (modal.noAuth || pwVal === adminPassword) {
       modal.onConfirm();
       onClose();
     } else {
@@ -105,20 +226,25 @@ function PwModal({ modal, adminPassword, onClose }) {
       <div className="pw-modal" onClick={e => e.stopPropagation()}>
         <h3>{modal.title}</h3>
         {modal.subtitle && <p>{modal.subtitle}</p>}
-        <input
-          type="password"
-          placeholder="Enter password"
-          value={pwVal}
-          autoFocus
-          onChange={e => { setPwVal(e.target.value); setPwErr(''); }}
-          onKeyDown={e => e.key === 'Enter' && handleConfirm()}
-        />
-        <div className="pw-modal-error">{pwErr}</div>
+        {!modal.noAuth && (
+          <>
+            <input
+              type="password"
+              placeholder="Enter password"
+              value={pwVal}
+              autoFocus
+              onChange={e => { setPwVal(e.target.value); setPwErr(''); }}
+              onKeyDown={e => e.key === 'Enter' && handleConfirm()}
+            />
+            <div className="pw-modal-error">{pwErr}</div>
+          </>
+        )}
         <div className="pw-modal-actions">
           <button className="btn-secondary" onClick={onClose}>Cancel</button>
           <button
             className={modal.danger ? 'btn-danger' : 'btn-confirm'}
             onClick={handleConfirm}
+            autoFocus={!!modal.noAuth}
           >
             {modal.danger ? 'Delete' : 'Confirm'}
           </button>
@@ -162,9 +288,16 @@ function App() {
 
   const formatDate = (date) => {
     if (!date) return '—';
-    const d = new Date(date);
+    // For YYYY-MM-DD strings, parse as local date to avoid UTC shift
+    let d;
+    if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      d = parseLocalDate(date);
+    } else {
+      d = new Date(date);
+    }
     if (isNaN(d.getTime())) return '—';
-    const days = Math.floor((Date.now() - d) / (1000 * 60 * 60 * 24));
+    const todayLocal = parseLocalDate(toLocalDateStr(new Date()));
+    const days = Math.floor((todayLocal - d) / (1000 * 60 * 60 * 24));
     if (days === 0) return 'Today';
     if (days <= 7) return `${days}d ago`;
     return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' });
@@ -346,8 +479,8 @@ function App() {
   const [pwModal, setPwModal] = useState(null);
   // pwModal = { title, subtitle, onConfirm, danger: bool } | null
 
-  const openPwModal = (title, subtitle, onConfirm, danger = false) => {
-    setPwModal({ title, subtitle, onConfirm, danger });
+  const openPwModal = (title, subtitle, onConfirm, danger = false, noAuth = false) => {
+    setPwModal({ title, subtitle, onConfirm, danger, noAuth });
   };
   const closePwModal = () => setPwModal(null);
 
@@ -994,31 +1127,34 @@ function App() {
 
   const handleDelete = (number, isCustom) => {
     const problem = allProblems.find(p => p.number === number);
+    const doDelete = async () => {
+      const tableRow = document.querySelector(`tr[data-problem-number="${number}"]`);
+      if (tableRow) {
+        tableRow.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
+        tableRow.style.opacity = '0';
+        tableRow.style.transform = 'translateX(-16px)';
+      }
+      try {
+        const response = await window.API.deleteProblem(number);
+        if (response.success) {
+          const allProblemsResponse = await window.API.getAllProblems();
+          setApiProblems(transformProblems(allProblemsResponse.data));
+          showNotification(`✅ Problem #${number} deleted`, 'success');
+        }
+      } catch (error) {
+        if (tableRow) { tableRow.style.opacity = '1'; tableRow.style.transform = 'none'; }
+        showNotification(`❌ Delete failed: ${error.message}`, 'error');
+      }
+    };
+    // If already admin-unlocked, just confirm with a simple modal (no re-auth)
+    // If locked, requireAdmin will prompt for password first, then confirm
     requireAdmin(() => {
-      // After admin unlock, show delete confirmation via PwModal (danger style, no re-auth)
       openPwModal(
         `Delete #${number}${problem ? ` — ${problem.title}` : ''}`,
         'This action cannot be undone.',
-        async () => {
-          const tableRow = document.querySelector(`tr[data-problem-number="${number}"]`);
-          if (tableRow) {
-            tableRow.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
-            tableRow.style.opacity = '0';
-            tableRow.style.transform = 'translateX(-16px)';
-          }
-          try {
-            const response = await window.API.deleteProblem(number);
-            if (response.success) {
-              const allProblemsResponse = await window.API.getAllProblems();
-              setApiProblems(transformProblems(allProblemsResponse.data));
-              showNotification(`✅ Problem #${number} deleted`, 'success');
-            }
-          } catch (error) {
-            if (tableRow) { tableRow.style.opacity = '1'; tableRow.style.transform = 'none'; }
-            showNotification(`❌ Delete failed: ${error.message}`, 'error');
-          }
-        },
-        true
+        doDelete,
+        true,
+        true  // noAuth — admin already verified
       );
     });
   };
@@ -1315,7 +1451,10 @@ function App() {
 
   // ============================================
   // PHASE 5: INTELLIGENT REVISION SYSTEM
-  // revisionScore = daysSinceSolved + weaknessScore of topic
+  // Score = 0.5*(daysSinceSolved/maxDays) + 0.3*(topicWeakness) + 0.2*(userDifficultyWeight)
+  // userDifficulty Hard → 1.0, Medium → 0.5, Easy → 0.1
+  // Only solved problems. No minimum days gate — all solved problems are candidates.
+  // Cap: 9. Show all if ≤ 9.
   // ============================================
   const intelligentRevision = React.useMemo(() => {
     const today = new Date();
@@ -1323,34 +1462,43 @@ function App() {
     const weaknessMap = {};
     weaknessAnalysis.forEach(w => { weaknessMap[w.topic] = w.weaknessScore; });
 
+    const userDiffWeight = { Hard: 1.0, Medium: 0.5, Easy: 0.1 };
+
     const solvedProblems = allProblems.filter(p => p.status === 'Done' && solvedDates[p.number]);
-    return solvedProblems.map(p => {
+    if (solvedProblems.length === 0) return [];
+
+    // Compute raw days for each, find max for normalization
+    const withDays = solvedProblems.map(p => {
       const solvedDate = parseLocalDate(solvedDates[p.number]);
       const daysSinceSolved = Math.max(1, Math.ceil((today - solvedDate) / 86400000));
+      return { ...p, daysSinceSolved };
+    });
+    const maxDays = Math.max(...withDays.map(p => p.daysSinceSolved), 1);
+
+    return withDays.map(p => {
       const topics = p.topics || [p.pattern];
-      const avgWeakness = topics.reduce((sum, t) => sum + (weaknessMap[t] || 0), 0) / topics.length;
-      return {
-        ...p,
-        daysSinceSolved,
-        revisionScore: parseFloat((daysSinceSolved + avgWeakness * 100).toFixed(2))
-      };
+      const avgWeakness = topics.reduce((sum, t) => sum + (weaknessMap[t] || 0), 0) / Math.max(topics.length, 1);
+      const udw = userDiffWeight[p.userDifficulty || p.difficulty] ?? 0.5;
+      const score = parseFloat((
+        0.5 * (p.daysSinceSolved / maxDays) +
+        0.3 * avgWeakness +
+        0.2 * udw
+      ).toFixed(4));
+      return { ...p, _revScore: score };
     })
-    .filter(p => p.daysSinceSolved >= 7) // only problems not revised in 7+ days
-    .sort((a, b) => b.revisionScore - a.revisionScore)
-    .slice(0, 10);
+    .sort((a, b) => b._revScore - a._revScore)
+    .slice(0, 9);
   }, [allProblems, solvedDates, weaknessAnalysis]);
 
   // ============================================
   // PHASE 4: TARGETED PROBLEMS ENGINE
   // Only solved problems. Conditions: never revised, stale revision (>7d), or weak topic.
-  // Capped per difficulty (4 Medium, 3 Hard, 3 Easy) so list is balanced, not all-Hard.
-  // Header shows total count in DB, list shows top 10 balanced picks.
+  // Balanced pick: up to 3 Easy, 4 Medium, 2 Hard → max 9.
   // ============================================
   const targetedProblems = React.useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Weak topic: < 5 solved problems OR top-half by weaknessScore
     const WEAK_THRESHOLD = 5;
     const topicSolvedCount = {};
     allProblems.forEach(p => {
@@ -1370,10 +1518,8 @@ function App() {
       .forEach(w => weakTopicSet.add(w.topic));
 
     const candidates = [];
-
     allProblems.forEach(p => {
       if (p.status !== 'Done') return;
-
       const topics = p.topics || [p.pattern];
       const isWeakTopic = topics.some(t => weakTopicSet.has(t));
       const revCount = p.revisionCount || 0;
@@ -1381,45 +1527,31 @@ function App() {
       const daysSinceRevision = lastRevAt
         ? Math.floor((today - lastRevAt) / 86400000)
         : Infinity;
-
       const neverRevised = revCount === 0;
       const stale = isFinite(daysSinceRevision) && daysSinceRevision > 7;
 
-      // Must meet at least one condition
       if (!neverRevised && !stale && !isWeakTopic) return;
 
-      // Priority: stale/weak beats never-revised-but-not-weak
-      // This prevents all-Hard domination
       let statusLabel, priority;
       if (stale && isWeakTopic) {
-        statusLabel = '⚠️ Needs Revision';
-        priority = 100 + Math.min(daysSinceRevision, 365);
+        statusLabel = '⚠️ Needs Revision'; priority = 100 + Math.min(daysSinceRevision, 365);
       } else if (stale) {
-        statusLabel = '⚠️ Needs Revision';
-        priority = 70 + Math.min(daysSinceRevision, 365);
+        statusLabel = '⚠️ Needs Revision'; priority = 70 + Math.min(daysSinceRevision, 365);
       } else if (neverRevised && isWeakTopic) {
-        statusLabel = '❌ Never Revised';
-        priority = 60;
+        statusLabel = '❌ Never Revised'; priority = 60;
       } else if (neverRevised) {
-        statusLabel = '❌ Never Revised';
-        priority = 30;
+        statusLabel = '❌ Never Revised'; priority = 30;
       } else {
-        statusLabel = '🔁 Recently Revised';
-        priority = 10;
+        statusLabel = '🔁 Recently Revised'; priority = 10;
       }
-
       candidates.push({ ...p, _statusLabel: statusLabel, _priority: priority, _daysSinceRevision: daysSinceRevision });
     });
 
-    // Sort by priority desc
     candidates.sort((a, b) => b._priority - a._priority);
-
-    // Total count before capping (shown in header)
     const totalCount = candidates.length;
 
-    // Pick balanced top 10: up to 4 Medium, 3 Hard, 3 Easy
-    // Fill remaining slots from whatever is left
-    const caps = { Easy: 3, Medium: 4, Hard: 3 };
+    // Balanced pick: 3 Easy, 4 Medium, 2 Hard → max 9
+    const caps = { Easy: 3, Medium: 4, Hard: 2 };
     const counts = { Easy: 0, Medium: 0, Hard: 0 };
     const picked = [];
     for (const p of candidates) {
@@ -1427,16 +1559,16 @@ function App() {
       if ((counts[diff] || 0) < (caps[diff] || 3)) {
         picked.push(p);
         counts[diff] = (counts[diff] || 0) + 1;
-        if (picked.length === 10) break;
+        if (picked.length === 9) break;
       }
     }
-    // If still under 10, fill with remaining
-    if (picked.length < 10) {
+    // Fill remaining slots up to 9
+    if (picked.length < 9) {
       const pickedNums = new Set(picked.map(p => p.number));
       for (const p of candidates) {
         if (!pickedNums.has(p.number)) {
           picked.push(p);
-          if (picked.length === 10) break;
+          if (picked.length === 9) break;
         }
       }
     }
@@ -2078,109 +2210,55 @@ function App() {
           </div>
         </div>
 
-        {/* Needs Revision — card grid, revisionCount > 0, sorted by most recent */}
-        {(() => {
-          const revProblems = [...allProblems]
-            .filter(p => (p.revisionCount || 0) > 0)
-            .sort((a, b) => {
-              const da = a.lastRevisedAt ? new Date(a.lastRevisedAt) : new Date(0);
-              const db = b.lastRevisedAt ? new Date(b.lastRevisedAt) : new Date(0);
-              return db - da;
-            })
-            .slice(0, 9);
+        {/* Needs Revision — intelligent score-based (days stale + topic weakness + user difficulty) */}
+        <ProblemSection
+          title="🔁 Needs Revision"
+          items={intelligentRevision}
+          variant="revision"
+          emptyIcon="🎉"
+          emptyMsg="No revision suggestions yet"
+          emptyHint="Solve more problems to get smart revision picks"
+          onRevise={handleRevise}
+          revisingId={revisingId}
+          formatDate={formatDate}
+        />
 
-          const colClass = revProblems.length <= 2 ? 'rs-grid rs-grid-stretch'
-            : revProblems.length <= 6 ? 'rs-grid rs-grid-mid'
-            : 'rs-grid';
-
-          return (
-            <div className="recently-solved-card" style={{ marginBottom: '1.5rem' }}>
-              <h3 className="card-title">🔁 Needs Revision ({revProblems.length})</h3>
-              {revProblems.length > 0 ? (
-                <div className={colClass}>
-                  {revProblems.map(p => (
-                    <div key={p.number} className="rs-card">
-                      <div className="rs-card-id">#{p.number}</div>
-                      <div className="rs-card-title">{p.title}</div>
-                      <div className="rs-card-meta">
-                        <span className={`badge badge-${(p.difficulty || 'medium').toLowerCase()}`}>{p.difficulty}</span>
-                        <span className="rs-rev-count">🔁 {p.revisionCount}×</span>
-                      </div>
-                      {p.lastRevisedAt && (
-                        <div className="rs-card-date" style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                          Last: {formatDate(p.lastRevisedAt)}
-                        </div>
-                      )}
-                      <div style={{ display: 'flex', gap: '6px', marginTop: 'auto' }}>
-                        <a
-                          href={p.link || `https://leetcode.com/problems/${p.number}/`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="rs-card-btn"
-                          style={{ flex: 1 }}
-                        >Open ↗</a>
-                        <button
-                          className="rs-card-btn rs-card-btn-revise"
-                          onClick={() => handleRevise(p.number)}
-                          disabled={revisingId === p.number}
-                          style={{ flex: 1, cursor: 'pointer', border: 'none' }}
-                        >{revisingId === p.number ? '⏳' : '🔁 Revise'}</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="rs-empty-state">
-                  <div style={{ fontSize: '2rem', marginBottom: '8px' }}>🎉</div>
-                  <div>No problems need revision yet</div>
-                  <small>Start revising solved problems to track them here</small>
-                </div>
-              )}
-            </div>
-          );
-        })()}
-
-        {/* Recently Solved */}
+        {/* Recently Solved — latest 9 */}
         {(() => {
           const recentProblems = [...allProblems]
             .filter(p => p.status === 'Done')
             .sort((a, b) => new Date(b._solvedDateISO || 0) - new Date(a._solvedDateISO || 0))
-            .slice(0, 6);
-
-          const colClass = recentProblems.length <= 2 ? 'rs-grid rs-grid-stretch'
-            : recentProblems.length <= 4 ? 'rs-grid rs-grid-mid'
-            : 'rs-grid';
-
+            .slice(0, 9);
           return (
-            <div className="recently-solved-card">
-              <h3 className="card-title">🆕 Recently Solved ({recentProblems.length})</h3>
-              {recentProblems.length > 0 ? (
-                <div className={colClass}>
-                  {recentProblems.map(p => (
-                    <div key={p.number} className="rs-card">
-                      <div className="rs-card-id">#{p.number}</div>
-                      <div className="rs-card-title">{p.title}</div>
-                      <div className="rs-card-meta">
-                        <span className={`badge badge-${(p.difficulty || 'medium').toLowerCase()}`}>{p.difficulty}</span>
-                        <span className="rs-card-date">📅 {formatDate(p._solvedDateISO)}</span>
-                      </div>
-                      <a
-                        href={p.link || `https://leetcode.com/problems/${p.number}/`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="rs-card-btn"
-                      >Open ↗</a>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="rs-empty-state">
-                  <div style={{ fontSize: '2rem', marginBottom: '8px' }}>📚</div>
-                  <div>No solved problems yet</div>
-                  <small>Start solving to see activity here</small>
-                </div>
-              )}
-            </div>
+            <ProblemSection
+              title="🆕 Recently Solved"
+              items={recentProblems}
+              variant="solved"
+              emptyIcon="📚"
+              emptyMsg="No solved problems yet"
+              emptyHint="Start solving to see activity here"
+              onRevise={handleRevise}
+              revisingId={revisingId}
+              formatDate={formatDate}
+            />
+          );
+        })()}
+
+        {/* Targeted Problems — balanced pick, max 9 */}
+        {(() => {
+          const list = targetedProblems.list; // already capped at 9 by useMemo
+          return (
+            <ProblemSection
+              title="🎯 Targeted Problems"
+              items={list}
+              variant="targeted"
+              emptyIcon="🎯"
+              emptyMsg="No targeted problems yet"
+              emptyHint="Solve more problems to get personalized targets"
+              onRevise={handleRevise}
+              revisingId={revisingId}
+              formatDate={formatDate}
+            />
           );
         })()}
 
@@ -2394,6 +2472,7 @@ function App() {
                   <th>#</th>
                   <th>Title</th>
                   <th>Difficulty</th>
+                  <th>My Difficulty</th>
                   <th>Rev</th>
                   <th>Solved On</th>
                   <th>Last Revised</th>
@@ -2412,6 +2491,18 @@ function App() {
                         <span className={`badge badge-${(problem.difficulty || 'medium').toLowerCase()}`}>
                           {problem.difficulty}
                         </span>
+                      </td>
+                      <td>
+                        <select
+                          className={`difficulty-select difficulty-${(problem.userDifficulty || problem.difficulty || 'medium').toLowerCase()}`}
+                          value={problem.userDifficulty || problem.difficulty || 'Medium'}
+                          onChange={(e) => handleUserDifficultyChange(problem.number, e.target.value)}
+                          title="How hard did you find this?"
+                        >
+                          <option value="Easy">Easy</option>
+                          <option value="Medium">Medium</option>
+                          <option value="Hard">Hard</option>
+                        </select>
                       </td>
                       <td>
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
@@ -2477,7 +2568,7 @@ function App() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="9" className="empty-state">
+                    <td colSpan="10" className="empty-state">
                       {allProblems.length === 0 ? (
                         <>
                           <div className="empty-icon">📚</div>
