@@ -2498,29 +2498,90 @@ function App() {
         </div>
       )}
 
-      {/* Alignment Modal */}
-      {showAlignmentModal && (
-        <div className="modal-overlay" onClick={() => setShowAlignmentModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>⚙️ Sync & Recompute Stats</h2>
-              <button className="modal-close" onClick={() => setShowAlignmentModal(false)}>×</button>
-            </div>
-            <div className="modal-body">
-              <p className="modal-description">
-                Re-fetches all problems from the backend and recomputes streak, active days, and all analytics from real data.
-              </p>
-              <div className="form-hint">
-                💡 Use this if stats look stale or out of sync with the database.
+      {/* Manual Stats Modal */}
+      {showAlignmentModal && (() => {
+        const ms = state.manualStats || {};
+        const handleSave = (e) => {
+          e.preventDefault();
+          const form = e.target;
+          const parse = (name) => {
+            const v = form[name].value.trim();
+            return v === '' ? null : parseInt(v);
+          };
+          const cs = parse('currentStreak');
+          const mx = parse('maxStreak');
+          const ad = parse('activeDays');
+          if ((cs !== null && (isNaN(cs) || cs < 0)) ||
+              (mx !== null && (isNaN(mx) || mx < 0)) ||
+              (ad !== null && (isNaN(ad) || ad < 0))) {
+            showNotification('❌ Values must be numbers ≥ 0', 'error');
+            return;
+          }
+          setState(prev => ({
+            ...prev,
+            manualStats: { currentStreak: cs, maxStreak: mx, activeDays: ad }
+          }));
+          setShowAlignmentModal(false);
+          showNotification('✓ Stats updated', 'success');
+        };
+        const handleReset = () => {
+          setState(prev => ({ ...prev, manualStats: { currentStreak: null, maxStreak: null, activeDays: null } }));
+          setShowAlignmentModal(false);
+          showNotification('↩ Stats reset to auto-computed', 'success');
+        };
+        return (
+          <div className="modal-overlay" onClick={() => setShowAlignmentModal(false)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2>✏️ Set Stats Manually</h2>
+                <button className="modal-close" onClick={() => setShowAlignmentModal(false)}>×</button>
               </div>
-            </div>
-            <div className="modal-footer">
-              <button type="button" className="btn-secondary" onClick={() => setShowAlignmentModal(false)}>Cancel</button>
-              <button type="button" className="btn-primary" onClick={handleAlignHistoricalActivity}>🔄 Sync & Recompute</button>
+              <form onSubmit={handleSave}>
+                <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div className="form-group">
+                    <label className="form-label">Current Streak (days)</label>
+                    <input
+                      name="currentStreak"
+                      type="number"
+                      min="0"
+                      className="form-input"
+                      defaultValue={ms.currentStreak != null ? ms.currentStreak : ''}
+                      placeholder="Leave blank to auto-compute"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Max Streak (days)</label>
+                    <input
+                      name="maxStreak"
+                      type="number"
+                      min="0"
+                      className="form-input"
+                      defaultValue={ms.maxStreak != null ? ms.maxStreak : ''}
+                      placeholder="Leave blank to auto-compute"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Active Days</label>
+                    <input
+                      name="activeDays"
+                      type="number"
+                      min="0"
+                      className="form-input"
+                      defaultValue={ms.activeDays != null ? ms.activeDays : ''}
+                      placeholder="Leave blank to auto-compute"
+                    />
+                  </div>
+                  <div className="form-hint">💡 Leave a field blank to let it auto-compute from your solved problems.</div>
+                </div>
+                <div className="modal-footer">
+                  <button type="button" className="btn-secondary" onClick={handleReset}>↩ Reset All</button>
+                  <button type="submit" className="btn-primary">✓ Save</button>
+                </div>
+              </form>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
 
 
