@@ -192,13 +192,18 @@ exports.updateProblem = async (req, res) => {
     if (updates.solved === true && !updates.solvedDate) updates.solvedDate = new Date();
     if (updates.solved === false) updates.solvedDate = null;
 
+    // Fetch BEFORE updating to check if it was previously unsolved
+    const before = await Problem.findOne({ id: parseInt(req.params.id) });
+    if (!before) return res.status(404).json({ success: false, error: 'Problem not found' });
+
     const problem = await Problem.findOneAndUpdate(
       { id: parseInt(req.params.id) }, updates, { returnDocument: 'after', runValidators: true }
     );
-    if (!problem) return res.status(404).json({ success: false, error: 'Problem not found' });
 
     let streakData = null;
-    if (updates.solved === true) {
+    // Only update streak if problem is being NEWLY marked as solved (was not solved before)
+    const isNewlySolved = updates.solved === true && before.solved === false;
+    if (isNewlySolved) {
       let s = await Settings.findOne({ key: 'global' });
       if (!s) s = await Settings.create({ key: 'global' });
       if (s.isSetup) {

@@ -1886,7 +1886,7 @@ function App() {
 
       <div className="container">
         {/* Navbar Stats Bar */}
-        <div className="navbar-stats fade-up fade-up-1">
+        <div className="navbar-stats">
           <StatCard value={totalSolved}   label="Problems Solved" icon="✅" delay={0.05} isReady={statsReady} />
           <div className="navbar-stat-divider" />
           <StatCard value={displayActiveDays} label="Active Days"     icon="📅" delay={0.10} isReady={statsReady} />
