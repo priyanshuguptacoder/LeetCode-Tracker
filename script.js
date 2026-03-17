@@ -136,24 +136,9 @@ function App() {
       try {
         setLoading(true);
         const probRes = await window.API.getAllProblems();
-
         if (probRes.success) {
-          const problems = transformProblems(probRes.data);
-          setApiProblems(problems);
-          
-          const backendSolvedDates = {};
-          problems.forEach(problem => {
-            if (problem.status === 'Done' && problem._solvedDateISO) {
-              backendSolvedDates[problem.number] = problem._solvedDateISO;
-            }
-          });
-          
-          setState(prev => ({
-            ...prev,
-            solvedDates: backendSolvedDates
-          }));
+          setApiProblems(transformProblems(probRes.data));
         }
-
         setLoading(false);
       } catch (error) {
         console.error('Failed to fetch data:', error);
@@ -161,50 +146,30 @@ function App() {
         setLoading(false);
       }
     };
-    
     fetchData();
   }, []);
 
   // ============================================
-  // STATE MANAGEMENT
+  // LOCAL STATE — only data that has no backend equivalent
+  // revisionFlags and solveTimes are device-local preferences.
+  // Everything else (problems, solved dates, streaks) comes from apiProblems.
   // ============================================
-  
+
   const getInitialState = () => {
     try {
       const saved = localStorage.getItem('priyanshu-leetcode-state');
       if (saved) {
         const parsed = JSON.parse(saved);
-        // Data sanitization - ensure all required fields exist
         return {
-          statusOverrides: parsed.statusOverrides || {},
-          userDifficultyOverrides: parsed.userDifficultyOverrides || {},
-          customProblems: Array.isArray(parsed.customProblems) ? parsed.customProblems : [],
-          deletedProblems: Array.isArray(parsed.deletedProblems) ? parsed.deletedProblems : [],
-          permanentlyDeleted: Array.isArray(parsed.permanentlyDeleted) ? parsed.permanentlyDeleted : [],
-          solvedDates: parsed.solvedDates || {},
           revisionFlags: parsed.revisionFlags || {},
           solveTimes: parsed.solveTimes || {},
-          lastUpdate: parsed.lastUpdate || new Date().toDateString()
         };
       }
     } catch (error) {
       console.error('Error loading state from localStorage:', error);
-      // Clear corrupted data
       localStorage.removeItem('priyanshu-leetcode-state');
     }
-    
-    // Default state
-    return {
-      statusOverrides: {},
-      userDifficultyOverrides: {},
-      customProblems: [],
-      deletedProblems: [],
-      permanentlyDeleted: [],
-      solvedDates: {},
-      revisionFlags: {},
-      solveTimes: {},
-      lastUpdate: new Date().toDateString()
-    };
+    return { revisionFlags: {}, solveTimes: {} };
   };
 
   const [state, setState] = useState(getInitialState());
@@ -216,7 +181,6 @@ function App() {
   const [showModal, setShowModal] = useState(false);
   const [showAlignmentModal, setShowAlignmentModal] = useState(false);
   const [notification, setNotification] = useState(null);
-  const [alignmentData, setAlignmentData] = useState({ activeDays: '', maxStreak: '' });
 
   // Password protection
   const ADMIN_PASSWORD = '0';
@@ -732,9 +696,8 @@ function App() {
   const allProblems = getAllProblems();
 
   // ── Derive solvedDates directly from apiProblems (always fresh, no async lag) ──
-  // This is the SINGLE SOURCE OF TRUTH for all streak/active days/analytics.
-  // state.solvedDates is kept in sync but we compute from apiProblems directly
-  // so streak/active days are never stale on first render.
+  // SINGLE SOURCE OF TRUTH for all streak/active days/analytics.
+  // Never stored in state — always computed. Refresh page → correct stats.
   const solvedDates = React.useMemo(() => {
     const map = {};
     apiProblems.forEach(p => {
@@ -890,57 +853,21 @@ function App() {
           solvedDate: newProblem.solvedDate
         });
         
-        // Refresh problems from API
+        // Refetch — apiProblems update triggers all useMemo analytics automatically
         const allProblemsResponse = await window.API.getAllProblems();
         const problems = transformProblems(allProblemsResponse.data);
         setApiProblems(problems);
         
-        console.log('🔄 Refreshed from backend:', {
+        console.log('[ADD] Refreshed:', {
           totalProblems: problems.length,
-          newProblemExists: problems.some(p => p.number === problemNumber),
           totalSolved: problems.filter(p => p.status === 'Done').length,
-          activeDays: new Set(Object.values(backendSolvedDates).filter(Boolean)).size,
-        });
-        
-        // Sync solved dates from backend (backend is source of truth)
-        const backendSolvedDates = {};
-        problems.forEach(problem => {
-          if (problem.status === 'Done' && problem._solvedDateISO) {
-            backendSolvedDates[problem.number] = problem._solvedDateISO;
-          }
-        });
-        
-        console.log('📅 Synced dates from backend:', {
-          totalSolvedDates: Object.keys(backendSolvedDates).length,
-          newProblemDate: backendSolvedDates[problemNumber]
-        });
-        
-        // Update calendar activity dates if problem was marked as solved
-        const today = toLocalDateStr(new Date());
-        
-        setState(prev => {
-          return {
-            ...prev,
-            solvedDates: backendSolvedDates // Backend is ONLY source of truth
-          };
+          newProblemExists: problems.some(p => p.number === problemNumber),
         });
         
         showNotification(`✅ Problem #${problemNumber} added successfully!${formData.type === 'Solved' ? ' — Streak updated!' : ''}`, 'success');
-        
-        // Close modal
         setShowModal(false);
+        setFormData({ number: '', title: '', difficulty: 'Medium', type: 'Solved', pattern: '', link: '' });
         
-        // Reset form
-        setFormData({
-          number: '',
-          title: '',
-          difficulty: 'Medium',
-          type: 'Solved',
-          pattern: '',
-          link: ''
-        });
-        
-        // Scroll to the new problem after a short delay
         setTimeout(() => {
           const tableRow = document.querySelector(`tr[data-problem-number="${problemNumber}"]`);
           if (tableRow) {
@@ -995,31 +922,19 @@ function App() {
       const response = await window.API.updateProblem(number, updateData);
       
       if (response.success) {
-        // Refresh problems from API
+        // Refetch — solvedDates useMemo recomputes automatically from apiProblems
         const allProblemsResponse = await window.API.getAllProblems();
         const problems = transformProblems(allProblemsResponse.data);
         setApiProblems(problems);
         
-        // Sync solved dates from backend (backend is source of truth)
-        const backendSolvedDates = {};
-        problems.forEach(problem => {
-          if (problem.status === 'Done' && problem._solvedDateISO) {
-            backendSolvedDates[problem.number] = problem._solvedDateISO;
-          }
-        });
-        
-        // Update state — statusOverrides is legacy, no longer needed
-        setState(prev => {
-          const newState = { ...prev, solvedDates: backendSolvedDates };
-          // Remove revision flag when unmarking as Done
-          if (newStatus !== 'Done' && prev.revisionFlags?.[number]) {
+        // Remove revision flag when unmarking as Done (local-only state)
+        if (newStatus !== 'Done' && state.revisionFlags?.[number]) {
+          setState(prev => {
             const { [number]: _removed, ...remainingFlags } = prev.revisionFlags;
-            newState.revisionFlags = remainingFlags;
-          }
-          return newState;
-        });
+            return { ...prev, revisionFlags: remainingFlags };
+          });
+        }
         
-        // Show notification
         if (newStatus === 'Done') {
           showNotification('✓ Problem marked done — streak updated!', 'success');
         } else {
@@ -1043,24 +958,8 @@ function App() {
       });
       
       if (response.success) {
-        // Refresh problems from API
         const allProblemsResponse = await window.API.getAllProblems();
-        const problems = transformProblems(allProblemsResponse.data);
-        setApiProblems(problems);
-        
-        // Sync solved dates from backend (backend is source of truth)
-        const backendSolvedDates = {};
-        problems.forEach(problem => {
-          if (problem.status === 'Done' && problem._solvedDateISO) {
-            backendSolvedDates[problem.number] = problem._solvedDateISO;
-          }
-        });
-        
-        setState(prev => ({
-          ...prev,
-          solvedDates: backendSolvedDates // Backend is ONLY source of truth
-        }));
-        
+        setApiProblems(transformProblems(allProblemsResponse.data));
         showNotification(`✓ Difficulty updated to ${newDifficulty}`, 'success');
       }
     } catch (error) {
@@ -1092,40 +991,20 @@ function App() {
       const response = await window.API.deleteProblem(number);
       
       if (response.success) {
-        // Refetch from backend — single source of truth
+        // Refetch — all analytics recompute automatically
         const allProblemsResponse = await window.API.getAllProblems();
         const problems = transformProblems(allProblemsResponse.data);
         setApiProblems(problems);
         
-        const backendSolvedDates = {};
-        problems.forEach(p => {
-          if (p.status === 'Done' && p._solvedDateISO) {
-            backendSolvedDates[p.number] = p._solvedDateISO;
-          }
-        });
-        
+        // Clean up local-only state for this problem
         setState(prev => {
           const { [number]: _rev, ...remainingRevisionFlags } = prev.revisionFlags || {};
           const { [number]: _st, ...remainingSolveTimes } = prev.solveTimes || {};
-          return {
-            ...prev,
-            solvedDates: backendSolvedDates,
-            revisionFlags: remainingRevisionFlags,
-            solveTimes: remainingSolveTimes
-          };
+          return { ...prev, revisionFlags: remainingRevisionFlags, solveTimes: remainingSolveTimes };
         });
         
-        console.log('[DELETE] Success:', {
-          number,
-          title: problem?.title,
-          remainingProblems: problems.length,
-          remainingSolvedDates: Object.keys(backendSolvedDates).length,
-        });
-        
-        showNotification(
-          `✅ Problem #${number} deleted${problem ? ` — ${problem.title}` : ''}`,
-          'success'
-        );
+        console.log('[DELETE]', { number, title: problem?.title, remaining: problems.length });
+        showNotification(`✅ Problem #${number} deleted${problem ? ` — ${problem.title}` : ''}`, 'success');
       }
     } catch (error) {
       // Restore row visibility on failure
@@ -1204,43 +1083,22 @@ function App() {
   };
 
   // ============================================
-  // ALIGN — Re-fetch from backend and recompute all stats
+  // ALIGN — Re-fetch from backend, all stats recompute automatically
   // ============================================
   const handleAlignHistoricalActivity = async () => {
     if (!verifyPassword('align historical activity')) return;
-
     try {
       showNotification('🔄 Syncing with backend...', 'success');
       const response = await window.API.getAllProblems();
       if (response.success) {
         const problems = transformProblems(response.data);
+        // Single line — solvedDates useMemo + all analytics recompute automatically
         setApiProblems(problems);
-
-        const backendSolvedDates = {};
-        problems.forEach(p => {
-          if (p.status === 'Done' && p._solvedDateISO) {
-            backendSolvedDates[p.number] = p._solvedDateISO;
-          }
-        });
-
-        setState(prev => ({ ...prev, solvedDates: backendSolvedDates }));
-
-        const uniqueDays = new Set(Object.values(backendSolvedDates).filter(Boolean)).size;
-        const solvedCount = problems.filter(p => p.status === 'Done').length;
-
-        console.log('[ALIGN] Recomputed stats:', {
-          totalProblems: problems.length,
-          solvedCount,
-          activeDays: uniqueDays,
-          solvedDatesCount: Object.keys(backendSolvedDates).length,
-        });
-
         setShowAlignmentModal(false);
-        setAlignmentData({ activeDays: '', maxStreak: '' });
-        showNotification(`✓ Aligned: ${solvedCount} solved, ${uniqueDays} active days`, 'success');
+        showNotification(`✓ Synced: ${problems.filter(p => p.status === 'Done').length} solved problems`, 'success');
       }
     } catch (err) {
-      showNotification(`❌ Align failed: ${err.message}`, 'error');
+      showNotification(`❌ Sync failed: ${err.message}`, 'error');
     }
   };
 
@@ -1650,44 +1508,11 @@ function App() {
     document.body.classList.toggle('light-mode', !darkMode);
   }, [darkMode]);
 
-  // Auto-update for new month/day
-  useEffect(() => {
-    const checkDateUpdate = () => {
-      const today = new Date().toDateString();
-      const currentMonth = new Date().getMonth();
-      const currentYear = new Date().getFullYear();
-      
-      if (state.lastUpdate) {
-        const lastUpdateDate = new Date(state.lastUpdate);
-        const lastMonth = lastUpdateDate.getMonth();
-        const lastYear = lastUpdateDate.getFullYear();
-        
-        // Check if we're in a new month
-        if (currentYear !== lastYear || currentMonth !== lastMonth) {
-          console.log('New month detected - monthly stats will auto-update');
-          // Monthly stats will automatically recalculate based on solvedDates
-          // No need to reset anything, just update lastUpdate
-          setState(prev => ({
-            ...prev,
-            lastUpdate: today
-          }));
-        } else if (state.lastUpdate !== today) {
-          // New day, update lastUpdate
-          setState(prev => ({
-            ...prev,
-            lastUpdate: today
-          }));
-        }
-      }
-    };
-    
-    checkDateUpdate();
-    // Check every hour for date changes
-    const interval = setInterval(checkDateUpdate, 60 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [state.lastUpdate]);
+  // (auto-update for new month/day removed — state.lastUpdate no longer exists;
+  //  monthly stats recompute automatically from apiProblems via useMemo)
 
-  // Periodic sync with backend to ensure data consistency across devices
+  // Periodic sync with backend — keeps apiProblems fresh across devices.
+  // solvedDates useMemo recomputes automatically from apiProblems. No setState needed.
   useEffect(() => {
     const syncWithBackend = async () => {
       try {
@@ -1695,76 +1520,33 @@ function App() {
         if (response.success) {
           const problems = transformProblems(response.data);
           setApiProblems(problems);
-          
-          // Sync solved dates from backend (backend is source of truth)
-          const backendSolvedDates = {};
-          problems.forEach(problem => {
-            if (problem.status === 'Done' && problem._solvedDateISO) {
-              backendSolvedDates[problem.number] = problem._solvedDateISO;
-            }
-          });
-          
-          setState(prev => ({
-            ...prev,
-            solvedDates: backendSolvedDates
-          }));
-          
-          console.log('✅ Synced with backend:', {
-            problems: problems.length,
-            solvedDates: Object.keys(backendSolvedDates).length
-          });
+          console.log('✅ Synced with backend:', { problems: problems.length });
         }
       } catch (error) {
         console.error('Background sync failed:', error);
       }
     };
-    
-    // Sync every 5 minutes to catch changes from other devices
     const syncInterval = setInterval(syncWithBackend, 5 * 60 * 1000);
-    
     return () => clearInterval(syncInterval);
   }, []);
 
-  // Clean up orphan data on mount
+  // Clean up orphan local state (revisionFlags / solveTimes) for deleted problems.
+  // solvedDates is no longer in state — it's a useMemo derived from apiProblems.
   useEffect(() => {
     const validProblemNumbers = new Set(allProblems.map(p => p.number));
-    
-    const cleanOrphanData = () => {
-      const solvedDatesKeys = Object.keys(state.solvedDates || {}).map(Number);
-      const revisionFlagsKeys = Object.keys(state.revisionFlags || {}).map(Number);
-      const solveTimesKeys = Object.keys(state.solveTimes || {}).map(Number);
-      
-      const orphanSolvedDates = solvedDatesKeys.filter(num => !validProblemNumbers.has(num));
-      const orphanRevisionFlags = revisionFlagsKeys.filter(num => !validProblemNumbers.has(num));
-      const orphanSolveTimes = solveTimesKeys.filter(num => !validProblemNumbers.has(num));
-      
-      if (orphanSolvedDates.length > 0 || orphanRevisionFlags.length > 0 || orphanSolveTimes.length > 0) {
-        console.log('Cleaning orphan data:', {
-          solvedDates: orphanSolvedDates.length,
-          revisionFlags: orphanRevisionFlags.length,
-          solveTimes: orphanSolveTimes.length
-        });
-        
-        setState(prev => {
-          const newSolvedDates = { ...prev.solvedDates };
-          const newRevisionFlags = { ...prev.revisionFlags };
-          const newSolveTimes = { ...prev.solveTimes };
-          
-          orphanSolvedDates.forEach(num => delete newSolvedDates[num]);
-          orphanRevisionFlags.forEach(num => delete newRevisionFlags[num]);
-          orphanSolveTimes.forEach(num => delete newSolveTimes[num]);
-          
-          return {
-            ...prev,
-            solvedDates: newSolvedDates,
-            revisionFlags: newRevisionFlags,
-            solveTimes: newSolveTimes
-          };
-        });
-      }
-    };
-    
-    cleanOrphanData();
+    const revisionFlagsKeys = Object.keys(state.revisionFlags || {}).map(Number);
+    const solveTimesKeys = Object.keys(state.solveTimes || {}).map(Number);
+    const orphanRevisionFlags = revisionFlagsKeys.filter(num => !validProblemNumbers.has(num));
+    const orphanSolveTimes = solveTimesKeys.filter(num => !validProblemNumbers.has(num));
+    if (orphanRevisionFlags.length > 0 || orphanSolveTimes.length > 0) {
+      setState(prev => {
+        const newRevisionFlags = { ...prev.revisionFlags };
+        const newSolveTimes = { ...prev.solveTimes };
+        orphanRevisionFlags.forEach(num => delete newRevisionFlags[num]);
+        orphanSolveTimes.forEach(num => delete newSolveTimes[num]);
+        return { ...prev, revisionFlags: newRevisionFlags, solveTimes: newSolveTimes };
+      });
+    }
   }, [allProblems.length]);
 
   // ============================================
