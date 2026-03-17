@@ -3,7 +3,7 @@
 // PRODUCTION: your Render backend URL — update PRODUCTION_API_URL below
 
 const LOCAL_API_URL = 'http://localhost:5001/api';
-const PRODUCTION_API_URL = 'https://leetcode-tracker-43rt.onrender.com/api'; // 👈 update after Render deploy
+const PRODUCTION_API_URL = 'https://leetcode-tracker-backend-kpuw.onrender.com/api'; // Render backend
 
 const isLocalhost =
   window.location.hostname === 'localhost' ||
