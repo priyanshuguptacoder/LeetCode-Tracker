@@ -30,9 +30,23 @@ exports.createProblem = async (req, res) => {
       return res.status(400).json({ success: false, error: 'id, title, difficulty, and leetcodeLink are required' });
     }
     const exists = await Problem.findOne({ id: parseInt(id) });
-    if (exists) return res.status(400).json({ success: false, error: 'Problem already exists' });
+    if (exists) return res.status(400).json({ success: false, error: `Problem #${id} already exists` });
 
-    const problem = await Problem.create({ id, title, difficulty, topics, solved, notes, leetcodeLink, solvedDate });
+    // Explicit boolean — never let schema default override a deliberate false
+    const isSolved = solved === true || solved === 'true';
+    // Only set solvedDate if actually solved
+    const resolvedSolvedDate = isSolved ? (solvedDate ? new Date(solvedDate) : new Date()) : null;
+
+    const problem = await Problem.create({
+      id: parseInt(id),
+      title,
+      difficulty,
+      topics: Array.isArray(topics) ? topics : [],
+      solved: isSolved,
+      notes: notes || '',
+      leetcodeLink,
+      solvedDate: resolvedSolvedDate,
+    });
     res.status(201).json({ success: true, data: problem });
   } catch (error) {
     res.status(500).json({ success: false, error: 'Failed to create problem', message: error.message });
@@ -42,12 +56,26 @@ exports.createProblem = async (req, res) => {
 // PUT update problem
 exports.updateProblem = async (req, res) => {
   try {
-    const updates = req.body;
-    delete updates.id; 
+    const updates = { ...req.body };
+    delete updates.id; // never allow id mutation
+
+    // Normalize solved field if sent as string
+    if (updates.solved !== undefined) {
+      updates.solved = updates.solved === true || updates.solved === 'true';
+    }
+
+    // Auto-set solvedDate when marking solved without providing one
+    if (updates.solved === true && !updates.solvedDate) {
+      updates.solvedDate = new Date();
+    }
+    // Clear solvedDate when explicitly unmarking
+    if (updates.solved === false) {
+      updates.solvedDate = null;
+    }
 
     const problem = await Problem.findOneAndUpdate(
       { id: parseInt(req.params.id) },
-      { ...updates, ...(updates.solved && !updates.solvedDate ? { solvedDate: new Date() } : {}) },
+      updates,
       { returnDocument: 'after', runValidators: true }
     );
     if (!problem) return res.status(404).json({ success: false, error: 'Problem not found' });

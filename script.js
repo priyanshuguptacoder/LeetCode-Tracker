@@ -116,10 +116,12 @@ function App() {
       ? toLocalDateStr(new Date(p.solvedDate))
       : parseDDMMM(p.date);
     const topics = getTopicsForProblem(p);
+    // Derive status from DB booleans: solved > inProgress > Not Started
+    const status = p.solved ? 'Done' : p.inProgress ? 'In Progress' : 'Not Started';
     return {
       ...p,
       number: p.id ?? p.number,
-      status: p.solved ? 'Done' : (p.status || 'Not Started'),
+      status,
       userDifficulty: p.userDifficulty || p.difficulty || 'Medium',
       topics: topics,
       pattern: topics[0] || (p.pattern || 'Miscellaneous'),
@@ -884,7 +886,7 @@ function App() {
         console.log('✅ Problem added to backend:', {
           number: problemNumber,
           title: formData.title,
-          status: newProblem.status,
+          solved: newProblem.solved,
           solvedDate: newProblem.solvedDate
         });
         
@@ -895,7 +897,9 @@ function App() {
         
         console.log('🔄 Refreshed from backend:', {
           totalProblems: problems.length,
-          newProblemExists: problems.some(p => p.number === problemNumber)
+          newProblemExists: problems.some(p => p.number === problemNumber),
+          totalSolved: problems.filter(p => p.status === 'Done').length,
+          activeDays: new Set(Object.values(backendSolvedDates).filter(Boolean)).size,
         });
         
         // Sync solved dates from backend (backend is source of truth)
@@ -981,9 +985,10 @@ function App() {
     try {
       const today = toLocalDateStr(new Date());
       
-      // Update via API — backend schema uses `solved` (boolean) + `solvedDate`
+      // Backend schema: solved=true only for 'Done', inProgress=true for 'In Progress'
       const updateData = {
         solved: newStatus === 'Done',
+        inProgress: newStatus === 'In Progress',
         solvedDate: newStatus === 'Done' ? today : null
       };
       
@@ -1003,25 +1008,14 @@ function App() {
           }
         });
         
-        // Update localStorage for dates and flags
+        // Update state — statusOverrides is legacy, no longer needed
         setState(prev => {
-          const newState = {
-            ...prev,
-            solvedDates: backendSolvedDates,
-            statusOverrides: {
-              ...prev.statusOverrides,
-              [number]: newStatus
-            }
-          };
-          
+          const newState = { ...prev, solvedDates: backendSolvedDates };
           // Remove revision flag when unmarking as Done
-          if (newStatus !== 'Done') {
-            if (prev.revisionFlags && prev.revisionFlags[number]) {
-              const { [number]: removed, ...remainingFlags } = prev.revisionFlags;
-              newState.revisionFlags = remainingFlags;
-            }
+          if (newStatus !== 'Done' && prev.revisionFlags?.[number]) {
+            const { [number]: _removed, ...remainingFlags } = prev.revisionFlags;
+            newState.revisionFlags = remainingFlags;
           }
-          
           return newState;
         });
         
@@ -1079,69 +1073,67 @@ function App() {
       return;
     }
     
-    // Enhanced confirmation with problem details
     const problem = allProblems.find(p => p.number === number);
     const confirmMessage = problem 
       ? `Are you sure you want to permanently delete:\n\n#${problem.number} - ${problem.title}\n\nThis action cannot be undone!`
       : 'Are you sure you want to delete this problem?';
     
-    if (confirm(confirmMessage)) {
-      // Add fade-out animation to table row
-      const tableRow = document.querySelector(`tr[data-problem-number="${number}"]`);
-      if (tableRow) {
-        tableRow.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
-        tableRow.style.opacity = '0';
-        tableRow.style.transform = 'translateX(-20px)';
-      }
+    if (!confirm(confirmMessage)) return;
+
+    // Optimistic fade-out
+    const tableRow = document.querySelector(`tr[data-problem-number="${number}"]`);
+    if (tableRow) {
+      tableRow.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+      tableRow.style.opacity = '0';
+      tableRow.style.transform = 'translateX(-20px)';
+    }
+
+    try {
+      const response = await window.API.deleteProblem(number);
       
-      // Delay API call for smooth animation
-      setTimeout(async () => {
-        try {
-          // Delete from API
-          const response = await window.API.deleteProblem(number);
-          
-          if (response.success) {
-            // Refresh problems from API
-            const allProblemsResponse = await window.API.getAllProblems();
-            const problems = transformProblems(allProblemsResponse.data);
-            setApiProblems(problems);
-            
-            // Sync solved dates from backend (backend is source of truth)
-            const backendSolvedDates = {};
-            problems.forEach(problem => {
-              if (problem.status === 'Done' && problem._solvedDateISO) {
-                backendSolvedDates[problem.number] = problem._solvedDateISO;
-              }
-            });
-            
-            // Clean up localStorage data for this problem
-            setState(prev => {
-              const { [number]: removedRevision, ...remainingRevisionFlags } = prev.revisionFlags || {};
-              const { [number]: removedSolveTime, ...remainingSolveTimes } = prev.solveTimes || {};
-              
-              return {
-                ...prev,
-                solvedDates: backendSolvedDates, // Backend is ONLY source of truth
-                revisionFlags: remainingRevisionFlags,
-                solveTimes: remainingSolveTimes
-              };
-            });
-            
-            showNotification(
-              `✅ Problem #${number} deleted successfully${problem ? ` - ${problem.title}` : ''}`, 
-              'success'
-            );
-            
-            console.log('🗑️ Problem Deleted:', {
-              number,
-              title: problem?.title,
-              deletedFromAPI: true
-            });
+      if (response.success) {
+        // Refetch from backend — single source of truth
+        const allProblemsResponse = await window.API.getAllProblems();
+        const problems = transformProblems(allProblemsResponse.data);
+        setApiProblems(problems);
+        
+        const backendSolvedDates = {};
+        problems.forEach(p => {
+          if (p.status === 'Done' && p._solvedDateISO) {
+            backendSolvedDates[p.number] = p._solvedDateISO;
           }
-        } catch (error) {
-          showNotification(`❌ Error: ${error.message}`, 'error');
-        }
-      }, 300);
+        });
+        
+        setState(prev => {
+          const { [number]: _rev, ...remainingRevisionFlags } = prev.revisionFlags || {};
+          const { [number]: _st, ...remainingSolveTimes } = prev.solveTimes || {};
+          return {
+            ...prev,
+            solvedDates: backendSolvedDates,
+            revisionFlags: remainingRevisionFlags,
+            solveTimes: remainingSolveTimes
+          };
+        });
+        
+        console.log('[DELETE] Success:', {
+          number,
+          title: problem?.title,
+          remainingProblems: problems.length,
+          remainingSolvedDates: Object.keys(backendSolvedDates).length,
+        });
+        
+        showNotification(
+          `✅ Problem #${number} deleted${problem ? ` — ${problem.title}` : ''}`,
+          'success'
+        );
+      }
+    } catch (error) {
+      // Restore row visibility on failure
+      if (tableRow) {
+        tableRow.style.opacity = '1';
+        tableRow.style.transform = 'none';
+      }
+      showNotification(`❌ Delete failed: ${error.message}`, 'error');
     }
   };
 

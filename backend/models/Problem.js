@@ -6,7 +6,8 @@ const problemSchema = new mongoose.Schema(
     title: { type: String, required: true },
     difficulty: { type: String, enum: ['Easy', 'Medium', 'Hard'], required: true },
     topics: { type: [String], default: [] },
-    solved: { type: Boolean, default: true },
+    solved: { type: Boolean, default: false },   // false = not solved (was: true — bug)
+    inProgress: { type: Boolean, default: false }, // tracks "In Progress" status
     notes: { type: String, default: '' },
     leetcodeLink: { type: String, required: true },
     solvedDate: { type: Date, default: null },
