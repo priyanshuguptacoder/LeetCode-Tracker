@@ -1,6 +1,49 @@
 const { useState, useEffect, useRef } = React;
 
 // ============================================
+// COUNT-UP HOOK — animates 0 → target value
+// ============================================
+function useCountUp(target, duration = 1200, enabled = true) {
+  const [value, setValue] = React.useState(0);
+  const rafRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (!enabled || typeof target !== 'number') return;
+    const start = performance.now();
+    const from = 0;
+    const to = target;
+
+    const tick = (now) => {
+      const elapsed = now - start;
+      const progress = Math.min(elapsed / duration, 1);
+      // ease-out cubic
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setValue(Math.round(from + (to - from) * eased));
+      if (progress < 1) rafRef.current = requestAnimationFrame(tick);
+    };
+
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [target, duration, enabled]);
+
+  return value;
+}
+
+// ============================================
+// STAT CARD — animated number + icon accent
+// ============================================
+function StatCard({ value, label, icon, gradient, delay = 0, isReady }) {
+  const animated = useCountUp(value, 1200, isReady);
+  return (
+    <div className="navbar-stat" style={{ animationDelay: `${delay}s` }}>
+      {icon && <div className="navbar-stat-icon">{icon}</div>}
+      <span className="navbar-stat-value">{animated}</span>
+      <span className="navbar-stat-label">{label}</span>
+    </div>
+  );
+}
+
+// ============================================
 // ADMIN AUTH MODAL — session-based unlock
 // Password: '0' (UI-level lock only, not real security)
 // ============================================
@@ -258,7 +301,7 @@ function App() {
 
   // ============================================
   // LOCAL STATE — only data that has no backend equivalent
-  // revisionFlags and solveTimes are device-local preferences.
+  // manualStats allows manual override of streak/activeDays.
   // Everything else (problems, solved dates, streaks) comes from apiProblems.
   // ============================================
 
@@ -268,8 +311,6 @@ function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         return {
-          revisionFlags: parsed.revisionFlags || {},
-          solveTimes: parsed.solveTimes || {},
           manualStats: parsed.manualStats || { currentStreak: null, maxStreak: null, activeDays: null },
         };
       }
@@ -277,7 +318,7 @@ function App() {
       console.error('Error loading state from localStorage:', error);
       localStorage.removeItem('priyanshu-leetcode-state');
     }
-    return { revisionFlags: {}, solveTimes: {}, manualStats: { currentStreak: null, maxStreak: null, activeDays: null } };
+    return { manualStats: { currentStreak: null, maxStreak: null, activeDays: null } };
   };
 
   const [state, setState] = useState(getInitialState());
@@ -286,6 +327,14 @@ function App() {
     return saved ? saved === 'dark' : true; // default dark
   });
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const debounceRef = useRef(null);
+
+  const handleSearchChange = (val) => {
+    setSearchTerm(val);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setDebouncedSearch(val), 300);
+  };
   const [difficultyFilter, setDifficultyFilter] = useState('All');
   const [patternFilter, setPatternFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
@@ -341,6 +390,14 @@ function App() {
       setPendingAction(null);
     }
   };
+
+  const [statsReady, setStatsReady] = React.useState(false);
+  React.useEffect(() => {
+    if (!loading) {
+      const t = setTimeout(() => setStatsReady(true), 150);
+      return () => clearTimeout(t);
+    }
+  }, [loading]);
 
   // Form state for modal
   const [formData, setFormData] = useState({
@@ -713,46 +770,6 @@ function App() {
     };
   };
 
-  // 7️⃣ SOLVE TIME TRACKING
-  const calculateSolveTimes = (problems, solveTimes) => {
-    if (!problems || !solveTimes) {
-      return {
-        overallAvg: 0,
-        easyAvg: 0,
-        mediumAvg: 0,
-        hardAvg: 0,
-        totalTracked: 0
-      };
-    }
-    
-    const times = {
-      overall: [],
-      Easy: [],
-      Medium: [],
-      Hard: []
-    };
-    
-    problems.forEach(problem => {
-      if (problem && problem.status === 'Done' && problem.number && solveTimes[problem.number]) {
-        const time = solveTimes[problem.number];
-        times.overall.push(time);
-        if (problem.difficulty && times[problem.difficulty]) {
-          times[problem.difficulty].push(time);
-        }
-      }
-    });
-    
-    const avg = (arr) => arr.length > 0 ? (arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1) : 0;
-    
-    return {
-      overallAvg: avg(times.overall),
-      easyAvg: avg(times.Easy),
-      mediumAvg: avg(times.Medium),
-      hardAvg: avg(times.Hard),
-      totalTracked: times.overall.length
-    };
-  };
-
   // 8️⃣ TARGET SUGGESTION
   const calculateTargetSuggestion = (problems, solvedDates) => {
     const dates = Object.values(solvedDates || {}).filter(d => d);
@@ -838,13 +855,7 @@ function App() {
   );
 
   // ── Debug: log computed vs manual stats ──
-  React.useEffect(() => {
-    console.log('[STATS]', {
-      auto: { activeDays: heatmapData.activeDays, currentStreak: heatmapData.currentStreak, maxStreak: heatmapData.maxStreak },
-      manual: state.manualStats,
-      display: { activeDays: displayActiveDays, currentStreak: displayCurrentStreak, maxStreak: displayMaxStreak },
-    });
-  }, [heatmapData, state.manualStats]);
+  // (removed — was referencing displayActiveDays before declaration)
   
   const monthlyData = React.useMemo(
     () => getMonthlyStats(allProblems, solvedDates),
@@ -1000,10 +1011,6 @@ function App() {
             if (response.success) {
               const allProblemsResponse = await window.API.getAllProblems();
               setApiProblems(transformProblems(allProblemsResponse.data));
-              setState(prev => {
-                const { [number]: _st, ...remainingSolveTimes } = prev.solveTimes || {};
-                return { ...prev, solveTimes: remainingSolveTimes };
-              });
               showNotification(`✅ Problem #${number} deleted`, 'success');
             }
           } catch (error) {
@@ -1064,18 +1071,6 @@ function App() {
   };
 
   // ============================================
-  // MANUAL STAT OVERRIDE HANDLERS
-  // ============================================
-  const handleStatClick = (key, currentVal) => {
-    // prompt() removed — stats are edited via the Setup/Edit modal
-  };
-
-  const handleStatReset = (key) => {
-    setState(prev => ({ ...prev, manualStats: { ...(prev.manualStats || {}), [key]: null } }));
-    showNotification('↩ Reset to auto-computed value', 'success');
-  };
-
-  // ============================================
   // ALIGN — Re-fetch problems + streak from backend
   // ============================================
   const handleAlignHistoricalActivity = async () => {
@@ -1107,6 +1102,7 @@ function App() {
     
     // Reset all filters
     setSearchTerm('');
+    setDebouncedSearch('');
     setDifficultyFilter('All');
     setPatternFilter('All');
     setStatusFilter('All');
@@ -1120,7 +1116,7 @@ function App() {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
         // Only clear if any filter is active
-        if (searchTerm || difficultyFilter !== 'All' || patternFilter !== 'All' || statusFilter !== 'All') {
+        if (searchTerm || debouncedSearch || difficultyFilter !== 'All' || patternFilter !== 'All' || statusFilter !== 'All') {
           handleClearAllFilters();
         }
       }
@@ -1128,7 +1124,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [searchTerm, difficultyFilter, patternFilter, statusFilter]);
+  }, [searchTerm, debouncedSearch, difficultyFilter, patternFilter, statusFilter]);
 
   // ============================================
   // DYNAMIC ANALYTICS CALCULATIONS
@@ -1187,7 +1183,6 @@ function App() {
   const weeklyPerformance = calculateWeeklyPerformance(allProblems, solvedDates);
   const dailyAverage = calculateDailyAverage(allProblems, solvedDates);
   const strongestDay = calculateStrongestDay(solvedDates);
-  const solveTimes = calculateSolveTimes(allProblems, state.solveTimes || {});
   const targetSuggestion = React.useMemo(
     () => calculateTargetSuggestion(allProblems, solvedDates),
     [allProblems.length, solvedDates]
@@ -1505,24 +1500,26 @@ function App() {
   const patterns = ['All', ...new Set(allProblems.map(p => p.pattern))].sort();
 
   const filteredProblems = React.useMemo(() => {
+    const q = debouncedSearch.trim().toLowerCase();
     return allProblems.filter(problem => {
-      const matchesSearch = 
-        searchTerm.trim() === '' ||
-        problem.number.toString().includes(searchTerm) ||
-        (problem.title || '').toLowerCase().includes(searchTerm.toLowerCase());
-      
-      const matchesDifficulty = 
+      const matchesSearch =
+        q === '' ||
+        problem.number.toString().includes(q) ||
+        (problem.title || '').toLowerCase().includes(q) ||
+        (problem.difficulty || '').toLowerCase().includes(q);
+
+      const matchesDifficulty =
         difficultyFilter === 'All' || problem.difficulty === difficultyFilter;
-      
-      const matchesPattern = 
+
+      const matchesPattern =
         patternFilter === 'All' || problem.pattern === patternFilter;
-      
-      const matchesStatus = 
+
+      const matchesStatus =
         statusFilter === 'All' || problem.status === statusFilter;
 
       return matchesSearch && matchesDifficulty && matchesPattern && matchesStatus;
     });
-  }, [allProblems, searchTerm, difficultyFilter, patternFilter, statusFilter]);
+  }, [allProblems, debouncedSearch, difficultyFilter, patternFilter, statusFilter]);
 
   // Animate table count when filtered problems change
   useEffect(() => {
@@ -1578,20 +1575,6 @@ function App() {
     const syncInterval = setInterval(syncWithBackend, 5 * 60 * 1000);
     return () => clearInterval(syncInterval);
   }, []);
-
-  // Clean up orphan local state (revisionFlags / solveTimes) for deleted problems.
-  // Clean up orphan solveTimes for deleted problems.
-  useEffect(() => {
-    const validProblemNumbers = new Set(allProblems.map(p => p.number));
-    const orphanSolveTimes = Object.keys(state.solveTimes || {}).map(Number).filter(num => !validProblemNumbers.has(num));
-    if (orphanSolveTimes.length > 0) {
-      setState(prev => {
-        const newSolveTimes = { ...prev.solveTimes };
-        orphanSolveTimes.forEach(num => delete newSolveTimes[num]);
-        return { ...prev, solveTimes: newSolveTimes };
-      });
-    }
-  }, [allProblems.length]);
 
   // ============================================
   // RENDER
@@ -1761,25 +1744,16 @@ function App() {
       <div className="container">
         {/* Navbar Stats Bar */}
         <div className="navbar-stats fade-up fade-up-1">
-          <div className="navbar-stat">
-            <span className="navbar-stat-value">{totalSolved}</span>
-            <span className="navbar-stat-label">Problems Solved</span>
-          </div>
+          <StatCard value={totalSolved}   label="Problems Solved" icon="✅" delay={0.05} isReady={statsReady} />
           <div className="navbar-stat-divider" />
-          <div className="navbar-stat">
-            <span className="navbar-stat-value">{displayActiveDays}</span>
-            <span className="navbar-stat-label">Active Days</span>
-          </div>
+          <StatCard value={displayActiveDays} label="Active Days"     icon="📅" delay={0.10} isReady={statsReady} />
           <div className="navbar-stat-divider" />
           <div className="navbar-stat navbar-stat-targeted">
             <span className="navbar-stat-value">🎯 {targetedProblems.totalCount}</span>
             <span className="navbar-stat-label">Targeted</span>
           </div>
           <div className="navbar-stat-divider" />
-          <div className="navbar-stat">
-            <span className="navbar-stat-value">{totalProblems}</span>
-            <span className="navbar-stat-label">Total Problems</span>
-          </div>
+          <StatCard value={totalProblems} label="Total Problems"  icon="📚" delay={0.20} isReady={statsReady} />
         </div>
 
         {/* Streak & Monthly Stats */}
@@ -2104,120 +2078,62 @@ function App() {
           </div>
         </div>
 
-        {/* Solve Time Analytics */}
-        {solveTimes.totalTracked > 0 && (
-          <div className="solve-time-card">
-            <h3 className="card-title">⏱️ Solve Time Analytics</h3>
-            <div className="solve-time-grid">
-              <div className="solve-time-item">
-                <div className="solve-time-label">Overall Average</div>
-                <div className="solve-time-value">{solveTimes.overallAvg} min</div>
-              </div>
-              <div className="solve-time-item">
-                <div className="solve-time-label">Easy</div>
-                <div className="solve-time-value">{solveTimes.easyAvg} min</div>
-              </div>
-              <div className="solve-time-item">
-                <div className="solve-time-label">Medium</div>
-                <div className="solve-time-value">{solveTimes.mediumAvg} min</div>
-              </div>
-              <div className="solve-time-item">
-                <div className="solve-time-label">Hard</div>
-                <div className="solve-time-value">{solveTimes.hardAvg} min</div>
-              </div>
-            </div>
-            <div className="solve-time-footer">
-              Tracked for {solveTimes.totalTracked} problems
-            </div>
-          </div>
-        )}
-
-        {/* Needs Revision — priority-ranked */}
+        {/* Needs Revision — card grid, revisionCount > 0, sorted by most recent */}
         {(() => {
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-
-          // Topic weakness map
-          const topicCount = {};
-          allProblems.forEach(p => {
-            if (p.status === 'Done') {
-              (p.topics || [p.pattern]).forEach(t => {
-                topicCount[t] = (topicCount[t] || 0) + 1;
-              });
-            }
-          });
-
-          const getTopicWeakness = (topics) => {
-            const counts = (topics || []).map(t => topicCount[t] || 0);
-            const min = counts.length > 0 ? Math.min(...counts) : 0;
-            return min < 5 ? 1 : 0.3;
-          };
-
-          const calcPriority = (p) => {
-            const lastRev = p.lastRevisedAt ? new Date(p.lastRevisedAt) : null;
-            const days = lastRev
-              ? Math.floor((today - lastRev) / 86400000)
-              : p.daysSinceSolved || 0;
-            return Math.round(days + getTopicWeakness(p.topics || [p.pattern]) * 100);
-          };
-
-          const priorityColor = (s) => s > 80 ? 'var(--danger)' : s > 40 ? 'var(--warning, #f59e0b)' : 'var(--success)';
-          const priorityDot  = (s) => s > 80 ? '🔴' : s > 40 ? '🟡' : '🟢';
-
-          const ranked = intelligentRevision
-            .map(p => {
-              const lastRev = p.lastRevisedAt ? new Date(p.lastRevisedAt) : null;
-              const daysSinceRevision = lastRev
-                ? Math.floor((today - lastRev) / 86400000)
-                : p.daysSinceSolved || 0;
-              return { ...p, daysSinceRevision, priority: calcPriority(p) };
+          const revProblems = [...allProblems]
+            .filter(p => (p.revisionCount || 0) > 0)
+            .sort((a, b) => {
+              const da = a.lastRevisedAt ? new Date(a.lastRevisedAt) : new Date(0);
+              const db = b.lastRevisedAt ? new Date(b.lastRevisedAt) : new Date(0);
+              return db - da;
             })
-            .sort((a, b) => b.priority - a.priority);
+            .slice(0, 9);
 
-          const RevRow = ({ p }) => (
-            <div className="rev-row">
-              <div className="rev-col-left">
-                <span className="revision-number">#{p.number}</span>
-                <span className="revision-title">{p.title}</span>
-              </div>
-              <div className="rev-col-center">
-                <span className={`badge badge-${(p.difficulty || 'Medium').toLowerCase()}`}>{p.difficulty}</span>
-                <span className="rev-date">{formatDate(p.lastRevisedAt || p._solvedDateISO)}</span>
-                <span className="rev-priority-score" style={{ color: priorityColor(p.priority) }}>
-                  {priorityDot(p.priority)} {p.priority}
-                </span>
-              </div>
-              <div className="rev-col-right">
-                <a
-                  href={p.link || `https://leetcode.com/problems/${p.number}/`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn-rev-solve"
-                >🔗 Solve</a>
-                <button
-                  className="btn-revised"
-                  onClick={() => handleRevise(p.number)}
-                  disabled={revisingId === p.number}
-                >{revisingId === p.number ? '⏳' : '🔁 Revise'}</button>
-              </div>
-            </div>
-          );
+          const colClass = revProblems.length <= 2 ? 'rs-grid rs-grid-stretch'
+            : revProblems.length <= 6 ? 'rs-grid rs-grid-mid'
+            : 'rs-grid';
 
           return (
-            <div className="revision-card" style={{ marginBottom: '1.5rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <h3 className="card-title" style={{ margin: 0 }}>📌 Needs Revision ({ranked.length})</h3>
-                <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
-                  priority = days + weakness×100
-                </span>
-              </div>
-              {ranked.length > 0 ? (
-                <div className="revision-list">
-                  {ranked.map(p => <RevRow key={p.number} p={p} />)}
+            <div className="recently-solved-card" style={{ marginBottom: '1.5rem' }}>
+              <h3 className="card-title">🔁 Needs Revision ({revProblems.length})</h3>
+              {revProblems.length > 0 ? (
+                <div className={colClass}>
+                  {revProblems.map(p => (
+                    <div key={p.number} className="rs-card">
+                      <div className="rs-card-id">#{p.number}</div>
+                      <div className="rs-card-title">{p.title}</div>
+                      <div className="rs-card-meta">
+                        <span className={`badge badge-${(p.difficulty || 'medium').toLowerCase()}`}>{p.difficulty}</span>
+                        <span className="rs-rev-count">🔁 {p.revisionCount}×</span>
+                      </div>
+                      {p.lastRevisedAt && (
+                        <div className="rs-card-date" style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                          Last: {formatDate(p.lastRevisedAt)}
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', gap: '6px', marginTop: 'auto' }}>
+                        <a
+                          href={p.link || `https://leetcode.com/problems/${p.number}/`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="rs-card-btn"
+                          style={{ flex: 1 }}
+                        >Open ↗</a>
+                        <button
+                          className="rs-card-btn rs-card-btn-revise"
+                          onClick={() => handleRevise(p.number)}
+                          disabled={revisingId === p.number}
+                          style={{ flex: 1, cursor: 'pointer', border: 'none' }}
+                        >{revisingId === p.number ? '⏳' : '🔁 Revise'}</button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ) : (
-                <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-secondary)' }}>
-                  🎉 You're well revised!
+                <div className="rs-empty-state">
+                  <div style={{ fontSize: '2rem', marginBottom: '8px' }}>🎉</div>
+                  <div>No problems need revision yet</div>
+                  <small>Start revising solved problems to track them here</small>
                 </div>
               )}
             </div>
@@ -2229,12 +2145,17 @@ function App() {
           const recentProblems = [...allProblems]
             .filter(p => p.status === 'Done')
             .sort((a, b) => new Date(b._solvedDateISO || 0) - new Date(a._solvedDateISO || 0))
-            .slice(0, 9);
+            .slice(0, 6);
+
+          const colClass = recentProblems.length <= 2 ? 'rs-grid rs-grid-stretch'
+            : recentProblems.length <= 4 ? 'rs-grid rs-grid-mid'
+            : 'rs-grid';
+
           return (
             <div className="recently-solved-card">
               <h3 className="card-title">🆕 Recently Solved ({recentProblems.length})</h3>
               {recentProblems.length > 0 ? (
-                <div className="rs-grid">
+                <div className={colClass}>
                   {recentProblems.map(p => (
                     <div key={p.number} className="rs-card">
                       <div className="rs-card-id">#{p.number}</div>
@@ -2253,8 +2174,10 @@ function App() {
                   ))}
                 </div>
               ) : (
-                <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
-                  Start solving to see activity
+                <div className="rs-empty-state">
+                  <div style={{ fontSize: '2rem', marginBottom: '8px' }}>📚</div>
+                  <div>No solved problems yet</div>
+                  <small>Start solving to see activity here</small>
                 </div>
               )}
             </div>
@@ -2388,13 +2311,21 @@ function App() {
             <div className="filter-group">
               <label>Search</label>
               <div className="search-input-wrapper">
+                <span className="search-icon">🔍</span>
                 <input
                   type="text"
-                  placeholder="Problem # or title..."
+                  placeholder="Name, #ID, or difficulty..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => handleSearchChange(e.target.value)}
                   className="filter-input search-input"
                 />
+                {searchTerm && (
+                  <button
+                    className="search-clear-btn"
+                    onClick={() => handleSearchChange('')}
+                    title="Clear search"
+                  >×</button>
+                )}
               </div>
             </div>
             <div className="filter-group">
@@ -2556,8 +2487,12 @@ function App() {
                       ) : (
                         <>
                           <div className="empty-icon">🔍</div>
-                          <p className="empty-title">No problems found</p>
-                          <small>Try adjusting your filters or search term</small>
+                          <p className="empty-title">No results found</p>
+                          <small>
+                            {debouncedSearch
+                              ? `No problems match "${debouncedSearch}" — try a different name, ID, or difficulty`
+                              : 'Try adjusting your filters'}
+                          </small>
                         </>
                       )}
                     </td>
