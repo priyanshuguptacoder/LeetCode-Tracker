@@ -2140,24 +2140,26 @@ function App() {
             <div className="recently-solved-card">
               <h3 className="card-title">🆕 Recently Solved ({recentProblems.length})</h3>
               {recentProblems.length > 0 ? (
-                <div className="recently-solved-list">
+                <div className="rs-grid">
                   {recentProblems.map(p => (
-                    <div key={p.number} className="recently-solved-item">
-                      <span className="recently-solved-number">#{p.number}</span>
-                      <span className="recently-solved-title">{p.title}</span>
-                      <span className={`badge badge-${(p.difficulty || 'medium').toLowerCase()}`}>{p.difficulty}</span>
-                      <span className="recently-solved-date">📅 {formatDate(p._solvedDateISO)}</span>
+                    <div key={p.number} className="rs-card">
+                      <div className="rs-card-id">#{p.number}</div>
+                      <div className="rs-card-title">{p.title}</div>
+                      <div className="rs-card-meta">
+                        <span className={`badge badge-${(p.difficulty || 'medium').toLowerCase()}`}>{p.difficulty}</span>
+                        <span className="rs-card-date">📅 {formatDate(p._solvedDateISO)}</span>
+                      </div>
                       <a
                         href={p.link || `https://leetcode.com/problems/${p.number}/`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="problem-link-btn"
-                      >🔗 Open</a>
+                        className="rs-card-btn"
+                      >Open ↗</a>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-secondary)' }}>
+                <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
                   Start solving to see activity
                 </div>
               )}

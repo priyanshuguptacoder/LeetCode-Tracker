@@ -3162,7 +3162,7 @@ body.light-mode .modal-overlay {
 }
 
 /* ============================================
-   RECENTLY SOLVED SECTION
+   RECENTLY SOLVED — CARD GRID
    ============================================ */
 
 .recently-solved-card {
@@ -3176,57 +3176,94 @@ body.light-mode .modal-overlay {
 }
 
 .recently-solved-card:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-lg);
-    border-color: rgba(0, 200, 150, 0.2);
+    box-shadow: var(--shadow-md);
 }
 
-.recently-solved-list {
+.rs-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-top: 16px;
+}
+
+@media (max-width: 1024px) {
+    .rs-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 600px) {
+    .rs-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.rs-card {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
     display: flex;
     flex-direction: column;
     gap: 8px;
-    margin-top: 12px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
-.recently-solved-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 14px;
-    background: var(--bg-tertiary);
-    border-radius: 10px;
-    transition: all 0.2s ease;
-    border: 1px solid transparent;
+.rs-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-md);
+    border-color: rgba(0, 200, 150, 0.25);
 }
 
-.recently-solved-item:hover {
-    background: var(--bg-primary);
-    border-color: rgba(0, 200, 150, 0.15);
-    transform: translateX(2px);
-}
-
-.recently-solved-number {
+.rs-card-id {
+    font-size: 0.72rem;
     font-weight: 700;
     color: var(--primary);
-    min-width: 48px;
-    font-size: 0.82rem;
+    letter-spacing: 0.03em;
 }
 
-.recently-solved-title {
-    flex: 1;
-    color: var(--text-primary);
+.rs-card-title {
     font-size: 0.875rem;
-    font-weight: 500;
-    white-space: nowrap;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
     overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 280px;
+    flex: 1;
 }
 
-.recently-solved-date {
+.rs-card-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.rs-card-date {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.rs-card-btn {
+    display: block;
+    text-align: center;
+    background: rgba(0, 200, 150, 0.1);
+    color: var(--primary);
+    border: 1px solid rgba(0, 200, 150, 0.25);
+    border-radius: 7px;
+    padding: 6px 0;
     font-size: 0.75rem;
-    color: var(--text-secondary);
-    white-space: nowrap;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background 0.2s ease, transform 0.15s ease;
+    margin-top: 2px;
+}
+
+.rs-card-btn:hover {
+    background: rgba(0, 200, 150, 0.2);
+    transform: translateY(-1px);
 }
 
 body.light-mode .recently-solved-card {
@@ -3234,29 +3271,27 @@ body.light-mode .recently-solved-card {
     border-color: #E2E8F0;
 }
 
-body.light-mode .recently-solved-item {
+body.light-mode .rs-card {
     background: #F8FAFC;
+    border-color: #E2E8F0;
 }
 
-body.light-mode .recently-solved-item:hover {
-    background: #F1F5F9;
+body.light-mode .rs-card:hover {
+    border-color: rgba(0, 200, 150, 0.3);
 }
 
-/* Mobile: recently solved stacks cleanly */
-@media (max-width: 768px) {
-    .recently-solved-item {
-        flex-wrap: wrap;
-        gap: 6px;
-    }
+body.light-mode .rs-card-btn {
+    background: rgba(0, 200, 150, 0.07);
+    border-color: rgba(0, 200, 150, 0.2);
+}
 
-    .recently-solved-title {
-        max-width: 100%;
+body.light-mode .rs-card-btn:hover {
+    background: rgba(0, 200, 150, 0.14);
+}
+
+@media (max-width: 600px) {
+    .rs-card-btn {
         width: 100%;
-        order: -1;
-    }
-
-    .recently-solved-number {
-        order: -2;
     }
 }
 
