@@ -14,7 +14,19 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState(null);
 
-  // Parse "DD-MMM" → ISO date string "YYYY-MM-DD"
+  // ─── LOCAL DATE HELPER ───────────────────────────────────────────────────────
+  // CRITICAL: Always use local date strings (YYYY-MM-DD) to avoid UTC timezone
+  // shift bugs (e.g. IST +5:30 → midnight local = 6:30pm UTC previous day).
+  const toLocalDateStr = (date) => {
+    const d = new Date(date);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+  const todayLocalStr = toLocalDateStr(new Date());
+
+  // Parse "DD-MMM" → local date string "YYYY-MM-DD"
   const MONTH_MAP = {
     Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',
     Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'
@@ -28,9 +40,9 @@ function App() {
 
   // Transform MongoDB schema → frontend schema
   const transformProblems = (data) => (data || []).map(p => {
-    // Prefer ISO solvedDate from MongoDB, fall back to parsing "DD-MMM" date field
+    // Use local date string to avoid UTC timezone shift (e.g. IST midnight → prev day UTC)
     const solvedDateISO = p.solvedDate
-      ? new Date(p.solvedDate).toISOString().split('T')[0]
+      ? toLocalDateStr(new Date(p.solvedDate))
       : parseDDMMM(p.date);
     return {
       ...p,
@@ -39,7 +51,7 @@ function App() {
       userDifficulty: p.userDifficulty || p.difficulty || 'Medium',
       pattern: (p.topics && p.topics.length > 0) ? p.topics[0] : (p.pattern || 'Miscellaneous'),
       link: p.leetcodeLink || p.link || '',
-      _solvedDateISO: solvedDateISO, // used to build solvedDates map
+      _solvedDateISO: solvedDateISO,
     };
   });
 
@@ -322,67 +334,50 @@ function App() {
   // HEATMAP & STREAK CALCULATION
   // ============================================
   
-  const calculateHeatmapAndStreak = (solvedDates, calendarActivityDates) => {
+  const calculateHeatmapAndStreak = (solvedDates) => {
     try {
-      // Always use real solvedDates as source of truth for streak/active days.
-      // calendarActivityDates (from Align modal) is only used as a fallback
-      // when no real solved dates exist at all.
-      let uniqueDates = [];
-      
-      if (solvedDates && typeof solvedDates === 'object' && Object.keys(solvedDates).length > 0) {
-        // Prefer real solved dates from MongoDB
-        uniqueDates = [...new Set(Object.values(solvedDates))].filter(d => d).sort();
-      } else if (calendarActivityDates && Array.isArray(calendarActivityDates) && calendarActivityDates.length > 0) {
-        // Fall back to calendar activity dates only if no real data
-        uniqueDates = [...new Set(calendarActivityDates)].filter(d => d).sort();
+      // Single source of truth: real solvedDates from MongoDB only
+      if (!solvedDates || typeof solvedDates !== 'object' || Object.keys(solvedDates).length === 0) {
+        return { dateCounts: {}, activeDays: 0, currentStreak: 0, maxStreak: 0 };
       }
-      
-      if (uniqueDates.length === 0) {
-        return {
-          dateCounts: {},
-          activeDays: 0,
-          currentStreak: 0,
-          maxStreak: 0
-        };
-      }
-      
-      // Count problems per date (for heatmap)
+
+      // Count problems per date (heatmap intensity)
       const dateCounts = {};
-      if (solvedDates && typeof solvedDates === 'object') {
-        Object.values(solvedDates).forEach(dateStr => {
-          if (dateStr) {
-            dateCounts[dateStr] = (dateCounts[dateStr] || 0) + 1;
-          }
-        });
-      }
-      
-      // Active Days = unique dates
+      Object.values(solvedDates).forEach(dateStr => {
+        if (dateStr) dateCounts[dateStr] = (dateCounts[dateStr] || 0) + 1;
+      });
+
+      const uniqueDates = Object.keys(dateCounts).sort(); // ascending
       const activeDays = uniqueDates.length;
-      
-      // Calculate Current Streak (from today backwards)
-      const today = new Date().toISOString().split('T')[0];
+
+      // ── Current Streak ──────────────────────────────────────────────────────
+      // Rule: streak = consecutive days ending TODAY with ≥1 solve.
+      // If no solve today → streak = 0 (no grace period).
+      const today = toLocalDateStr(new Date());
       let currentStreak = 0;
-      let checkDate = new Date();
-      
-      while (true) {
-        const dateStr = checkDate.toISOString().split('T')[0];
-        if (uniqueDates.includes(dateStr)) {
-          currentStreak++;
-          checkDate.setDate(checkDate.getDate() - 1);
-        } else {
-          break;
+
+      if (dateCounts[today]) {
+        // Start counting backwards from today
+        let checkDate = new Date();
+        while (true) {
+          const ds = toLocalDateStr(checkDate);
+          if (dateCounts[ds]) {
+            currentStreak++;
+            checkDate.setDate(checkDate.getDate() - 1);
+          } else {
+            break;
+          }
         }
       }
-      
-      // Calculate Max Streak (consecutive days)
+      // else: no solve today → currentStreak stays 0
+
+      // ── Max Streak ───────────────────────────────────────────────────────────
       let maxStreak = 0;
       let tempStreak = 1;
-      
       for (let i = 1; i < uniqueDates.length; i++) {
-        const prevDate = new Date(uniqueDates[i - 1]);
-        const currDate = new Date(uniqueDates[i]);
-        const diffDays = Math.round((currDate - prevDate) / (1000 * 60 * 60 * 24));
-        
+        const prev = new Date(uniqueDates[i - 1]);
+        const curr = new Date(uniqueDates[i]);
+        const diffDays = Math.round((curr - prev) / 86400000);
         if (diffDays === 1) {
           tempStreak++;
         } else {
@@ -390,23 +385,12 @@ function App() {
           tempStreak = 1;
         }
       }
-      
       maxStreak = Math.max(maxStreak, tempStreak);
-      
-      return {
-        dateCounts,
-        activeDays,
-        currentStreak,
-        maxStreak
-      };
+
+      return { dateCounts, activeDays, currentStreak, maxStreak };
     } catch (error) {
       console.error('Error in calculateHeatmapAndStreak:', error);
-      return {
-        dateCounts: {},
-        activeDays: 0,
-        currentStreak: 0,
-        maxStreak: 0
-      };
+      return { dateCounts: {}, activeDays: 0, currentStreak: 0, maxStreak: 0 };
     }
   };
 
@@ -450,11 +434,6 @@ function App() {
     
     let consistency = (activeDays / totalDaysTracked) * 100;
     
-    // Boost if solving 3+ problems per active day (but cap at 100%)
-    if (averageProblemsPerActiveDay >= 3) {
-      consistency = Math.min(100, consistency * 1.1);
-    }
-    
     let status, label;
     if (consistency < 40) {
       status = '🔴 Low';
@@ -480,49 +459,47 @@ function App() {
   // 2️⃣ WEEKLY PERFORMANCE
   const calculateWeeklyPerformance = (problems, solvedDates) => {
     if (!problems || !solvedDates) {
-      return {
-        thisWeek: 0,
-        lastWeek: 0,
-        change: 0,
-        trend: '➡️'
-      };
+      return { thisWeek: 0, lastWeek: 0, change: 0, trend: '➡️' };
     }
-    
-    const getISOWeekStart = (date) => {
+
+    // Week = Monday → Sunday (ISO week). No mutation bug.
+    const getMondayOf = (date) => {
       const d = new Date(date);
-      const day = d.getDay();
-      const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Monday
-      return new Date(d.setDate(diff));
+      d.setHours(0, 0, 0, 0);
+      const day = d.getDay(); // 0=Sun
+      const diff = day === 0 ? -6 : 1 - day; // shift to Monday
+      d.setDate(d.getDate() + diff);
+      return d;
     };
-    
-    const today = new Date();
-    const thisWeekStart = getISOWeekStart(today);
-    const lastWeekStart = new Date(thisWeekStart);
-    lastWeekStart.setDate(lastWeekStart.getDate() - 7);
-    
+
+    const thisMonday = getMondayOf(new Date());
+    const lastMonday = new Date(thisMonday);
+    lastMonday.setDate(lastMonday.getDate() - 7);
+    const lastSunday = new Date(thisMonday); // exclusive end of last week
+
     let thisWeekCount = 0;
     let lastWeekCount = 0;
-    
+
     problems.forEach(problem => {
       if (problem && problem.status === 'Done' && problem.number && solvedDates[problem.number]) {
         const solvedDate = new Date(solvedDates[problem.number]);
-        
-        if (solvedDate >= thisWeekStart) {
+        solvedDate.setHours(0, 0, 0, 0);
+        if (solvedDate >= thisMonday) {
           thisWeekCount++;
-        } else if (solvedDate >= lastWeekStart && solvedDate < thisWeekStart) {
+        } else if (solvedDate >= lastMonday && solvedDate < lastSunday) {
           lastWeekCount++;
         }
       }
     });
-    
-    const change = lastWeekCount > 0 
-      ? (((thisWeekCount - lastWeekCount) / lastWeekCount) * 100).toFixed(1)
+
+    const change = lastWeekCount > 0
+      ? parseFloat((((thisWeekCount - lastWeekCount) / lastWeekCount) * 100).toFixed(1))
       : thisWeekCount > 0 ? 100 : 0;
-    
+
     return {
       thisWeek: thisWeekCount,
       lastWeek: lastWeekCount,
-      change: parseFloat(change),
+      change,
       trend: change > 0 ? '📈' : change < 0 ? '📉' : '➡️'
     };
   };
@@ -692,94 +669,44 @@ function App() {
     };
   };
 
-  // 8️⃣ MONTHLY TARGET SUGGESTION (data-driven, no hardcoded floors)
-  const calculateAITargetSuggestion = (problems, solvedDates, consistencyScore) => {
+  // 8️⃣ MONTHLY TARGET SUGGESTION
+  // Formula: avg_last_30_days = solves in last 30 days / 30
+  // moderate = avg * 1.2, aggressive = avg * 1.5
+  // Hide section entirely if no data in last 30 days.
+  const calculateTargetSuggestion = (problems, solvedDates) => {
     const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-    
-    const getMonthStart = (monthsAgo) => new Date(currentYear, currentMonth - monthsAgo, 1);
-    
-    const last1MonthStart = getMonthStart(1);
-    const last2MonthStart = getMonthStart(2);
-    const last3MonthStart = getMonthStart(3);
-    const currentMonthStart = getMonthStart(0);
-    
-    let last1MonthCount = 0;
-    let last2MonthCount = 0;
-    let last3MonthCount = 0;
+    now.setHours(0, 0, 0, 0);
+
+    const last30Start = new Date(now);
+    last30Start.setDate(last30Start.getDate() - 30);
+
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+    let last30Count = 0;
     let currentMonthCount = 0;
-    
-    problems.forEach(problem => {
-      if (problem.status === 'Done' && solvedDates[problem.number]) {
-        const solvedDate = new Date(solvedDates[problem.number]);
-        if (solvedDate >= currentMonthStart) currentMonthCount++;
-        if (solvedDate >= last1MonthStart && solvedDate < currentMonthStart) last1MonthCount++;
-        if (solvedDate >= last2MonthStart && solvedDate < last1MonthStart) last2MonthCount++;
-        if (solvedDate >= last3MonthStart && solvedDate < last2MonthStart) last3MonthCount++;
+    let lastMonthCount = 0;
+
+    problems.forEach(p => {
+      if (p.status === 'Done' && solvedDates[p.number]) {
+        const d = new Date(solvedDates[p.number]);
+        d.setHours(0, 0, 0, 0);
+        if (d >= last30Start) last30Count++;
+        if (d >= currentMonthStart) currentMonthCount++;
+        if (d >= lastMonthStart && d < currentMonthStart) lastMonthCount++;
       }
     });
-    
-    // Need at least 1 month of real data to suggest a target
-    const monthsWithData = [last1MonthCount, last2MonthCount, last3MonthCount].filter(c => c > 0).length;
-    if (monthsWithData === 0) {
-      return {
-        suggestedTarget: null,
-        growthMode: 'No Data',
-        last1MonthCount, last2MonthCount, last3MonthCount,
-        averageLast3Months: 0,
-        currentMonthCount,
-        currentPace: 0,
-        reasoning: 'Not enough history — solve problems for at least 1 month'
-      };
+
+    if (last30Count === 0) {
+      return { hasData: false, last30Count: 0, avgLast30: 0, moderate: null, aggressive: null, currentMonthCount, lastMonthCount };
     }
-    
-    const averageLast3Months = Math.round(
-      (last1MonthCount + last2MonthCount + last3MonthCount) / Math.max(1, monthsWithData)
-    );
-    
-    const daysIntoMonth = now.getDate();
-    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-    const currentPace = daysIntoMonth > 0 ? Math.round((currentMonthCount / daysIntoMonth) * daysInMonth) : 0;
-    
-    // Base: 10% above average
-    let suggestedTarget = Math.round(averageLast3Months * 1.10);
-    
-    // Pace adjustment
-    if (currentPace > averageLast3Months * 1.2) {
-      suggestedTarget = Math.round(suggestedTarget * 1.10);
-    } else if (currentPace < averageLast3Months * 0.7) {
-      suggestedTarget = Math.round(suggestedTarget * 0.90);
-    }
-    
-    // Growth trend
-    const isGrowthTrend = last1MonthCount > last2MonthCount && last2MonthCount > last3MonthCount;
-    const isInconsistent = Math.abs(last1MonthCount - last2MonthCount) > 10 || Math.abs(last2MonthCount - last3MonthCount) > 10;
-    if (isGrowthTrend) suggestedTarget = Math.round(suggestedTarget * 1.15);
-    else if (isInconsistent) suggestedTarget = averageLast3Months;
-    
-    // Consistency bonus
-    if (consistencyScore.score > 75) suggestedTarget = Math.round(suggestedTarget * 1.10);
-    
-    // Round to nearest 5, cap at 1.5x average (no artificial floor)
-    suggestedTarget = Math.round(suggestedTarget / 5) * 5;
-    suggestedTarget = Math.min(suggestedTarget, Math.round(averageLast3Months * 1.5));
-    suggestedTarget = Math.max(suggestedTarget, last1MonthCount); // at least match last month
-    suggestedTarget = Math.max(suggestedTarget, 1); // sanity: never 0
-    
-    let growthMode = 'Balanced';
-    if (suggestedTarget >= averageLast3Months * 1.3) growthMode = 'Aggressive';
-    else if (suggestedTarget <= averageLast3Months * 1.05) growthMode = 'Conservative';
-    
-    return {
-      suggestedTarget,
-      growthMode,
-      last1MonthCount, last2MonthCount, last3MonthCount,
-      averageLast3Months,
-      currentMonthCount,
-      currentPace,
-      reasoning: `Based on ${averageLast3Months} avg/month (${monthsWithData} month${monthsWithData > 1 ? 's' : ''} of data)`
-    };
+
+    const avgLast30 = last30Count / 30; // problems per day over last 30 days
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const moderate   = Math.round(avgLast30 * 1.2 * daysInMonth);
+    const aggressive = Math.round(avgLast30 * 1.5 * daysInMonth);
+
+    return { hasData: true, last30Count, avgLast30: avgLast30.toFixed(2), moderate, aggressive, currentMonthCount, lastMonthCount };
   };
 
   // ============================================
@@ -804,8 +731,8 @@ function App() {
   // ============================================
   
   const heatmapData = React.useMemo(
-    () => calculateHeatmapAndStreak(state.solvedDates || {}, state.calendarActivityDates),
-    [state.solvedDates, state.calendarActivityDates]
+    () => calculateHeatmapAndStreak(state.solvedDates || {}),
+    [state.solvedDates]
   );
   
   const monthlyData = React.useMemo(
@@ -911,7 +838,7 @@ function App() {
       pattern: detectedPattern,
       link: formData.link || `https://leetcode.com/problems/${problemNumber}/`,
       status: formData.type === 'Solved' ? 'Done' : 'Not Started',
-      solvedDate: formData.type === 'Solved' ? new Date().toISOString().split('T')[0] : null
+      solvedDate: formData.type === 'Solved' ? toLocalDateStr(new Date()) : null
     };
 
     try {
@@ -950,23 +877,12 @@ function App() {
         });
         
         // Update calendar activity dates if problem was marked as solved
-        const today = new Date().toISOString().split('T')[0];
+        const today = toLocalDateStr(new Date());
         
         setState(prev => {
-          let updatedCalendarDates = prev.calendarActivityDates || [];
-          
-          if (formData.type === 'Solved') {
-            const currentDates = new Set(updatedCalendarDates);
-            if (!currentDates.has(today)) {
-              updatedCalendarDates = [...updatedCalendarDates, today];
-              console.log('🔥 Streak updated - added today to calendar');
-            }
-          }
-          
           return {
             ...prev,
-            solvedDates: backendSolvedDates, // Backend is ONLY source of truth
-            calendarActivityDates: updatedCalendarDates
+            solvedDates: backendSolvedDates // Backend is ONLY source of truth
           };
         });
         
@@ -1028,7 +944,7 @@ function App() {
     }
     
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = toLocalDateStr(new Date());
       
       // Update via API
       const updateData = {
@@ -1056,31 +972,15 @@ function App() {
         setState(prev => {
           const newState = {
             ...prev,
-            solvedDates: backendSolvedDates, // Backend is ONLY source of truth
+            solvedDates: backendSolvedDates,
             statusOverrides: {
               ...prev.statusOverrides,
               [number]: newStatus
             }
           };
           
-          // Update calendar activity dates when marking as Done
-          if (newStatus === 'Done') {
-            const today = new Date().toISOString().split('T')[0];
-            
-            // Update calendar activity dates
-            if (prev.calendarActivityDates) {
-              const currentDates = new Set(prev.calendarActivityDates);
-              if (!currentDates.has(today)) {
-                newState.calendarActivityDates = [...prev.calendarActivityDates, today];
-              }
-            } else {
-              newState.calendarActivityDates = [today];
-            }
-          }
-          
           // Remove revision flag when unmarking as Done
           if (newStatus !== 'Done') {
-            // Remove revision flag
             if (prev.revisionFlags && prev.revisionFlags[number]) {
               const { [number]: removed, ...remainingFlags } = prev.revisionFlags;
               newState.revisionFlags = remainingFlags;
@@ -1244,7 +1144,7 @@ function App() {
           [number]: {
             needsRevision: false,
             revisionCount: current.revisionCount + 1,
-            lastRevisedDate: new Date().toISOString().split('T')[0]
+            lastRevisedDate: toLocalDateStr(new Date())
           }
         }
       };
@@ -1269,22 +1169,7 @@ function App() {
     }
   };
 
-  const handleAdoptSuggestedTarget = () => {
-    if (!aiTargetSuggestion.suggestedTarget) {
-      showNotification('No suggestion available yet — solve problems for at least 1 month', 'error');
-      return;
-    }
-    if (!verifyPassword('adopt suggested target')) {
-      return;
-    }
-    
-    setState(prev => ({
-      ...prev,
-      monthlyTarget: aiTargetSuggestion.suggestedTarget
-    }));
-    
-    showNotification(`✓ Monthly target updated to ${aiTargetSuggestion.suggestedTarget}`, 'success');
-  };
+
 
   const handleAlignHistoricalActivity = () => {
     if (!verifyPassword('align historical activity')) {
@@ -1398,16 +1283,10 @@ function App() {
   const totalProblems = allProblems.length;
   const totalRemaining = allProblems.filter(p => p.status !== 'Done').length;
   
-  // Rolling 100 Progress — track the last 100 solved problems by date
-  const last100Progress = (() => {
-    const solvedWithDates = allProblems
-      .filter(p => p.status === 'Done' && state.solvedDates[p.number])
-      .map(p => ({ number: p.number, date: state.solvedDates[p.number] }))
-      .sort((a, b) => new Date(b.date) - new Date(a.date)); // newest first
-    const last100 = solvedWithDates.slice(0, 100);
-    return last100.length; // progress within current cycle of 100
-  })();
+  // Rolling 100: current cycle progress = totalSolved % 100
+  // cycles = floor(totalSolved / 100)
   const completedCycles = Math.floor(totalSolved / 100);
+  const last100Progress = totalSolved % 100; // 0–99 within current cycle
   const rollingProgressPercentage = last100Progress;
   
   // Average problems per active day
@@ -1472,9 +1351,9 @@ function App() {
   const revisionStats = getRevisionStats(allProblems);
   const strongestDay = calculateStrongestDay(state.solvedDates);
   const solveTimes = calculateSolveTimes(allProblems, state.solveTimes || {});
-  const aiTargetSuggestion = React.useMemo(
-    () => calculateAITargetSuggestion(allProblems, state.solvedDates, consistencyScore),
-    [allProblems.length, state.solvedDates, consistencyScore.score]
+  const targetSuggestion = React.useMemo(
+    () => calculateTargetSuggestion(allProblems, state.solvedDates),
+    [allProblems.length, state.solvedDates]
   );
 
   // LeetCode Difficulty distribution
@@ -1900,14 +1779,12 @@ function App() {
 
             {/* Today Status */}
             <div className={`today-status ${(() => {
-              const today = new Date().toISOString().split('T')[0];
-              const allDates = state.calendarActivityDates || Object.values(state.solvedDates || {});
-              return allDates.includes(today) ? 'solved' : 'pending';
+              const solvedToday = Object.values(state.solvedDates || {}).includes(todayLocalStr);
+              return solvedToday ? 'solved' : 'pending';
             })()}`}>
               {(() => {
-                const today = new Date().toISOString().split('T')[0];
-                const allDates = state.calendarActivityDates || Object.values(state.solvedDates || {});
-                return allDates.includes(today) 
+                const solvedToday = Object.values(state.solvedDates || {}).includes(todayLocalStr);
+                return solvedToday
                   ? <><span className="status-icon">✅</span> Solved Today — Streak Alive</>
                   : <><span className="status-icon">❌</span> Solve 1 Problem to Keep Streak</>;
               })()}
@@ -1924,12 +1801,12 @@ function App() {
                   for (let i = 6; i >= 0; i--) {
                     const date = new Date(today);
                     date.setDate(date.getDate() - i);
-                    const dateStr = date.toISOString().split('T')[0];
+                    const dateStr = toLocalDateStr(date);
                     const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
                     
                     // Count problems solved on this date
-                    const problemCount = Object.entries(state.solvedDates || {}).filter(
-                      ([_, solvedDate]) => solvedDate === dateStr
+                    const problemCount = Object.values(state.solvedDates || {}).filter(
+                      d => d === dateStr
                     ).length;
                     
                     const isToday = i === 0;
@@ -2022,36 +1899,48 @@ function App() {
             </div>
             
             {/* Suggested Target */}
-            <div className="ai-suggestion-section">
-              <div className="ai-suggestion-header">
-                <span className="ai-icon">📊</span>
-                <span className="ai-title">Suggested Target</span>
-                {aiTargetSuggestion.suggestedTarget !== null && (
-                  <span className={`growth-mode-badge ${(aiTargetSuggestion.growthMode || '').toLowerCase()}`}>
-                    {aiTargetSuggestion.growthMode}
+            {targetSuggestion.hasData ? (
+              <div className="ai-suggestion-section">
+                <div className="ai-suggestion-header">
+                  <span className="ai-icon">📊</span>
+                  <span className="ai-title">Suggested Target</span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                    avg {targetSuggestion.avgLast30}/day (last 30d)
                   </span>
-                )}
-              </div>
-              {aiTargetSuggestion.suggestedTarget !== null ? (
-                <>
-                  <div className="ai-suggestion-value">{aiTargetSuggestion.suggestedTarget}</div>
-                  <div className="ai-suggestion-reason">{aiTargetSuggestion.reasoning}</div>
-                  <button 
-                    className="btn-adopt-target"
-                    onClick={handleAdoptSuggestedTarget}
-                  >
-                    Adopt Suggested Target
-                  </button>
-                  <div className="ai-tooltip">
-                    💡 Based on last 3 months average ({aiTargetSuggestion.averageLast3Months}), current pace ({aiTargetSuggestion.currentPace}/month), and consistency score.
-                  </div>
-                </>
-              ) : (
-                <div className="ai-suggestion-reason" style={{ marginTop: '0.5rem' }}>
-                  📭 No Data — {aiTargetSuggestion.reasoning}
                 </div>
-              )}
-            </div>
+                <div style={{ display: 'flex', gap: '1rem', margin: '0.5rem 0' }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <div className="ai-suggestion-value" style={{ fontSize: '1.4rem' }}>{targetSuggestion.moderate}</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Moderate (×1.2)</div>
+                    <button className="btn-adopt-target" style={{ marginTop: '0.25rem', padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}
+                      onClick={() => { if (verifyPassword('set target')) setState(prev => ({ ...prev, monthlyTarget: targetSuggestion.moderate })); }}>
+                      Set
+                    </button>
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div className="ai-suggestion-value" style={{ fontSize: '1.4rem' }}>{targetSuggestion.aggressive}</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Aggressive (×1.5)</div>
+                    <button className="btn-adopt-target" style={{ marginTop: '0.25rem', padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}
+                      onClick={() => { if (verifyPassword('set target')) setState(prev => ({ ...prev, monthlyTarget: targetSuggestion.aggressive })); }}>
+                      Set
+                    </button>
+                  </div>
+                </div>
+                <div className="ai-tooltip">
+                  💡 Based on {targetSuggestion.last30Count} solves in last 30 days ({targetSuggestion.avgLast30}/day avg × days in month)
+                </div>
+              </div>
+            ) : (
+              <div className="ai-suggestion-section">
+                <div className="ai-suggestion-header">
+                  <span className="ai-icon">📊</span>
+                  <span className="ai-title">Suggested Target</span>
+                </div>
+                <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.5rem' }}>
+                  No Data — solve problems for at least 1 day in the last 30 days
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
