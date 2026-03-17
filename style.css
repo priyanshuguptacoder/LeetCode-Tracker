@@ -335,69 +335,134 @@ button:active {
 .priority-low  { color: #22c55e; }
 
 /* ============================================
-   NAVBAR STATS BAR
+   NAVBAR STATS BAR — Extraordinary dark mode
    ============================================ */
 
 .navbar-stats {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: 16px;
+    background: linear-gradient(135deg, rgba(17,24,39,0.97) 0%, rgba(11,18,32,0.99) 100%);
+    border: 1px solid rgba(0, 200, 150, 0.25);
+    border-top: 1px solid rgba(0, 200, 150, 0.45);
+    border-radius: 20px;
     padding: 0;
     margin-bottom: 24px;
     overflow: hidden;
-    box-shadow: var(--shadow-sm);
+    box-shadow:
+        0 0 0 1px rgba(0,200,150,0.1),
+        0 0 30px rgba(0,200,150,0.08),
+        0 8px 32px rgba(0,0,0,0.5),
+        0 1px 0 rgba(255,255,255,0.05) inset;
     position: relative;
+    isolation: isolate;
+    animation: navbarBorderPulse 4s ease-in-out infinite;
 }
 
-/* Animated gradient sweep across the bar */
+@keyframes navbarBorderPulse {
+    0%, 100% { border-top-color: rgba(0, 200, 150, 0.3); box-shadow: 0 0 0 1px rgba(0,200,150,0.08), 0 0 20px rgba(0,200,150,0.06), 0 8px 32px rgba(0,0,0,0.5); }
+    50%       { border-top-color: rgba(0, 200, 150, 0.7); box-shadow: 0 0 0 1px rgba(0,200,150,0.15), 0 0 40px rgba(0,200,150,0.12), 0 8px 32px rgba(0,0,0,0.5); }
+}
+
+/* Animated shimmer sweep — bright moving light */
+.navbar-stats::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 60%;
+    height: 100%;
+    background: linear-gradient(
+        105deg,
+        transparent 0%,
+        rgba(0, 200, 150, 0.04) 20%,
+        rgba(0, 200, 150, 0.18) 40%,
+        rgba(99, 102, 241, 0.14) 55%,
+        rgba(0, 200, 150, 0.04) 75%,
+        transparent 100%
+    );
+    animation: navbarShimmer 4s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 0;
+    border-radius: 20px;
+}
+
+/* Glowing bottom border pulse */
 .navbar-stats::after {
     content: '';
     position: absolute;
-    inset: 0;
-    background: linear-gradient(
-        105deg,
-        transparent 30%,
-        rgba(34, 197, 94, 0.06) 50%,
-        transparent 70%
+    bottom: 0;
+    left: 5%;
+    right: 5%;
+    height: 2px;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(0, 200, 150, 0.0) 10%,
+        rgba(0, 200, 150, 0.9) 35%,
+        rgba(99, 102, 241, 0.8) 65%,
+        rgba(0, 200, 150, 0.0) 90%,
+        transparent 100%
     );
-    background-size: 200% 100%;
-    animation: navbarSweep 4s ease-in-out infinite;
+    animation: navbarGlow 4s ease-in-out infinite;
     pointer-events: none;
-    border-radius: 16px;
+    filter: blur(1px);
 }
 
-@keyframes navbarSweep {
-    0%   { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
+@keyframes navbarShimmer {
+    0%   { left: -100%; opacity: 0; }
+    10%  { opacity: 1; }
+    90%  { opacity: 1; }
+    100% { left: 160%; opacity: 0; }
+}
+
+@keyframes navbarGlow {
+    0%, 100% { opacity: 0.2; transform: scaleX(0.4); }
+    30%       { opacity: 0.7; transform: scaleX(0.8); }
+    50%       { opacity: 1;   transform: scaleX(1); }
+    70%       { opacity: 0.7; transform: scaleX(0.8); }
 }
 
 .navbar-stat {
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 18px 32px;
+    padding: 20px 36px;
     flex: 1;
-    transition: background 0.25s ease, transform 0.2s ease;
+    transition: background 0.3s ease, transform 0.2s ease;
     cursor: default;
     position: relative;
     z-index: 1;
 }
 
+/* Hover: radial glow spotlight from bottom */
+.navbar-stat::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 50% 130%, rgba(0,200,150,0.18) 0%, transparent 65%);
+    opacity: 0;
+    transition: opacity 0.35s ease;
+    pointer-events: none;
+    border-radius: 12px;
+}
+
+.navbar-stat:hover::before {
+    opacity: 1;
+}
+
 .navbar-stat:hover {
-    background: rgba(255, 255, 255, 0.04);
+    transform: translateY(-3px);
 }
 
 /* Number count-up feel on load */
 .navbar-stat-value {
-    font-size: 1.75rem;
+    font-size: 1.85rem;
     font-weight: 800;
     color: var(--text-primary);
     line-height: 1.1;
     letter-spacing: -0.03em;
-    animation: statPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    animation: statPop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    text-shadow: 0 0 20px rgba(0,200,150,0.15);
 }
 
 .navbar-stat:nth-child(1) .navbar-stat-value { animation-delay: 0.05s; }
@@ -406,7 +471,7 @@ button:active {
 .navbar-stat:nth-child(7) .navbar-stat-value { animation-delay: 0.20s; }
 
 @keyframes statPop {
-    from { opacity: 0; transform: translateY(6px) scale(0.92); }
+    from { opacity: 0; transform: translateY(8px) scale(0.88); }
     to   { opacity: 1; transform: translateY(0)  scale(1); }
 }
 
@@ -414,45 +479,78 @@ button:active {
     font-size: 0.68rem;
     color: var(--text-secondary);
     text-transform: uppercase;
-    letter-spacing: 0.08em;
-    margin-top: 4px;
+    letter-spacing: 0.09em;
+    margin-top: 5px;
     font-weight: 600;
 }
 
 .navbar-stat-icon {
     font-size: 1.1rem;
     margin-bottom: 4px;
-    opacity: 0.7;
+    opacity: 0.75;
     transition: transform 0.25s ease, opacity 0.25s ease;
 }
 
 .navbar-stat:hover .navbar-stat-icon {
-    transform: scale(1.2) rotate(-5deg);
+    transform: scale(1.25) rotate(-6deg);
     opacity: 1;
 }
 
+/* Targeted stat — gradient text */
 .navbar-stat-targeted .navbar-stat-value {
-    background: linear-gradient(135deg, var(--primary), var(--accent-blue));
+    background: linear-gradient(135deg, var(--primary) 0%, #6366F1 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+    filter: drop-shadow(0 0 10px rgba(0,200,150,0.5));
 }
 
 .navbar-stat-divider {
     width: 1px;
-    height: 40px;
-    background: var(--border);
+    height: 44px;
+    background: linear-gradient(180deg, transparent, rgba(0,200,150,0.3) 50%, transparent);
     flex-shrink: 0;
 }
 
+/* ── Light mode overrides ── */
 body.light-mode .navbar-stats {
-    background: #FFFFFF;
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
     border-color: #E5E7EB;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    border-top-color: rgba(250, 204, 21, 0.6);
+    box-shadow: 0 2px 16px rgba(0,0,0,0.07), 0 1px 0 rgba(255,255,255,0.9) inset;
+    animation: navbarBorderPulseLight 4s ease-in-out infinite;
+}
+
+@keyframes navbarBorderPulseLight {
+    0%, 100% { border-top-color: rgba(250, 204, 21, 0.4); }
+    50%       { border-top-color: rgba(250, 204, 21, 0.8); }
+}
+
+body.light-mode .navbar-stats::before {
+    background: linear-gradient(
+        105deg,
+        transparent 20%,
+        rgba(250, 204, 21, 0.08) 40%,
+        rgba(251, 191, 36, 0.06) 55%,
+        transparent 75%
+    );
+}
+
+body.light-mode .navbar-stats::after {
+    background: linear-gradient(90deg,
+        transparent,
+        rgba(250, 204, 21, 0.7) 30%,
+        rgba(251, 191, 36, 0.6) 70%,
+        transparent
+    );
 }
 
 body.light-mode .navbar-stat:hover {
-    background: #FFFDF5;
+    background: rgba(250, 204, 21, 0.04);
+}
+
+body.light-mode .navbar-stat::before {
+    background: radial-gradient(ellipse at 50% 120%, rgba(250,204,21,0.1) 0%, transparent 70%);
 }
 
 body.light-mode .navbar-stat-value {
@@ -464,31 +562,21 @@ body.light-mode .navbar-stat-label {
 }
 
 body.light-mode .navbar-stat-divider {
-    background: #E5E7EB;
+    background: linear-gradient(180deg, transparent, rgba(0,0,0,0.1) 50%, transparent);
 }
 
-/* Light mode: accent top border on hover */
-body.light-mode .navbar-stat::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 16px;
-    right: 16px;
-    height: 2px;
-    background: linear-gradient(90deg, #FACC15, #FDE68A);
-    border-radius: 0 0 4px 4px;
-    opacity: 0;
-    transition: opacity 0.25s ease;
-}
-
-body.light-mode .navbar-stat:hover::before {
-    opacity: 1;
+body.light-mode .navbar-stat-targeted .navbar-stat-value {
+    background: linear-gradient(135deg, #059669 0%, #6366F1 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    filter: none;
 }
 
 @media (max-width: 768px) {
     .navbar-stats {
         flex-wrap: wrap;
-        border-radius: 12px;
+        border-radius: 14px;
         margin-bottom: 20px;
     }
     .navbar-stat {
@@ -496,7 +584,7 @@ body.light-mode .navbar-stat:hover::before {
         min-width: 50%;
     }
     .navbar-stat-value {
-        font-size: 1.4rem;
+        font-size: 1.45rem;
     }
     .navbar-stat-divider {
         display: none;
@@ -4629,9 +4717,62 @@ body.light-mode .pc-empty small {
     color: #9CA3AF;
 }
 
-/* ============================================
-   MOBILE TABLE CARDS
-   ============================================ */
+/* ── Mobile compact card overrides ── */
+@media (max-width: 768px) {
+    .pc-card {
+        padding: 10px 12px;
+        gap: 6px;
+        border-radius: 12px;
+    }
+
+    .pc-title {
+        font-size: 0.82rem;
+        -webkit-line-clamp: 1;
+    }
+
+    .pc-id {
+        font-size: 0.65rem;
+    }
+
+    .pc-meta {
+        gap: 5px;
+    }
+
+    .pc-rev-badge,
+    .pc-status-label,
+    .pc-date {
+        font-size: 0.62rem;
+        padding: 1px 5px;
+    }
+
+    .pc-sub-info {
+        font-size: 0.65rem;
+    }
+
+    /* Buttons inline, compact */
+    .pc-actions {
+        flex-direction: row;
+        gap: 5px;
+        margin-top: 4px;
+    }
+
+    .pc-btn {
+        padding: 5px 0;
+        font-size: 0.68rem;
+        border-radius: 6px;
+    }
+
+    .pc-user-diff-select {
+        font-size: 0.6rem;
+        padding: 1px 5px;
+    }
+
+    .pc-grid {
+        gap: 8px;
+    }
+}
+
+
 
 @media (max-width: 640px) {
     .table-wrapper {
@@ -5302,3 +5443,7 @@ body.light-mode .compact-sub-row span[style] { }
 ::-webkit-scrollbar-track { background: var(--bg-tertiary); }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ============================================
+   MOBILE TABLE CARDS
+   ============================================ */

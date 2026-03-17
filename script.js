@@ -1568,6 +1568,31 @@ function App() {
     return { list: picked, totalCount };
   }, [allProblems, weaknessAnalysis]);
 
+  // ── Safety check: verify strict data separation ──────────────────────────
+  React.useEffect(() => {
+    const solvedProblems   = allProblems.filter(p => p.status === 'Done');
+    const targetedList     = targetedProblems.list;
+    const revisionList     = intelligentRevision;
+
+    // Targeted must be a subset of solved (no unsolved problems in targeted)
+    const targetedUnsolved = targetedList.filter(p => p.status !== 'Done');
+    // Revision must be a subset of solved
+    const revisionUnsolved = revisionList.filter(p => p.status !== 'Done');
+
+    console.log('📊 Data Separation Check:', {
+      solved:   solvedProblems.length,
+      targeted: targetedList.length,
+      revision: revisionList.length,
+      targetedUnsolvedLeak: targetedUnsolved.length,  // must be 0
+      revisionUnsolvedLeak: revisionUnsolved.length,  // must be 0
+    });
+
+    if (targetedUnsolved.length > 0)
+      console.warn('⚠️ Targeted contains unsolved problems!', targetedUnsolved.map(p => p.number));
+    if (revisionUnsolved.length > 0)
+      console.warn('⚠️ Revision contains unsolved problems!', revisionUnsolved.map(p => p.number));
+  }, [allProblems, targetedProblems, intelligentRevision]);
+
   // ============================================
   // PHASE 10: PERFORMANCE INSIGHTS
   // Natural-language insights generated from computed data
@@ -1873,8 +1898,8 @@ function App() {
           <StatCard value={displayActiveDays} label="Active Days"     icon="📅" delay={0.10} isReady={statsReady} />
           <div className="navbar-stat-divider" />
           <div className="navbar-stat navbar-stat-targeted">
-            <span className="navbar-stat-value">🎯 {targetedProblems.totalCount}</span>
-            <span className="navbar-stat-label">Targeted</span>
+            <span className="navbar-stat-value">{targetedProblems.list.length}</span>
+            <span className="navbar-stat-label">🎯 Targeted</span>
           </div>
           <div className="navbar-stat-divider" />
           <StatCard value={totalProblems} label="Total Problems"  icon="📚" delay={0.20} isReady={statsReady} />
