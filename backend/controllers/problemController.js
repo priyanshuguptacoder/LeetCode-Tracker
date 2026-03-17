@@ -111,7 +111,7 @@ exports.getSettings = async (req, res) => {
 
 function computeStreaks(problems, timeZone = 'Asia/Kolkata') {
   const solvedDates = new Set();
-  
+
   problems.forEach(p => {
     if (p.solved && p.solvedDate) {
       const dateStr = new Date(p.solvedDate).toLocaleDateString('en-CA', { timeZone });
@@ -124,53 +124,44 @@ function computeStreaks(problems, timeZone = 'Asia/Kolkata') {
     }
   });
 
-  const uniqueDates = Array.from(solvedDates).sort((a, b) => b.localeCompare(a));
+  const uniqueDates = Array.from(solvedDates).sort(); // ascending YYYY-MM-DD
   const activeDays = uniqueDates.length;
 
   let currentStreak = 0;
-  let maxStreak = 0;
+  let maxStreak = uniqueDates.length > 0 ? 1 : 0;
 
   if (uniqueDates.length > 0) {
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone });
-    
-    let i = 0;
-    while(true) {
-        const offsetDate = new Date(todayStr + 'T00:00:00Z');
-        offsetDate.setUTCDate(offsetDate.getUTCDate() - i);
-        const dateStr = offsetDate.toISOString().split('T')[0];
-        
-        if (solvedDates.has(dateStr)) {
-            currentStreak++;
-            i++;
+
+    // Current streak: strict — must have solved today, then walk backwards
+    if (solvedDates.has(todayStr)) {
+      // Walk backwards from today using local date arithmetic
+      let checkDate = new Date(new Date().toLocaleDateString('en-CA', { timeZone }));
+      while (true) {
+        const ds = checkDate.toLocaleDateString('en-CA', { timeZone });
+        if (solvedDates.has(ds)) {
+          currentStreak++;
+          checkDate.setDate(checkDate.getDate() - 1);
         } else {
-            if (i === 0) {
-                // Today not solved yet, let's check yesterday
-                i++;
-                continue;
-            } else {
-                break;
-            }
+          break;
         }
+      }
     }
 
-    let tempMax = 0;
-    let currentTemp = 1;
-
-    const sortedAsc = [...uniqueDates].reverse();
-    tempMax = 1;
-    for (let j = 1; j < sortedAsc.length; j++) {
-        const prev = new Date(sortedAsc[j - 1] + 'T00:00:00Z');
-        const curr = new Date(sortedAsc[j] + 'T00:00:00Z');
-        const diffDays = Math.round((curr - prev) / 86400000);
-        if (diffDays === 1) {
-            currentTemp++;
-        } else {
-            if (currentTemp > tempMax) tempMax = currentTemp;
-            currentTemp = 1;
-        }
+    // Max streak: walk ascending sorted dates
+    let tempStreak = 1;
+    for (let i = 1; i < uniqueDates.length; i++) {
+      const prev = new Date(uniqueDates[i - 1]);
+      const curr = new Date(uniqueDates[i]);
+      const diffDays = Math.round((curr - prev) / 86400000);
+      if (diffDays === 1) {
+        tempStreak++;
+      } else {
+        maxStreak = Math.max(maxStreak, tempStreak);
+        tempStreak = 1;
+      }
     }
-    if (currentTemp > tempMax) tempMax = currentTemp;
-    maxStreak = tempMax;
+    maxStreak = Math.max(maxStreak, tempStreak);
   }
 
   return { currentStreak, maxStreak, activeDays };
