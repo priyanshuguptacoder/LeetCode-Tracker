@@ -12,6 +12,7 @@ const problemSchema = new mongoose.Schema(
     leetcodeLink: { type: String, required: true },
     solvedDate: { type: Date, default: null },
     date: { type: String, default: '' },       // "DD-MMM" format e.g. "21-Jan"
+    userDifficulty: { type: String, enum: ['Easy', 'Medium', 'Hard'], default: null },
     revisionCount: { type: Number, default: 0, min: 0 },
     lastRevisedAt: { type: Date, default: null },
   },

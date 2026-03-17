@@ -48,16 +48,9 @@ function StatCard({ value, label, icon, gradient, delay = 0, isReady }) {
 // Used by: Recently Solved, Needs Revision, Targeted Problems
 // variant: 'solved' | 'revision' | 'targeted'
 // ============================================
-function ProblemCard({ p, variant, onRevise, revisingId, formatDate }) {
+function ProblemCard({ p, variant, onRevise, revisingId, formatDate, onUserDiffChange }) {
   const diffLower = (p.difficulty || 'medium').toLowerCase();
   const userDiff = p.userDifficulty || p.difficulty || 'Medium';
-
-  // User difficulty label
-  const userDiffLabel = userDiff === 'Easy'
-    ? 'Solved quickly'
-    : userDiff === 'Hard'
-    ? 'Struggled'
-    : 'Moderate effort';
 
   const userDiffColor = userDiff === 'Easy'
     ? 'var(--success)'
@@ -67,12 +60,20 @@ function ProblemCard({ p, variant, onRevise, revisingId, formatDate }) {
 
   return (
     <div className="pc-card">
-      {/* Top row: ID + user difficulty tag */}
+      {/* Top row: ID + user difficulty dropdown */}
       <div className="pc-top-row">
         <span className="pc-id">#{p.number}</span>
-        <span className="pc-user-diff" style={{ color: userDiffColor }}>
-          {userDiffLabel}
-        </span>
+        <select
+          className={`pc-user-diff-select pc-user-diff-${userDiff.toLowerCase()}`}
+          value={userDiff}
+          onChange={(e) => onUserDiffChange && onUserDiffChange(p.number, e.target.value)}
+          title="Your experience with this problem"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <option value="Easy">Easy ✓</option>
+          <option value="Medium">Medium ~</option>
+          <option value="Hard">Hard ✗</option>
+        </select>
       </div>
 
       {/* Title */}
@@ -134,7 +135,7 @@ function getPcGridClass(count) {
 }
 
 // Reusable section renderer
-function ProblemSection({ title, items, variant, emptyIcon, emptyMsg, emptyHint, onRevise, revisingId, formatDate }) {
+function ProblemSection({ title, items, variant, emptyIcon, emptyMsg, emptyHint, onRevise, revisingId, formatDate, onUserDiffChange }) {
   const gridClass = getPcGridClass(items.length);
   return (
     <div className="pc-section">
@@ -149,6 +150,7 @@ function ProblemSection({ title, items, variant, emptyIcon, emptyMsg, emptyHint,
               onRevise={onRevise}
               revisingId={revisingId}
               formatDate={formatDate}
+              onUserDiffChange={onUserDiffChange}
             />
           ))}
         </div>
@@ -486,7 +488,7 @@ function App() {
 
   // ── Admin session state ───────────────────────────────────────────────────
   // Session-based unlock: enter password once per tab, then all actions flow freely.
-  const ADMIN_PASSWORD = '0';
+  const ADMIN_PASSWORD = '0000';
   const [isAdminUnlocked, setIsAdminUnlocked] = useState(
     () => sessionStorage.getItem('admin') === 'true'
   );
@@ -1451,44 +1453,34 @@ function App() {
 
   // ============================================
   // PHASE 5: INTELLIGENT REVISION SYSTEM
-  // Score = 0.5*(daysSinceSolved/maxDays) + 0.3*(topicWeakness) + 0.2*(userDifficultyWeight)
-  // userDifficulty Hard → 1.0, Medium → 0.5, Easy → 0.1
-  // Only solved problems. No minimum days gate — all solved problems are candidates.
-  // Cap: 9. Show all if ≤ 9.
+  // Data Rule: problems where revisionCount > 0
+  // Sort: most recently revised first (lastRevisedAt desc)
+  // Cap: max 9. Show all if ≤ 9.
   // ============================================
   const intelligentRevision = React.useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const weaknessMap = {};
-    weaknessAnalysis.forEach(w => { weaknessMap[w.topic] = w.weaknessScore; });
 
-    const userDiffWeight = { Hard: 1.0, Medium: 0.5, Easy: 0.1 };
+    // Include ALL problems with revisionCount > 0 (regardless of solved status)
+    const revisedProblems = allProblems.filter(p => (p.revisionCount || 0) > 0);
+    if (revisedProblems.length === 0) return [];
 
-    const solvedProblems = allProblems.filter(p => p.status === 'Done' && solvedDates[p.number]);
-    if (solvedProblems.length === 0) return [];
-
-    // Compute raw days for each, find max for normalization
-    const withDays = solvedProblems.map(p => {
-      const solvedDate = parseLocalDate(solvedDates[p.number]);
-      const daysSinceSolved = Math.max(1, Math.ceil((today - solvedDate) / 86400000));
-      return { ...p, daysSinceSolved };
-    });
-    const maxDays = Math.max(...withDays.map(p => p.daysSinceSolved), 1);
-
-    return withDays.map(p => {
-      const topics = p.topics || [p.pattern];
-      const avgWeakness = topics.reduce((sum, t) => sum + (weaknessMap[t] || 0), 0) / Math.max(topics.length, 1);
-      const udw = userDiffWeight[p.userDifficulty || p.difficulty] ?? 0.5;
-      const score = parseFloat((
-        0.5 * (p.daysSinceSolved / maxDays) +
-        0.3 * avgWeakness +
-        0.2 * udw
-      ).toFixed(4));
-      return { ...p, _revScore: score };
-    })
-    .sort((a, b) => b._revScore - a._revScore)
-    .slice(0, 9);
-  }, [allProblems, solvedDates, weaknessAnalysis]);
+    return revisedProblems
+      .map(p => {
+        const solvedDateStr = solvedDates[p.number];
+        const daysSinceSolved = solvedDateStr
+          ? Math.max(1, Math.ceil((today - parseLocalDate(solvedDateStr)) / 86400000))
+          : null;
+        return { ...p, daysSinceSolved };
+      })
+      .sort((a, b) => {
+        // Sort by lastRevisedAt descending (most recently revised first)
+        const aTime = a.lastRevisedAt ? new Date(a.lastRevisedAt).getTime() : 0;
+        const bTime = b.lastRevisedAt ? new Date(b.lastRevisedAt).getTime() : 0;
+        return bTime - aTime;
+      })
+      .slice(0, 9);
+  }, [allProblems, solvedDates]);
 
   // ============================================
   // PHASE 4: TARGETED PROBLEMS ENGINE
@@ -2210,17 +2202,18 @@ function App() {
           </div>
         </div>
 
-        {/* Needs Revision — intelligent score-based (days stale + topic weakness + user difficulty) */}
+        {/* Needs Revision — problems with revisionCount > 0, sorted by most recently revised */}
         <ProblemSection
           title="🔁 Needs Revision"
           items={intelligentRevision}
           variant="revision"
           emptyIcon="🎉"
-          emptyMsg="No revision suggestions yet"
-          emptyHint="Solve more problems to get smart revision picks"
+          emptyMsg="No problems need revision yet"
+          emptyHint="Start revising solved problems to track them here"
           onRevise={handleRevise}
           revisingId={revisingId}
           formatDate={formatDate}
+          onUserDiffChange={handleUserDifficultyChange}
         />
 
         {/* Recently Solved — latest 9 */}
@@ -2240,6 +2233,7 @@ function App() {
               onRevise={handleRevise}
               revisingId={revisingId}
               formatDate={formatDate}
+              onUserDiffChange={handleUserDifficultyChange}
             />
           );
         })()}
@@ -2258,6 +2252,7 @@ function App() {
               onRevise={handleRevise}
               revisingId={revisingId}
               formatDate={formatDate}
+              onUserDiffChange={handleUserDifficultyChange}
             />
           );
         })()}

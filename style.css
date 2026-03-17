@@ -4413,12 +4413,49 @@ body.light-mode .rs-card-btn:hover {
     letter-spacing: 0.04em;
 }
 
-.pc-user-diff {
+/* User difficulty dropdown in cards */
+.pc-user-diff-select {
     font-size: 0.65rem;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    opacity: 0.85;
+    letter-spacing: 0.04em;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 2px 6px;
+    cursor: pointer;
+    background: transparent;
+    transition: background 0.2s ease, border-color 0.2s ease;
+    appearance: none;
+    -webkit-appearance: none;
+    outline: none;
+}
+
+.pc-user-diff-select.pc-user-diff-easy {
+    color: var(--success);
+    background: rgba(34, 197, 94, 0.1);
+    border-color: rgba(34, 197, 94, 0.25);
+}
+
+.pc-user-diff-select.pc-user-diff-medium {
+    color: var(--warning);
+    background: rgba(245, 158, 11, 0.1);
+    border-color: rgba(245, 158, 11, 0.25);
+}
+
+.pc-user-diff-select.pc-user-diff-hard {
+    color: var(--danger);
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.25);
+}
+
+.pc-user-diff-select:hover {
+    filter: brightness(1.1);
+}
+
+.pc-user-diff-select option {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    font-size: 0.75rem;
 }
 
 /* Title */
