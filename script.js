@@ -757,6 +757,17 @@ function App() {
     () => calculateHeatmapAndStreak(solvedDates),
     [solvedDates]
   );
+
+  // ── Debug assertion: verify all three values are independent ──
+  React.useEffect(() => {
+    console.log('[STATS AUDIT]', {
+      activeDays: heatmapData.activeDays,
+      currentStreak: heatmapData.currentStreak,
+      maxStreak: heatmapData.maxStreak,
+      totalSolvedDates: Object.keys(solvedDates).length,
+      today: toLocalDateStr(new Date()),
+    });
+  }, [heatmapData]);
   
   const monthlyData = React.useMemo(
     () => getMonthlyStats(allProblems, solvedDates),
@@ -855,12 +866,13 @@ function App() {
     const detectedPattern = hasPattern ? formData.pattern : detectPattern(formData.title);
 
     const newProblem = {
-      number: problemNumber,
+      // Backend schema: id, title, difficulty, leetcodeLink, solved, solvedDate, topics
+      id: problemNumber,
       title: formData.title,
       difficulty: formData.difficulty,
-      pattern: detectedPattern,
-      link: formData.link || `https://leetcode.com/problems/${problemNumber}/`,
-      status: formData.type === 'Solved' ? 'Done' : 'Not Started',
+      topics: detectedPattern ? [detectedPattern] : [],
+      leetcodeLink: formData.link || `https://leetcode.com/problems/${problemNumber}/`,
+      solved: formData.type === 'Solved',
       solvedDate: formData.type === 'Solved' ? toLocalDateStr(new Date()) : null
     };
 
@@ -969,9 +981,9 @@ function App() {
     try {
       const today = toLocalDateStr(new Date());
       
-      // Update via API
+      // Update via API — backend schema uses `solved` (boolean) + `solvedDate`
       const updateData = {
-        status: newStatus,
+        solved: newStatus === 'Done',
         solvedDate: newStatus === 'Done' ? today : null
       };
       
@@ -1200,46 +1212,44 @@ function App() {
   };
 
   // ============================================
-  // ALIGN — Full Backend Data Sync (Phase 1-7)
-  // Posts the entire local dataset to backend for upsert,
-  // then refreshes ALL frontend state from the backend response.
+  // ALIGN — Re-fetch from backend and recompute all stats
   // ============================================
-  const handleAlignHistoricalActivity = () => {
+  const handleAlignHistoricalActivity = async () => {
     if (!verifyPassword('align historical activity')) return;
 
-    const activeDays = parseInt(alignmentData.activeDays);
-    const maxStreak  = parseInt(alignmentData.maxStreak);
+    try {
+      showNotification('🔄 Syncing with backend...', 'success');
+      const response = await window.API.getAllProblems();
+      if (response.success) {
+        const problems = transformProblems(response.data);
+        setApiProblems(problems);
 
-    if (isNaN(activeDays) || isNaN(maxStreak) || activeDays < 1 || maxStreak < 1) {
-      showNotification('Please enter valid numbers', 'error');
-      return;
-    }
-    if (maxStreak > activeDays) {
-      showNotification('Max streak cannot exceed active days', 'error');
-      return;
-    }
+        const backendSolvedDates = {};
+        problems.forEach(p => {
+          if (p.status === 'Done' && p._solvedDateISO) {
+            backendSolvedDates[p.number] = p._solvedDateISO;
+          }
+        });
 
-    // Generate synthetic dates matching the requested shape
-    const today = new Date();
-    const dates = [];
-    for (let i = 0; i < maxStreak; i++) {
-      const d = new Date(today);
-      d.setDate(d.getDate() - i);
-      dates.push(toLocalDateStr(d));
-    }
-    let daysBack = maxStreak + 2;
-    for (let i = 0; i < activeDays - maxStreak; i++) {
-      const d = new Date(today);
-      d.setDate(d.getDate() - daysBack);
-      dates.push(toLocalDateStr(d));
-      daysBack += Math.floor(Math.random() * 3) + 2;
-    }
+        setState(prev => ({ ...prev, solvedDates: backendSolvedDates }));
 
-    const uniqueDates = [...new Set(dates)].sort();
-    setState(prev => ({ ...prev, calendarActivityDates: uniqueDates }));
-    setShowAlignmentModal(false);
-    setAlignmentData({ activeDays: '', maxStreak: '' });
-    showNotification(`✓ Aligned: ${activeDays} active days, ${maxStreak} max streak`, 'success');
+        const uniqueDays = new Set(Object.values(backendSolvedDates).filter(Boolean)).size;
+        const solvedCount = problems.filter(p => p.status === 'Done').length;
+
+        console.log('[ALIGN] Recomputed stats:', {
+          totalProblems: problems.length,
+          solvedCount,
+          activeDays: uniqueDays,
+          solvedDatesCount: Object.keys(backendSolvedDates).length,
+        });
+
+        setShowAlignmentModal(false);
+        setAlignmentData({ activeDays: '', maxStreak: '' });
+        showNotification(`✓ Aligned: ${solvedCount} solved, ${uniqueDays} active days`, 'success');
+      }
+    } catch (err) {
+      showNotification(`❌ Align failed: ${err.message}`, 'error');
+    }
   };
 
   const handleClearAllFilters = () => {
@@ -2683,44 +2693,20 @@ function App() {
         <div className="modal-overlay" onClick={() => setShowAlignmentModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>⚙️ Adjust Historical Activity</h2>
+              <h2>⚙️ Sync & Recompute Stats</h2>
               <button className="modal-close" onClick={() => setShowAlignmentModal(false)}>×</button>
             </div>
             <div className="modal-body">
               <p className="modal-description">
-                Align your tracker stats with LeetCode by entering your actual activity metrics.
+                Re-fetches all problems from the backend and recomputes streak, active days, and all analytics from real data.
               </p>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Total Active Days *</label>
-                  <input
-                    type="number"
-                    value={alignmentData.activeDays}
-                    onChange={(e) => setAlignmentData({...alignmentData, activeDays: e.target.value})}
-                    placeholder="e.g., 40"
-                    className="form-input"
-                    min="1"
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Max Streak *</label>
-                  <input
-                    type="number"
-                    value={alignmentData.maxStreak}
-                    onChange={(e) => setAlignmentData({...alignmentData, maxStreak: e.target.value})}
-                    placeholder="e.g., 37"
-                    className="form-input"
-                    min="1"
-                  />
-                </div>
-              </div>
               <div className="form-hint">
-                💡 Generates synthetic historical dates to match your LeetCode stats.
+                💡 Use this if stats look stale or out of sync with the database.
               </div>
             </div>
             <div className="modal-footer">
               <button type="button" className="btn-secondary" onClick={() => setShowAlignmentModal(false)}>Cancel</button>
-              <button type="button" className="btn-primary" onClick={handleAlignHistoricalActivity}>Apply Alignment</button>
+              <button type="button" className="btn-primary" onClick={handleAlignHistoricalActivity}>🔄 Sync & Recompute</button>
             </div>
           </div>
         </div>
