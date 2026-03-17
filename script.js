@@ -1976,81 +1976,103 @@ function App() {
           )}
         </div>
 
-        {/* Needs Revision — grouped by urgency */}
+        {/* Needs Revision — priority-ranked */}
         {(() => {
           const today = new Date();
           today.setHours(0, 0, 0, 0);
 
-          // Use lastRevisedAt from DB if available, else fall back to daysSinceSolved
-          const withDays = intelligentRevision.map(p => {
-            const lastRev = p.lastRevisedAt ? new Date(p.lastRevisedAt) : null;
-            const daysSinceRevision = lastRev
-              ? Math.floor((today - lastRev) / 86400000)
-              : p.daysSinceSolved;
-            return { ...p, daysSinceRevision };
+          // Build topic solved-count map for weakness calc
+          const topicCount = {};
+          allProblems.forEach(p => {
+            if (p.status === 'Done') {
+              (p.topics || [p.pattern]).forEach(t => {
+                topicCount[t] = (topicCount[t] || 0) + 1;
+              });
+            }
           });
 
-          const urgent = withDays.filter(p => p.daysSinceRevision > 30);
-          const medium = withDays.filter(p => p.daysSinceRevision > 7 && p.daysSinceRevision <= 30);
-          const recent = withDays.filter(p => p.daysSinceRevision <= 7);
+          const getTopicWeakness = (topics) => {
+            const counts = (topics || []).map(t => topicCount[t] || 0);
+            const min = counts.length > 0 ? Math.min(...counts) : 0;
+            return min < 5 ? 1 : 0.3;
+          };
+
+          const calcPriority = (p) => {
+            const lastRev = p.lastRevisedAt ? new Date(p.lastRevisedAt) : null;
+            const days = lastRev
+              ? Math.floor((today - lastRev) / 86400000)
+              : p.daysSinceSolved || 0;
+            const weakness = getTopicWeakness(p.topics || [p.pattern]);
+            return Math.round(days + weakness * 100);
+          };
+
+          const priorityColor = (score) =>
+            score > 80 ? 'var(--danger)' : score > 40 ? 'var(--warning, #f59e0b)' : 'var(--success)';
+
+          const priorityDot = (score) =>
+            score > 80 ? '🔴' : score > 40 ? '🟡' : '🟢';
+
+          const ranked = intelligentRevision
+            .map(p => {
+              const lastRev = p.lastRevisedAt ? new Date(p.lastRevisedAt) : null;
+              const daysSinceRevision = lastRev
+                ? Math.floor((today - lastRev) / 86400000)
+                : p.daysSinceSolved || 0;
+              const priority = calcPriority(p);
+              return { ...p, daysSinceRevision, priority };
+            })
+            .sort((a, b) => b.priority - a.priority);
+
+          const total = ranked.length;
 
           const RevRow = ({ p }) => (
-            <div className="revision-item">
-              <span className="revision-number">#{p.number}</span>
-              <span className="revision-title" style={{ flex: 1 }}>{p.title}</span>
-              <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginRight: '0.5rem' }}>
-                {p.daysSinceRevision}d ago
-              </span>
-              <span className={`badge badge-${(p.difficulty || 'Medium').toLowerCase()}`} style={{ marginRight: '0.5rem' }}>
-                {p.difficulty}
-              </span>
-              <button
-                className="btn-revised"
-                onClick={() => handleRevise(p.number)}
-                disabled={revisingId === p.number}
-              >
-                {revisingId === p.number ? '⏳' : '🔁 Revise'}
-              </button>
+            <div className="revision-item-v2">
+              {/* Left: ID + title */}
+              <div className="rev-left">
+                <span className="revision-number">#{p.number}</span>
+                <span className="revision-title">{p.title}</span>
+              </div>
+              {/* Meta: difficulty + last revised */}
+              <div className="rev-meta">
+                <span className={`badge badge-${(p.difficulty || 'Medium').toLowerCase()}`}>{p.difficulty}</span>
+                <span className="rev-date">📅 {formatDate(p.lastRevisedAt || p._solvedDateISO)}</span>
+              </div>
+              {/* Priority score */}
+              <div className="rev-priority" style={{ color: priorityColor(p.priority) }}>
+                {priorityDot(p.priority)} <strong>{p.priority}</strong>
+              </div>
+              {/* Actions */}
+              <div className="rev-actions">
+                <a
+                  href={p.link || `https://leetcode.com/problems/${p.number}/`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-rev-solve"
+                  title="Open on LeetCode"
+                >🔗 Solve</a>
+                <button
+                  className="btn-revised"
+                  onClick={() => handleRevise(p.number)}
+                  disabled={revisingId === p.number}
+                >
+                  {revisingId === p.number ? '⏳' : '🔁 Revise'}
+                </button>
+              </div>
             </div>
           );
 
-          const total = withDays.length;
           return (
             <div className="revision-card" style={{ marginBottom: '1.5rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                 <h3 className="card-title" style={{ margin: 0 }}>📌 Needs Revision ({total})</h3>
-                <div style={{ display: 'flex', gap: '0.5rem', fontSize: '0.75rem' }}>
-                  {urgent.length > 0 && <span style={{ color: 'var(--danger)' }}>🔥 {urgent.length} urgent</span>}
-                  {medium.length > 0 && <span style={{ color: 'var(--warning, #f59e0b)' }}>⚠️ {medium.length} medium</span>}
-                  {recent.length > 0 && <span style={{ color: 'var(--success)' }}>🟢 {recent.length} recent</span>}
-                </div>
+              </div>
+              {/* Formula hint */}
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.75rem', fontFamily: 'monospace' }}>
+                Priority = daysSinceLastRevised + (topicWeakness × 100)
               </div>
               {total > 0 ? (
                 <div className="revision-list">
-                  {urgent.length > 0 && (
-                    <>
-                      <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--danger)', padding: '0.2rem 0', marginBottom: '0.25rem', borderBottom: '1px solid rgba(239,68,68,0.2)' }}>
-                        🔥 Urgent — {'>'}30 days
-                      </div>
-                      {urgent.map(p => <RevRow key={p.number} p={p} />)}
-                    </>
-                  )}
-                  {medium.length > 0 && (
-                    <>
-                      <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--warning, #f59e0b)', padding: '0.2rem 0', marginTop: urgent.length ? '0.5rem' : 0, marginBottom: '0.25rem', borderBottom: '1px solid rgba(245,158,11,0.2)' }}>
-                        ⚠️ Medium — 7–30 days
-                      </div>
-                      {medium.map(p => <RevRow key={p.number} p={p} />)}
-                    </>
-                  )}
-                  {recent.length > 0 && (
-                    <>
-                      <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--success)', padding: '0.2rem 0', marginTop: (urgent.length || medium.length) ? '0.5rem' : 0, marginBottom: '0.25rem', borderBottom: '1px solid rgba(34,197,94,0.2)' }}>
-                        🟢 Recent — {'<'}7 days
-                      </div>
-                      {recent.map(p => <RevRow key={p.number} p={p} />)}
-                    </>
-                  )}
+                  {ranked.map(p => <RevRow key={p.number} p={p} />)}
                 </div>
               ) : (
                 <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-secondary)' }}>

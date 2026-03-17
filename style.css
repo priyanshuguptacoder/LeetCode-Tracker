@@ -3321,3 +3321,123 @@ body.light-mode .recently-solved-item:hover {
         grid-column: 1 / -1;
     }
 }
+
+/* ============================================
+   NEEDS REVISION — PRIORITY ROW (v2)
+   ============================================ */
+
+.revision-item-v2 {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: var(--bg-tertiary);
+    border-radius: 10px;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+}
+
+.revision-item-v2:hover {
+    background: var(--bg-primary);
+    border-color: rgba(0, 200, 150, 0.15);
+    transform: translateX(2px);
+}
+
+.rev-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+}
+
+.rev-left .revision-title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 260px;
+}
+
+.rev-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.rev-date {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.rev-priority {
+    font-size: 0.8rem;
+    font-weight: 700;
+    min-width: 56px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.rev-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.btn-rev-solve {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(99, 102, 241, 0.15);
+    color: var(--accent);
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.btn-rev-solve:hover {
+    background: rgba(99, 102, 241, 0.25);
+    transform: translateY(-1px);
+}
+
+body.light-mode .revision-item-v2 {
+    background: #F8FAFC;
+}
+
+body.light-mode .revision-item-v2:hover {
+    background: #F1F5F9;
+}
+
+body.light-mode .btn-rev-solve {
+    background: rgba(99, 102, 241, 0.08);
+    border-color: rgba(99, 102, 241, 0.2);
+}
+
+@media (max-width: 768px) {
+    .revision-item-v2 {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .rev-left {
+        width: 100%;
+    }
+
+    .rev-left .revision-title {
+        max-width: none;
+    }
+
+    .rev-meta,
+    .rev-priority,
+    .rev-actions {
+        flex-shrink: 0;
+    }
+}
