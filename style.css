@@ -1607,6 +1607,61 @@ body.light-mode .table-count {
     color: var(--danger);
 }
 
+/* Target toggle button in table */
+.btn-target {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 4px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    line-height: 1;
+    min-width: 28px;
+}
+
+.btn-target:hover {
+    background: rgba(0, 200, 150, 0.1);
+    border-color: rgba(0, 200, 150, 0.4);
+    color: var(--primary);
+}
+
+.btn-target.active {
+    background: rgba(0, 200, 150, 0.12);
+    border-color: rgba(0, 200, 150, 0.45);
+    color: var(--primary);
+    animation: targetPulse 2s ease-in-out infinite;
+}
+
+@keyframes targetPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(0, 200, 150, 0); }
+    50%       { box-shadow: 0 0 0 3px rgba(0, 200, 150, 0.15); }
+}
+
+.btn-target:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+body.light-mode .btn-target {
+    border-color: #E5E7EB;
+    color: #9CA3AF;
+}
+
+body.light-mode .btn-target:hover {
+    background: rgba(22, 163, 74, 0.08);
+    border-color: rgba(22, 163, 74, 0.3);
+    color: #16a34a;
+}
+
+body.light-mode .btn-target.active {
+    background: rgba(22, 163, 74, 0.1);
+    border-color: rgba(22, 163, 74, 0.4);
+    color: #16a34a;
+}
+
 /* Revision count chip in table */
 .rev-chip {
     display: inline-flex;
@@ -4587,6 +4642,16 @@ body.light-mode .rs-card-btn:hover {
     border-radius: 20px;
 }
 
+.pc-targeted-badge {
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--primary);
+    background: rgba(0, 200, 150, 0.1);
+    border: 1px solid rgba(0, 200, 150, 0.25);
+    padding: 2px 7px;
+    border-radius: 20px;
+}
+
 .pc-date {
     font-size: 0.68rem;
     color: var(--text-muted);
@@ -4648,6 +4713,33 @@ body.light-mode .rs-card-btn:hover {
     opacity: 0.5;
     cursor: not-allowed;
     transform: none;
+}
+
+.pc-btn-untarget {
+    background: rgba(239, 68, 68, 0.08);
+    color: var(--danger);
+    border-color: rgba(239, 68, 68, 0.2);
+}
+
+.pc-btn-untarget:hover {
+    background: rgba(239, 68, 68, 0.18);
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(239, 68, 68, 0.15);
+}
+
+.pc-btn-untarget:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+body.light-mode .pc-btn-untarget {
+    background: rgba(239, 68, 68, 0.06);
+    border-color: rgba(239, 68, 68, 0.15);
+}
+
+body.light-mode .pc-btn-untarget:hover {
+    background: rgba(239, 68, 68, 0.12);
 }
 
 /* Empty state */

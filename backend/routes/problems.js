@@ -8,6 +8,8 @@ const {
   deleteProblem,
   reviseProblem,
   unreviseProblem,
+  targetProblem,
+  untargetProblem,
   getStats,
   getSettings,
   alignProblems,
@@ -27,6 +29,8 @@ router.get('/:id', getProblem);
 router.put('/:id', updateProblem);
 router.post('/:id/revise', reviseProblem);
 router.post('/:id/unrevise', unreviseProblem);
+router.post('/:id/target', targetProblem);
+router.post('/:id/untarget', untargetProblem);
 router.delete('/:id', deleteProblem);
 
 module.exports = router;

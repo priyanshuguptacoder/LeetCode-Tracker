@@ -121,7 +121,7 @@ exports.getProblem = async (req, res) => {
 // ─── POST /api/problems ───────────────────────────────────────────────────────
 exports.createProblem = async (req, res) => {
   try {
-    const { id, title, difficulty, topics, solved, notes, leetcodeLink, solvedDate } = req.body;
+    const { id, title, difficulty, topics, solved, notes, leetcodeLink, solvedDate, targeted, targetedAt } = req.body;
     if (!id || !title || !difficulty || !leetcodeLink) {
       return res.status(400).json({ success: false, error: 'id, title, difficulty, and leetcodeLink are required' });
     }
@@ -129,13 +129,17 @@ exports.createProblem = async (req, res) => {
     if (exists) return res.status(400).json({ success: false, error: 'Problem #' + id + ' already exists' });
 
     const isSolved = solved === true || solved === 'true';
+    const isTargeted = targeted === true || targeted === 'true';
     const resolvedSolvedDate = isSolved ? (solvedDate ? new Date(solvedDate) : new Date()) : null;
+    const resolvedTargetedAt = isTargeted ? (targetedAt ? new Date(targetedAt) : new Date()) : null;
 
     const problem = await Problem.create({
       id: parseInt(id), title, difficulty,
       topics: Array.isArray(topics) ? topics : [],
       solved: isSolved, notes: notes || '', leetcodeLink,
       solvedDate: resolvedSolvedDate,
+      targeted: isTargeted,
+      targetedAt: resolvedTargetedAt,
     });
 
     let streakData = null;
@@ -224,6 +228,36 @@ exports.unreviseProblem = async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to unrevise', message: err.message });
+  }
+};
+
+// ─── POST /api/problems/:id/target ───────────────────────────────────────────
+exports.targetProblem = async (req, res) => {
+  try {
+    const problem = await Problem.findOneAndUpdate(
+      { id: parseInt(req.params.id) },
+      { $set: { targeted: true, targetedAt: new Date() } },
+      { new: true, runValidators: true }
+    );
+    if (!problem) return res.status(404).json({ success: false, error: 'Problem not found' });
+    res.json({ success: true, data: { id: problem.id, targeted: problem.targeted, targetedAt: problem.targetedAt } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Failed to target problem', message: err.message });
+  }
+};
+
+// ─── POST /api/problems/:id/untarget ─────────────────────────────────────────
+exports.untargetProblem = async (req, res) => {
+  try {
+    const problem = await Problem.findOneAndUpdate(
+      { id: parseInt(req.params.id) },
+      { $set: { targeted: false, targetedAt: null } },
+      { new: true, runValidators: true }
+    );
+    if (!problem) return res.status(404).json({ success: false, error: 'Problem not found' });
+    res.json({ success: true, data: { id: problem.id, targeted: problem.targeted, targetedAt: problem.targetedAt } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Failed to untarget problem', message: err.message });
   }
 };
 

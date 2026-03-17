@@ -52,6 +52,16 @@ const api = {
     if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Failed to unrevise'); }
     return r.json();
   },
+  targetProblem: async (id) => {
+    const r = await fetch(`${API_BASE_URL}/problems/${id}/target`, { method: 'POST' });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Failed to target problem'); }
+    return r.json();
+  },
+  untargetProblem: async (id) => {
+    const r = await fetch(`${API_BASE_URL}/problems/${id}/untarget`, { method: 'POST' });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Failed to untarget problem'); }
+    return r.json();
+  },
   getStreak: async () => {
     const r = await fetch(`${API_BASE_URL}/problems/streak`);
     if (!r.ok) throw new Error('Failed to fetch streak');

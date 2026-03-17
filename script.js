@@ -48,15 +48,9 @@ function StatCard({ value, label, icon, gradient, delay = 0, isReady }) {
 // Used by: Recently Solved, Needs Revision, Targeted Problems
 // variant: 'solved' | 'revision' | 'targeted'
 // ============================================
-function ProblemCard({ p, variant, onRevise, revisingId, formatDate, onUserDiffChange }) {
+function ProblemCard({ p, variant, onRevise, revisingId, formatDate, onUserDiffChange, onTarget, targetingId }) {
   const diffLower = (p.difficulty || 'medium').toLowerCase();
   const userDiff = p.userDifficulty || p.difficulty || 'Medium';
-
-  const userDiffColor = userDiff === 'Easy'
-    ? 'var(--success)'
-    : userDiff === 'Hard'
-    ? 'var(--danger)'
-    : 'var(--warning)';
 
   return (
     <div className="pc-card">
@@ -83,14 +77,15 @@ function ProblemCard({ p, variant, onRevise, revisingId, formatDate, onUserDiffC
       <div className="pc-meta">
         <span className={`badge badge-${diffLower}`}>{p.difficulty}</span>
         {variant === 'revision' && (p.revisionCount || 0) > 0 && (
-          <span className="pc-rev-badge">
-            🔁 Revised {p.revisionCount}×
-          </span>
-        )}        {variant === 'targeted' && p._statusLabel && (
-          <span className="pc-status-label">{p._statusLabel}</span>
+          <span className="pc-rev-badge">🔁 Revised {p.revisionCount}×</span>
         )}
         {variant === 'solved' && p._solvedDateISO && (
           <span className="pc-date">📅 {formatDate(p._solvedDateISO)}</span>
+        )}
+        {variant === 'targeted' && (
+          <span className="pc-targeted-badge">
+            {(p.revisionCount || 0) === 0 ? '📝 Never Revised' : `🔁 Revised ${p.revisionCount}×`}
+          </span>
         )}
       </div>
 
@@ -101,8 +96,14 @@ function ProblemCard({ p, variant, onRevise, revisingId, formatDate, onUserDiffC
       {variant === 'revision' && p.lastRevisedAt && (
         <div className="pc-sub-info">Last revised: {formatDate(p.lastRevisedAt)}</div>
       )}
-      {variant === 'targeted' && p._daysSinceRevision !== Infinity && (
-        <div className="pc-sub-info">{p._daysSinceRevision}d since last revision</div>
+      {variant === 'targeted' && p.lastRevisedAt && (
+        <div className="pc-sub-info">Last revised: {formatDate(p.lastRevisedAt)}</div>
+      )}
+      {variant === 'targeted' && p.status === 'Done' && (
+        <div className="pc-sub-info" style={{ color: 'var(--success)' }}>✅ Solved</div>
+      )}
+      {variant === 'targeted' && p.status !== 'Done' && (
+        <div className="pc-sub-info">Status: {p.status}</div>
       )}
 
       {/* Actions */}
@@ -113,13 +114,32 @@ function ProblemCard({ p, variant, onRevise, revisingId, formatDate, onUserDiffC
           rel="noopener noreferrer"
           className="pc-btn pc-btn-open"
         >Open ↗</a>
-        {(variant === 'revision' || variant === 'targeted') && (
+        {variant === 'revision' && (
           <button
             className="pc-btn pc-btn-revise"
             onClick={() => onRevise(p.number)}
             disabled={revisingId === p.number}
           >
             {revisingId === p.number ? '⏳' : '🔁 Revise'}
+          </button>
+        )}
+        {variant === 'targeted' && (
+          <button
+            className="pc-btn pc-btn-revise"
+            onClick={() => onRevise && onRevise(p.number)}
+            disabled={revisingId === p.number}
+          >
+            {revisingId === p.number ? '⏳' : '🔁 Revise'}
+          </button>
+        )}
+        {variant === 'targeted' && (
+          <button
+            className="pc-btn pc-btn-untarget"
+            onClick={() => onTarget && onTarget(p.number)}
+            disabled={targetingId === p.number}
+            title="Remove from targeted"
+          >
+            {targetingId === p.number ? '⏳' : '✕ Remove'}
           </button>
         )}
       </div>
@@ -135,7 +155,7 @@ function getPcGridClass(count) {
 }
 
 // Reusable section renderer
-function ProblemSection({ title, items, variant, emptyIcon, emptyMsg, emptyHint, onRevise, revisingId, formatDate, onUserDiffChange }) {
+function ProblemSection({ title, items, variant, emptyIcon, emptyMsg, emptyHint, onRevise, revisingId, formatDate, onUserDiffChange, onTarget, targetingId }) {
   const gridClass = getPcGridClass(items.length);
   return (
     <div className="pc-section">
@@ -151,6 +171,8 @@ function ProblemSection({ title, items, variant, emptyIcon, emptyMsg, emptyHint,
               revisingId={revisingId}
               formatDate={formatDate}
               onUserDiffChange={onUserDiffChange}
+              onTarget={onTarget}
+              targetingId={targetingId}
             />
           ))}
         </div>
@@ -410,6 +432,7 @@ function App() {
       pattern: topics[0] || (p.pattern || 'Miscellaneous'),
       link: p.leetcodeLink || p.link || '',
       _solvedDateISO: solvedDateISO,
+      targeted: p.targeted || false,
     };
   });
 
@@ -1061,7 +1084,9 @@ function App() {
         topics: detectedPattern ? [detectedPattern] : [],
         leetcodeLink: formData.link || `https://leetcode.com/problems/${problemNumber}/`,
         solved: formData.type === 'Solved',
-        solvedDate: formData.type === 'Solved' ? toLocalDateStr(new Date()) : null
+        solvedDate: formData.type === 'Solved' ? toLocalDateStr(new Date()) : null,
+        targeted: formData.type === 'Target',
+        targetedAt: formData.type === 'Target' ? new Date().toISOString() : null,
       };
       try {
         const response = await window.API.createProblem(newProblem);
@@ -1204,6 +1229,37 @@ function App() {
         showNotification(`❌ ${err.message}`, 'error');
       } finally {
         setUnrevisingId(null);
+      }
+    });
+  };
+
+  const [targetingId, setTargetingId] = React.useState(null);
+
+  const handleToggleTarget = (number) => {
+    requireAdmin(async () => {
+      if (targetingId === number) return;
+      const problem = allProblems.find(p => p.number === number);
+      const isCurrentlyTargeted = problem?.targeted || false;
+      try {
+        setTargetingId(number);
+        const res = isCurrentlyTargeted
+          ? await window.API.untargetProblem(number)
+          : await window.API.targetProblem(number);
+        if (res.success) {
+          setApiProblems(prev => prev.map(p =>
+            p.number === number
+              ? { ...p, targeted: res.data.targeted, targetedAt: res.data.targetedAt }
+              : p
+          ));
+          showNotification(
+            res.data.targeted ? '🎯 Added to Targeted' : '✅ Removed from Targeted',
+            'success'
+          );
+        }
+      } catch (err) {
+        showNotification(`❌ ${err.message}`, 'error');
+      } finally {
+        setTargetingId(null);
       }
     });
   };
@@ -1483,90 +1539,21 @@ function App() {
   }, [allProblems, solvedDates]);
 
   // ============================================
-  // PHASE 4: TARGETED PROBLEMS ENGINE
-  // Only solved problems. Conditions: never revised, stale revision (>7d), or weak topic.
-  // Balanced pick: up to 3 Easy, 4 Medium, 2 Hard → max 9.
+  // TARGETED PROBLEMS — manually marked by user
+  // Simple filter: problems where targeted === true
+  // Sorted by targetedAt descending (most recently targeted first)
   // ============================================
   const targetedProblems = React.useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const WEAK_THRESHOLD = 5;
-    const topicSolvedCount = {};
-    allProblems.forEach(p => {
-      if (p.status === 'Done') {
-        (p.topics || [p.pattern]).forEach(t => {
-          topicSolvedCount[t] = (topicSolvedCount[t] || 0) + 1;
-        });
-      }
-    });
-    const weakTopicSet = new Set(
-      Object.entries(topicSolvedCount)
-        .filter(([, c]) => c < WEAK_THRESHOLD)
-        .map(([t]) => t)
-    );
-    weaknessAnalysis
-      .slice(0, Math.max(1, Math.ceil(weaknessAnalysis.length / 2)))
-      .forEach(w => weakTopicSet.add(w.topic));
-
-    const candidates = [];
-    allProblems.forEach(p => {
-      if (p.status !== 'Done') return;
-      const topics = p.topics || [p.pattern];
-      const isWeakTopic = topics.some(t => weakTopicSet.has(t));
-      const revCount = p.revisionCount || 0;
-      const lastRevAt = p.lastRevisedAt ? new Date(p.lastRevisedAt) : null;
-      const daysSinceRevision = lastRevAt
-        ? Math.floor((today - lastRevAt) / 86400000)
-        : Infinity;
-      const neverRevised = revCount === 0;
-      const stale = isFinite(daysSinceRevision) && daysSinceRevision > 7;
-
-      if (!neverRevised && !stale && !isWeakTopic) return;
-
-      let statusLabel, priority;
-      if (stale && isWeakTopic) {
-        statusLabel = '⚠️ Needs Revision'; priority = 100 + Math.min(daysSinceRevision, 365);
-      } else if (stale) {
-        statusLabel = '⚠️ Needs Revision'; priority = 70 + Math.min(daysSinceRevision, 365);
-      } else if (neverRevised && isWeakTopic) {
-        statusLabel = '❌ Never Revised'; priority = 60;
-      } else if (neverRevised) {
-        statusLabel = '❌ Never Revised'; priority = 30;
-      } else {
-        statusLabel = '🔁 Recently Revised'; priority = 10;
-      }
-      candidates.push({ ...p, _statusLabel: statusLabel, _priority: priority, _daysSinceRevision: daysSinceRevision });
-    });
-
-    candidates.sort((a, b) => b._priority - a._priority);
-    const totalCount = candidates.length;
-
-    // Balanced pick: 3 Easy, 4 Medium, 2 Hard → max 9
-    const caps = { Easy: 3, Medium: 4, Hard: 2 };
-    const counts = { Easy: 0, Medium: 0, Hard: 0 };
-    const picked = [];
-    for (const p of candidates) {
-      const diff = p.difficulty || 'Medium';
-      if ((counts[diff] || 0) < (caps[diff] || 3)) {
-        picked.push(p);
-        counts[diff] = (counts[diff] || 0) + 1;
-        if (picked.length === 9) break;
-      }
-    }
-    // Fill remaining slots up to 9
-    if (picked.length < 9) {
-      const pickedNums = new Set(picked.map(p => p.number));
-      for (const p of candidates) {
-        if (!pickedNums.has(p.number)) {
-          picked.push(p);
-          if (picked.length === 9) break;
-        }
-      }
-    }
-
-    return { list: picked, totalCount };
-  }, [allProblems, weaknessAnalysis]);
+    const list = allProblems
+      .filter(p => p.targeted === true)
+      .sort((a, b) => {
+        const aTime = a.targetedAt ? new Date(a.targetedAt).getTime() : 0;
+        const bTime = b.targetedAt ? new Date(b.targetedAt).getTime() : 0;
+        return bTime - aTime;
+      });
+    console.log('🎯 Targeted Problems:', list.length, list.map(p => p.number));
+    return { list, totalCount: list.length };
+  }, [allProblems]);
 
   // ── Safety check: verify strict data separation ──────────────────────────
   React.useEffect(() => {
@@ -1574,23 +1561,11 @@ function App() {
     const targetedList     = targetedProblems.list;
     const revisionList     = intelligentRevision;
 
-    // Targeted must be a subset of solved (no unsolved problems in targeted)
-    const targetedUnsolved = targetedList.filter(p => p.status !== 'Done');
-    // Revision must be a subset of solved
-    const revisionUnsolved = revisionList.filter(p => p.status !== 'Done');
-
     console.log('📊 Data Separation Check:', {
       solved:   solvedProblems.length,
       targeted: targetedList.length,
       revision: revisionList.length,
-      targetedUnsolvedLeak: targetedUnsolved.length,  // must be 0
-      revisionUnsolvedLeak: revisionUnsolved.length,  // must be 0
     });
-
-    if (targetedUnsolved.length > 0)
-      console.warn('⚠️ Targeted contains unsolved problems!', targetedUnsolved.map(p => p.number));
-    if (revisionUnsolved.length > 0)
-      console.warn('⚠️ Revision contains unsolved problems!', revisionUnsolved.map(p => p.number));
   }, [allProblems, targetedProblems, intelligentRevision]);
 
   // ============================================
@@ -1655,7 +1630,9 @@ function App() {
         q === '' ||
         problem.number.toString().includes(q) ||
         (problem.title || '').toLowerCase().includes(q) ||
-        (problem.difficulty || '').toLowerCase().includes(q);
+        (problem.difficulty || '').toLowerCase().includes(q) ||
+        (problem.pattern || '').toLowerCase().includes(q) ||
+        (problem.topics || []).some(t => t.toLowerCase().includes(q));
 
       const matchesDifficulty =
         difficultyFilter === 'All' || problem.difficulty === difficultyFilter;
@@ -2062,7 +2039,7 @@ function App() {
             {/* ── SECTION 2: Today's Plan (primary focus) ── */}
             {targetSuggestion.hasData && (() => {
               const solveTarget = Math.max(1, Math.ceil(parseFloat(targetSuggestion.dailyRequired)));
-              const reviseTarget = Math.min(3, targetedProblems.totalCount);
+              const reviseTarget = Math.min(3, targetedProblems.list.length);
               const focusTopics = weaknessAnalysis.slice(0, 2).map(w => w.topic);
               return (
                 <div className="mp-today-plan">
@@ -2263,9 +2240,9 @@ function App() {
           );
         })()}
 
-        {/* Targeted Problems — balanced pick, max 9 */}
+        {/* Targeted Problems — manually marked by user */}
         {(() => {
-          const list = targetedProblems.list; // already capped at 9 by useMemo
+          const list = targetedProblems.list;
           return (
             <ProblemSection
               title="🎯 Targeted Problems"
@@ -2273,11 +2250,13 @@ function App() {
               variant="targeted"
               emptyIcon="🎯"
               emptyMsg="No targeted problems yet"
-              emptyHint="Solve more problems to get personalized targets"
+              emptyHint="Click the 🎯 button on any problem in the table below to add it here"
               onRevise={handleRevise}
               revisingId={revisingId}
               formatDate={formatDate}
               onUserDiffChange={handleUserDifficultyChange}
+              onTarget={handleToggleTarget}
+              targetingId={targetingId}
             />
           );
         })()}
@@ -2575,6 +2554,14 @@ function App() {
                       </td>
                       <td>
                         <div className="action-buttons">
+                          <button
+                            className={`btn-target${problem.targeted ? ' active' : ''}`}
+                            onClick={() => handleToggleTarget(problem.number)}
+                            disabled={targetingId === problem.number}
+                            title={problem.targeted ? 'Remove from Targeted' : 'Add to Targeted'}
+                          >
+                            {targetingId === problem.number ? '⏳' : problem.targeted ? '🎯' : '○'}
+                          </button>
                           <button
                             className="btn-delete"
                             onClick={() => handleDelete(problem.number, problem.isCustom)}
