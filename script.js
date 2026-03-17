@@ -196,7 +196,10 @@ function App() {
   };
 
   const [state, setState] = useState(getInitialState());
-  const [darkMode, setDarkMode] = useState(true);
+  const [darkMode, setDarkMode] = useState(() => {
+    const saved = localStorage.getItem('theme');
+    return saved ? saved === 'dark' : true; // default dark
+  });
   const [searchTerm, setSearchTerm] = useState('');
   const [difficultyFilter, setDifficultyFilter] = useState('All');
   const [patternFilter, setPatternFilter] = useState('All');
@@ -731,10 +734,6 @@ function App() {
   // DUPLICATE PREVENTION
   // ============================================
   const problemExists = (number) => apiProblems.some(p => p.number === parseInt(number));
-
-  // ============================================
-  // PASSWORD VERIFICATION
-  // ============================================
   
   const verifyPassword = (action) => {
     const password = prompt(`🔒 Enter password to ${action}:`);
@@ -1499,7 +1498,17 @@ function App() {
 
   useEffect(() => {
     document.body.classList.toggle('light-mode', !darkMode);
+    localStorage.setItem('theme', darkMode ? 'dark' : 'light');
   }, [darkMode]);
+
+  // Navbar scroll shadow
+  useEffect(() => {
+    const header = document.querySelector('.header');
+    if (!header) return;
+    const onScroll = () => header.classList.toggle('scrolled', window.scrollY > 10);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   // (auto-update for new month/day removed — state.lastUpdate no longer exists;
   //  monthly stats recompute automatically from apiProblems via useMemo)
@@ -1544,12 +1553,132 @@ function App() {
   try {
     // Show loading state while fetching from API
     if (loading) {
+      // Skeleton layout — mirrors real dashboard structure
+      const Sk = ({ w = '100%', h = 12, style = {} }) => (
+        <div className="skeleton sk-line" style={{ width: w, height: h, ...style }} />
+      );
       return (
-        <div className="app">
-          <div className="loading-container">
-            <div className="loading-spinner"></div>
-            <div className="loading-text">Loading your problems...</div>
-            <div className="loading-subtext">Please wait</div>
+        <div className="app skeleton-page">
+          {/* Top loading bar */}
+          <div className="loading-bar" />
+
+          {/* Welcome overlay */}
+          <div className="welcome-overlay">
+            <div className="welcome-title">Welcome Priyanshu 👋</div>
+            <div className="welcome-sub">Entering the world of competitive programming...</div>
+          </div>
+
+          {/* Skeleton header */}
+          <div className="sk-header">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <Sk w={180} h={20} />
+              <Sk w={260} h={11} />
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <Sk w={130} h={36} style={{ borderRadius: 8 }} />
+              <Sk w={42}  h={36} style={{ borderRadius: 8 }} />
+            </div>
+          </div>
+
+          <div className="container" style={{ paddingTop: 24 }}>
+            {/* Skeleton stats bar */}
+            <div className="sk-stats-bar">
+              {[1,2,3,4].map(i => (
+                <div key={i} className="sk-stat-pill">
+                  <Sk w={48} h={22} />
+                  <Sk w={72} h={10} />
+                </div>
+              ))}
+            </div>
+
+            {/* Skeleton streak + monthly */}
+            <div className="sk-grid-2">
+              <div className="sk-card">
+                <Sk w={140} h={14} style={{ marginBottom: 20 }} />
+                <div style={{ display: 'flex', justifyContent: 'space-around', marginBottom: 20 }}>
+                  {[1,2,3].map(i => (
+                    <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                      <Sk w={48} h={32} />
+                      <Sk w={64} h={10} />
+                    </div>
+                  ))}
+                </div>
+                <Sk w="100%" h={36} style={{ borderRadius: 10 }} />
+              </div>
+              <div className="sk-card">
+                <Sk w={120} h={14} style={{ marginBottom: 16 }} />
+                <Sk w="100%" h={8}  style={{ marginBottom: 8 }} />
+                <Sk w="100%" h={10} style={{ marginBottom: 16 }} />
+                <div style={{ display: 'flex', justifyContent: 'space-around' }}>
+                  {[1,2,3].map(i => (
+                    <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                      <Sk w={36} h={22} />
+                      <Sk w={52} h={9} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Skeleton analytics cards */}
+            <div className="sk-grid-4">
+              {[1,2,3,4].map(i => (
+                <div key={i} className="sk-card">
+                  <Sk w={100} h={13} style={{ marginBottom: 14 }} />
+                  <Sk w={60}  h={32} style={{ marginBottom: 10 }} />
+                  <Sk w="80%" h={10} style={{ marginBottom: 6 }} />
+                  <Sk w="60%" h={10} />
+                </div>
+              ))}
+            </div>
+
+            {/* Skeleton revision + recently solved */}
+            <div className="sk-grid-2">
+              <div className="sk-card">
+                <Sk w={160} h={14} style={{ marginBottom: 14 }} />
+                {[1,2,3,4].map(i => (
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1.5fr 1fr', gap: 10, marginBottom: 10, alignItems: 'center' }}>
+                    <Sk w="90%" h={11} />
+                    <Sk w="80%" h={11} />
+                    <Sk w="70%" h={28} style={{ borderRadius: 6 }} />
+                  </div>
+                ))}
+              </div>
+              <div className="sk-card">
+                <Sk w={140} h={14} style={{ marginBottom: 14 }} />
+                <div className="sk-grid-3" style={{ marginBottom: 0 }}>
+                  {[1,2,3,4,5,6].map(i => (
+                    <div key={i} className="sk-card" style={{ padding: 12, marginBottom: 0 }}>
+                      <Sk w={40}  h={10} style={{ marginBottom: 8 }} />
+                      <Sk w="90%" h={12} style={{ marginBottom: 6 }} />
+                      <Sk w="70%" h={10} style={{ marginBottom: 10 }} />
+                      <Sk w="100%" h={26} style={{ borderRadius: 6 }} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Skeleton table */}
+            <div className="sk-card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
+                <Sk w={120} h={14} />
+                <Sk w={80}  h={22} style={{ borderRadius: 20 }} />
+              </div>
+              {[1,2,3,4,5].map(i => (
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '40px 1fr 80px 60px 80px 80px 70px 90px 50px', gap: 12, marginBottom: 14, alignItems: 'center' }}>
+                  <Sk h={11} />
+                  <Sk h={11} />
+                  <Sk h={22} style={{ borderRadius: 6 }} />
+                  <Sk h={11} />
+                  <Sk h={11} />
+                  <Sk h={11} />
+                  <Sk h={26} style={{ borderRadius: 6 }} />
+                  <Sk h={26} style={{ borderRadius: 6 }} />
+                  <Sk h={26} style={{ borderRadius: 6 }} />
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       );
@@ -1575,7 +1704,7 @@ function App() {
     }
 
     return (
-      <div className="app">
+      <div className="app app-ready">
       {/* Notification */}
       {notification && (
         <div className={`notification notification-${notification.type}`}>
@@ -1589,9 +1718,9 @@ function App() {
           <div className="header-title">
             <h1>Priyanshu Gupta</h1>
             <p className="subtitle">
-              Competitive Programming Intelligence Engine
+              Your Personal DSA Growth Engine
               <span className="live-indicator" title="All stats update in real-time">
-                <span className="live-dot"></span> Live
+                <span className="live-dot"></span> 🟢 Real-time Sync
               </span>
             </p>
           </div>
@@ -1609,7 +1738,7 @@ function App() {
             </a>
             <button 
               className="theme-toggle"
-              onClick={() => setDarkMode(!darkMode)}
+              onClick={() => setDarkMode(prev => !prev)}
               title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
             >
               {darkMode ? '☀️' : '🌙'}
@@ -1620,7 +1749,7 @@ function App() {
 
       <div className="container">
         {/* Navbar Stats Bar */}
-        <div className="navbar-stats">
+        <div className="navbar-stats fade-up fade-up-1">
           <div className="navbar-stat">
             <span className="navbar-stat-value">{totalSolved}</span>
             <span className="navbar-stat-label">Problems Solved</span>
@@ -1643,7 +1772,7 @@ function App() {
         </div>
 
         {/* Streak & Monthly Stats */}
-        <div className="streak-monthly-grid">
+        <div className="streak-monthly-grid fade-up fade-up-2">
           <div className="streak-card">
             <div className="streak-header">
               <h3 className="card-title">🔥 Streak Stats</h3>
@@ -1865,7 +1994,7 @@ function App() {
         </div>
 
         {/* Advanced Analytics Grid */}
-        <div className="advanced-analytics-grid">
+        <div className="advanced-analytics-grid fade-up fade-up-3">
           {/* Consistency Score */}
           <div className="analytics-card consistency-card">
             <h3 className="card-title">🎯 Consistency Score</h3>
@@ -1876,20 +2005,13 @@ function App() {
               </div>
               <div className="consistency-details">
                 <div className="consistency-detail-item">
-                  <span className="detail-label">Start Date:</span>
+                  <span className="detail-label">Start Date</span>
                   <span className="detail-value">{consistencyScore.firstDate}</span>
                 </div>
                 <div className="consistency-detail-item">
-                  <span className="detail-label">Total Days Tracked:</span>
+                  <span className="detail-label">Days Tracked</span>
                   <span className="detail-value">{consistencyScore.totalDaysTracked}</span>
                 </div>
-                <div className="consistency-detail-item">
-                  <span className="detail-label">Active Days:</span>
-                  <span className="detail-value">{consistencyScore.activeDays}</span>
-                </div>
-              </div>
-              <div className="consistency-tooltip">
-                💡 Consistency = (Active Days / Total Days Tracked) × 100
               </div>
             </div>
           </div>
@@ -1999,36 +2121,12 @@ function App() {
           </div>
         )}
 
-        {/* Topic Weakness Analysis (Phase 3) */}
-        <div className="revision-card" style={{ marginBottom: '1.5rem' }}>
-          <h3 className="card-title">📊 Topic Strength Analysis</h3>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '0.75rem' }}>
-            weaknessScore = (1/solvedCount)×0.6 + (daysSinceLastSolved/maxDays)×0.4
-          </p>
-          {weaknessAnalysis.length > 0 ? (
-            <div style={{ display: 'grid', gap: '0.4rem' }}>
-              {weaknessAnalysis.slice(0, 12).map(w => (
-                <div key={w.topic} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 0.6rem', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', fontSize: '0.82rem' }}>
-                  <span style={{ minWidth: '120px', fontWeight: 500, color: 'var(--text-primary)' }}>{w.topic}</span>
-                  <div style={{ flex: 1, height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', overflow: 'hidden' }}>
-                    <div style={{ width: `${Math.min(w.weaknessScore * 100, 100)}%`, height: '100%', background: w.weaknessScore > 0.5 ? 'var(--danger)' : w.weaknessScore > 0.3 ? 'var(--warning, #f59e0b)' : 'var(--success)', borderRadius: '3px', transition: 'width 0.3s' }}></div>
-                  </div>
-                  <span style={{ minWidth: '40px', textAlign: 'right', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{w.solvedCount}✓</span>
-                  <span style={{ minWidth: '50px', textAlign: 'right', fontSize: '0.75rem', color: w.daysSinceLast >= 7 ? 'var(--danger)' : 'var(--text-secondary)' }}>{w.daysSinceLast}d ago</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-secondary)' }}>Solve problems to see topic analysis</div>
-          )}
-        </div>
-
         {/* Needs Revision — priority-ranked */}
         {(() => {
           const today = new Date();
           today.setHours(0, 0, 0, 0);
 
-          // Build topic solved-count map for weakness calc
+          // Topic weakness map
           const topicCount = {};
           allProblems.forEach(p => {
             if (p.status === 'Done') {
@@ -2049,15 +2147,11 @@ function App() {
             const days = lastRev
               ? Math.floor((today - lastRev) / 86400000)
               : p.daysSinceSolved || 0;
-            const weakness = getTopicWeakness(p.topics || [p.pattern]);
-            return Math.round(days + weakness * 100);
+            return Math.round(days + getTopicWeakness(p.topics || [p.pattern]) * 100);
           };
 
-          const priorityColor = (score) =>
-            score > 80 ? 'var(--danger)' : score > 40 ? 'var(--warning, #f59e0b)' : 'var(--success)';
-
-          const priorityDot = (score) =>
-            score > 80 ? '🔴' : score > 40 ? '🟡' : '🟢';
+          const priorityColor = (s) => s > 80 ? 'var(--danger)' : s > 40 ? 'var(--warning, #f59e0b)' : 'var(--success)';
+          const priorityDot  = (s) => s > 80 ? '🔴' : s > 40 ? '🟡' : '🟢';
 
           const ranked = intelligentRevision
             .map(p => {
@@ -2065,59 +2159,48 @@ function App() {
               const daysSinceRevision = lastRev
                 ? Math.floor((today - lastRev) / 86400000)
                 : p.daysSinceSolved || 0;
-              const priority = calcPriority(p);
-              return { ...p, daysSinceRevision, priority };
+              return { ...p, daysSinceRevision, priority: calcPriority(p) };
             })
             .sort((a, b) => b.priority - a.priority);
 
-          const total = ranked.length;
-
           const RevRow = ({ p }) => (
-            <div className="revision-item-v2">
-              {/* Left: ID + title */}
-              <div className="rev-left">
+            <div className="rev-row">
+              <div className="rev-col-left">
                 <span className="revision-number">#{p.number}</span>
                 <span className="revision-title">{p.title}</span>
               </div>
-              {/* Meta: difficulty + last revised */}
-              <div className="rev-meta">
+              <div className="rev-col-center">
                 <span className={`badge badge-${(p.difficulty || 'Medium').toLowerCase()}`}>{p.difficulty}</span>
-                <span className="rev-date">📅 {formatDate(p.lastRevisedAt || p._solvedDateISO)}</span>
+                <span className="rev-date">{formatDate(p.lastRevisedAt || p._solvedDateISO)}</span>
+                <span className="rev-priority-score" style={{ color: priorityColor(p.priority) }}>
+                  {priorityDot(p.priority)} {p.priority}
+                </span>
               </div>
-              {/* Priority score */}
-              <div className="rev-priority" style={{ color: priorityColor(p.priority) }}>
-                {priorityDot(p.priority)} <strong>{p.priority}</strong>
-              </div>
-              {/* Actions */}
-              <div className="rev-actions">
+              <div className="rev-col-right">
                 <a
                   href={p.link || `https://leetcode.com/problems/${p.number}/`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="btn-rev-solve"
-                  title="Open on LeetCode"
                 >🔗 Solve</a>
                 <button
                   className="btn-revised"
                   onClick={() => handleRevise(p.number)}
                   disabled={revisingId === p.number}
-                >
-                  {revisingId === p.number ? '⏳' : '🔁 Revise'}
-                </button>
+                >{revisingId === p.number ? '⏳' : '🔁 Revise'}</button>
               </div>
             </div>
           );
 
           return (
             <div className="revision-card" style={{ marginBottom: '1.5rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                <h3 className="card-title" style={{ margin: 0 }}>📌 Needs Revision ({total})</h3>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <h3 className="card-title" style={{ margin: 0 }}>📌 Needs Revision ({ranked.length})</h3>
+                <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                  priority = days + weakness×100
+                </span>
               </div>
-              {/* Formula hint */}
-              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.75rem', fontFamily: 'monospace' }}>
-                Priority = daysSinceLastRevised + (topicWeakness × 100)
-              </div>
-              {total > 0 ? (
+              {ranked.length > 0 ? (
                 <div className="revision-list">
                   {ranked.map(p => <RevRow key={p.number} p={p} />)}
                 </div>
@@ -2135,7 +2218,7 @@ function App() {
           const recentProblems = [...allProblems]
             .filter(p => p.status === 'Done')
             .sort((a, b) => new Date(b._solvedDateISO || 0) - new Date(a._solvedDateISO || 0))
-            .slice(0, 10);
+            .slice(0, 9);
           return (
             <div className="recently-solved-card">
               <h3 className="card-title">🆕 Recently Solved ({recentProblems.length})</h3>
