@@ -3,11 +3,9 @@ const { useState, useEffect, useRef } = React;
 function App() {
   // ============================================
   // API DATA FETCHING
-  // CRITICAL: Backend (problems.json) is the SINGLE SOURCE OF TRUTH
-  // - All problem data comes from backend API
-  // - Solved dates are stored in backend and synced to localStorage
-  // - Changes on one device appear on all devices after sync
-  // - Periodic sync every 5 minutes ensures consistency
+  // Backend is the SINGLE SOURCE OF TRUTH for all problem data.
+  // solvedDates, streak, activeDays are derived from apiProblems via useMemo.
+  // manualStats in localStorage allows manual override of streak/activeDays.
   // ============================================
   
   const [apiProblems, setApiProblems] = useState([]);
@@ -39,7 +37,8 @@ function App() {
     if (!str) return null;
     const [day, mon] = str.split('-');
     if (!MONTH_MAP[mon]) return null;
-    return `2026-${MONTH_MAP[mon]}-${day.padStart(2,'0')}`;
+    const year = new Date().getFullYear();
+    return `${year}-${MONTH_MAP[mon]}-${day.padStart(2,'0')}`;
   };
 
   // ============================================
@@ -182,7 +181,6 @@ function App() {
   const [showModal, setShowModal] = useState(false);
   const [showAlignmentModal, setShowAlignmentModal] = useState(false);
   const [notification, setNotification] = useState(null);
-  const [editingStatKey, setEditingStatKey] = useState(null); // 'currentStreak' | 'maxStreak' | 'activeDays' | null
 
   // Password protection
   const ADMIN_PASSWORD = '0';
@@ -237,30 +235,8 @@ function App() {
   };
 
   // ============================================
-  // PATTERN NORMALIZATION
-  // ============================================
-  
-  const normalizePattern = (pattern) => {
-    const patternMap = {
-      'Arrays / Hashing': 'Arrays',
-      'Arrays / Matrix': 'Matrix',
-      'Arrays / Prefix': 'Prefix Sum',
-      'Arrays / Sorting': 'Arrays',
-      'Tree / DFS': 'Tree',
-      'Tree / BFS': 'Tree',
-      'Graph / DFS': 'Graph',
-      'Graph / BFS': 'Graph',
-      'Graph / Topological Sort': 'Graph',
-      'Trie / Backtracking': 'Trie'
-    };
-    
-    return patternMap[pattern] || pattern;
-  };
-
-  // ============================================
   // HISTORICAL DATE GENERATION — DISABLED
   // Real dates come from MongoDB solvedDate field.
-  // Synthetic date generation removed to prevent fake stats.
   // ============================================
 
   // ============================================
@@ -530,36 +506,6 @@ function App() {
     };
   };
 
-  // 5️⃣ REVISION TRACKING
-  const getRevisionStats = (problems) => {
-    if (!problems) {
-      return {
-        needsRevisionCount: 0,
-        needsRevisionProblems: [],
-        recentlyRevised: []
-      };
-    }
-    
-    const needsRevision = problems.filter(p => 
-      p && p.status === 'Done' && state.revisionFlags && state.revisionFlags[p.number]?.needsRevision
-    );
-    
-    const recentlyRevised = problems
-      .filter(p => p && state.revisionFlags && state.revisionFlags[p.number]?.lastRevisedDate)
-      .sort((a, b) => {
-        const dateA = state.revisionFlags[a.number]?.lastRevisedDate || '';
-        const dateB = state.revisionFlags[b.number]?.lastRevisedDate || '';
-        return dateB.localeCompare(dateA);
-      })
-      .slice(0, 5);
-    
-    return {
-      needsRevisionCount: needsRevision.length,
-      needsRevisionProblems: needsRevision,
-      recentlyRevised
-    };
-  };
-
   // 6️⃣ STRONGEST DAY
   const calculateStrongestDay = (solvedDates) => {
     if (!solvedDates) {
@@ -688,14 +634,10 @@ function App() {
   };
 
   // ============================================
-  // DATA LAYER - API-BASED SYSTEM
+  // DATA LAYER
   // ============================================
-  
-  const getAllProblems = () => {
-    return apiProblems;
-  };
 
-  const allProblems = getAllProblems();
+  const allProblems = apiProblems;
 
   // ── Derive solvedDates directly from apiProblems (always fresh, no async lag) ──
   // SINGLE SOURCE OF TRUTH for all streak/active days/analytics.
@@ -725,16 +667,14 @@ function App() {
     [solvedDates]
   );
 
-  // ── Debug assertion: verify all three values are independent ──
+  // ── Debug: log computed vs manual stats ──
   React.useEffect(() => {
-    console.log('[STATS AUDIT]', {
-      activeDays: heatmapData.activeDays,
-      currentStreak: heatmapData.currentStreak,
-      maxStreak: heatmapData.maxStreak,
-      totalSolvedDates: Object.keys(solvedDates).length,
-      today: toLocalDateStr(new Date()),
+    console.log('[STATS]', {
+      auto: { activeDays: heatmapData.activeDays, currentStreak: heatmapData.currentStreak, maxStreak: heatmapData.maxStreak },
+      manual: state.manualStats,
+      display: { activeDays: displayActiveDays, currentStreak: displayCurrentStreak, maxStreak: displayMaxStreak },
     });
-  }, [heatmapData]);
+  }, [heatmapData, state.manualStats]);
   
   const monthlyData = React.useMemo(
     () => getMonthlyStats(allProblems, solvedDates),
@@ -752,19 +692,9 @@ function App() {
   );
 
   // ============================================
-  // DUPLICATE PREVENTION & VALIDATION
+  // DUPLICATE PREVENTION
   // ============================================
-  
-  const problemExists = (number) => {
-    // Check in API problems
-    return apiProblems.some(p => p.number === parseInt(number));
-  };
-
-  const validateDataset = () => {
-    const numbers = allProblems.map(p => p.number);
-    const duplicates = numbers.filter((n, i) => numbers.indexOf(n) !== i);
-    return duplicates.length === 0;
-  };
+  const problemExists = (number) => apiProblems.some(p => p.number === parseInt(number));
 
   // ============================================
   // PASSWORD VERIFICATION
@@ -1061,46 +991,35 @@ function App() {
     showNotification('✓ Marked as revised', 'success');
   };
 
-  const handleSolveTimeInput = (number) => {
-    const time = prompt('Enter solve time in minutes (or leave blank to skip):');
-    if (time !== null && time.trim() !== '') {
-      const minutes = parseInt(time);
-      if (!isNaN(minutes) && minutes > 0) {
-        setState(prev => ({
-          ...prev,
-          solveTimes: {
-            ...prev.solveTimes,
-            [number]: minutes
-          }
-        }));
-      }
-    }
+  // ============================================
+  // MANUAL STAT OVERRIDE HANDLERS
+  // ============================================
+  const handleStatClick = (key, currentVal) => {
+    const label = key === 'currentStreak' ? 'Current Streak' : key === 'maxStreak' ? 'Max Streak' : 'Active Days';
+    const input = prompt(`Enter new value for ${label}:`, currentVal);
+    if (input === null) return;
+    const val = parseInt(input.trim());
+    if (isNaN(val) || val < 0) { showNotification('❌ Enter a valid number ≥ 0', 'error'); return; }
+    setState(prev => ({ ...prev, manualStats: { ...(prev.manualStats || {}), [key]: val } }));
+    showNotification(`✓ ${label} set to ${val}`, 'success');
   };
 
-
-
-
-  const handleClearSearch = () => {
-    setSearchTerm('');
+  const handleStatReset = (key) => {
+    setState(prev => ({ ...prev, manualStats: { ...(prev.manualStats || {}), [key]: null } }));
+    showNotification('↩ Reset to auto-computed value', 'success');
   };
 
   // ============================================
   // ALIGN — Re-fetch from backend, all stats recompute automatically
   // ============================================
   const handleAlignHistoricalActivity = async () => {
-    if (!verifyPassword('align historical activity')) return;
     try {
-      showNotification('🔄 Syncing with backend...', 'success');
       const response = await window.API.getAllProblems();
       if (response.success) {
-        const problems = transformProblems(response.data);
-        // Single line — solvedDates useMemo + all analytics recompute automatically
-        setApiProblems(problems);
-        setShowAlignmentModal(false);
-        showNotification(`✓ Synced: ${problems.filter(p => p.status === 'Done').length} solved problems`, 'success');
+        setApiProblems(transformProblems(response.data));
       }
     } catch (err) {
-      showNotification(`❌ Sync failed: ${err.message}`, 'error');
+      console.error('Align failed:', err);
     }
   };
 
@@ -1128,13 +1047,6 @@ function App() {
     showNotification('✨ All filters cleared', 'success');
   };
 
-  // Auto-reset search when empty
-  useEffect(() => {
-    if (searchTerm.trim() === '') {
-      // Search is cleared, filtered results will show all
-    }
-  }, [searchTerm]);
-
   // ESC key to clear all filters
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -1156,17 +1068,16 @@ function App() {
   
   const totalSolved = allProblems.filter(p => p.status === 'Done').length;
   const totalProblems = allProblems.length;
-  const totalRemaining = allProblems.filter(p => p.status !== 'Done').length;
-  
-  // Rolling 100: current cycle progress = totalSolved % 100
-  // cycles = floor(totalSolved / 100)
+
+  // Rolling 100
   const completedCycles = Math.floor(totalSolved / 100);
-  const last100Progress = totalSolved % 100; // 0–99 within current cycle
+  const last100Progress = totalSolved % 100;
   const rollingProgressPercentage = last100Progress;
-  
-  // Average problems per active day
-  const activeDaysCount = heatmapData.activeDays || 0;
-  const avgProblemsPerDay = activeDaysCount > 0 ? (totalSolved / activeDaysCount).toFixed(2) : 0;
+
+  // Resolved display values — manual override takes priority over auto-computed
+  const displayCurrentStreak = state.manualStats?.currentStreak != null ? state.manualStats.currentStreak : heatmapData.currentStreak;
+  const displayMaxStreak     = state.manualStats?.maxStreak     != null ? state.manualStats.maxStreak     : heatmapData.maxStreak;
+  const displayActiveDays    = state.manualStats?.activeDays    != null ? state.manualStats.activeDays    : heatmapData.activeDays;
 
   // Advanced Analytics
   const consistencyScore = React.useMemo(() => {
@@ -1202,7 +1113,6 @@ function App() {
 
   const weeklyPerformance = calculateWeeklyPerformance(allProblems, solvedDates);
   const dailyAverage = calculateDailyAverage(allProblems, solvedDates);
-  const revisionStats = getRevisionStats(allProblems);
   const strongestDay = calculateStrongestDay(solvedDates);
   const solveTimes = calculateSolveTimes(allProblems, state.solveTimes || {});
   const targetSuggestion = React.useMemo(
@@ -1270,7 +1180,6 @@ function App() {
 
   // Weakness detection
   const hardCoverage = totalHard > 0 ? (hardCount / totalHard) * 100 : 0;
-  const weakPatterns = patternArray.filter(p => p.percentage < 50 && p.total > 0);
 
   // ============================================
   // PHASE 2: TOPIC STATS — per-topic strength analysis
@@ -1645,7 +1554,7 @@ function App() {
           <div className="stat-card stat-accent">
             <div className="stat-icon">📅</div>
             <div className="stat-content">
-              <div className="stat-value">{heatmapData.activeDays}</div>
+              <div className="stat-value">{displayActiveDays}</div>
               <div className="stat-label">Active Days</div>
             </div>
           </div>
@@ -1674,41 +1583,13 @@ function App() {
             {/* Editable streak stats — click any value to override manually */}
             {(() => {
               const ms = state.manualStats || {};
-              const displayStreak = ms.currentStreak != null ? ms.currentStreak : heatmapData.currentStreak;
-              const displayMax    = ms.maxStreak    != null ? ms.maxStreak    : heatmapData.maxStreak;
-              const displayActive = ms.activeDays   != null ? ms.activeDays   : heatmapData.activeDays;
-
-              const handleStatClick = (key, currentVal) => {
-                const input = prompt(`Enter new value for ${key === 'currentStreak' ? 'Current Streak' : key === 'maxStreak' ? 'Max Streak' : 'Active Days'}:`, currentVal);
-                if (input === null) return; // cancelled
-                const val = parseInt(input.trim());
-                if (isNaN(val) || val < 0) { showNotification('❌ Enter a valid number ≥ 0', 'error'); return; }
-                setState(prev => ({
-                  ...prev,
-                  manualStats: { ...(prev.manualStats || {}), [key]: val }
-                }));
-                showNotification(`✓ ${key === 'currentStreak' ? 'Current Streak' : key === 'maxStreak' ? 'Max Streak' : 'Active Days'} set to ${val}`, 'success');
-              };
-
-              const handleStatReset = (key) => {
-                setState(prev => ({
-                  ...prev,
-                  manualStats: { ...(prev.manualStats || {}), [key]: null }
-                }));
-                showNotification('↩ Reset to auto-computed value', 'success');
-              };
-
               const StatItem = ({ label, value, statKey, isManual }) => (
-                <div className="streak-item" style={{ position: 'relative', cursor: 'pointer' }} title={`Click to manually set ${label}`}>
-                  <div
-                    className="streak-value"
-                    onClick={() => handleStatClick(statKey, value)}
-                    style={{ userSelect: 'none' }}
-                  >
+                <div className="streak-item" style={{ cursor: 'pointer' }} title={`Click to manually set ${label}`}>
+                  <div className="streak-value" onClick={() => handleStatClick(statKey, value)} style={{ userSelect: 'none' }}>
                     {value}
                     {isManual && (
                       <span
-                        title="Manual override — click to reset to auto"
+                        title="Manual — click to reset"
                         onClick={(e) => { e.stopPropagation(); handleStatReset(statKey); }}
                         style={{ fontSize: '0.55rem', marginLeft: '4px', verticalAlign: 'super', color: 'var(--accent, #6366f1)', cursor: 'pointer' }}
                       >✏️</span>
@@ -1717,14 +1598,13 @@ function App() {
                   <div className="streak-label">{label}</div>
                 </div>
               );
-
               return (
                 <div className="streak-stats">
-                  <StatItem label="Current Streak" value={displayStreak} statKey="currentStreak" isManual={ms.currentStreak != null} />
+                  <StatItem label="Current Streak" value={displayCurrentStreak} statKey="currentStreak" isManual={ms.currentStreak != null} />
                   <div className="streak-divider"></div>
-                  <StatItem label="Max Streak" value={displayMax} statKey="maxStreak" isManual={ms.maxStreak != null} />
+                  <StatItem label="Max Streak" value={displayMaxStreak} statKey="maxStreak" isManual={ms.maxStreak != null} />
                   <div className="streak-divider"></div>
-                  <StatItem label="Active Days" value={displayActive} statKey="activeDays" isManual={ms.activeDays != null} />
+                  <StatItem label="Active Days" value={displayActiveDays} statKey="activeDays" isManual={ms.activeDays != null} />
                 </div>
               );
             })()}
@@ -1784,31 +1664,21 @@ function App() {
             </div>
 
             {/* Next Milestone */}
-            {(() => {
-              const cs = (state.manualStats?.currentStreak != null ? state.manualStats.currentStreak : heatmapData.currentStreak);
-              return (
-                <div className="streak-milestone">
-                  <div className="milestone-header">
-                    <span className="milestone-label">Next Milestone</span>
-                    <span className="milestone-target">{cs < 50 ? '50 Days' : '100 Days'}</span>
-                  </div>
-                  <div className="milestone-progress-bar">
-                    <div className="milestone-progress-fill" style={{ width: `${cs < 50 ? (cs / 50) * 100 : ((cs - 50) / 50) * 100}%` }}></div>
-                  </div>
-                  <div className="milestone-text">{cs < 50 ? `${cs} / 50 days` : `${cs} / 100 days`}</div>
-                </div>
-              );
-            })()}
+            <div className="streak-milestone">
+              <div className="milestone-header">
+                <span className="milestone-label">Next Milestone</span>
+                <span className="milestone-target">{displayCurrentStreak < 50 ? '50 Days' : '100 Days'}</span>
+              </div>
+              <div className="milestone-progress-bar">
+                <div className="milestone-progress-fill" style={{ width: `${displayCurrentStreak < 50 ? (displayCurrentStreak / 50) * 100 : ((displayCurrentStreak - 50) / 50) * 100}%` }}></div>
+              </div>
+              <div className="milestone-text">{displayCurrentStreak < 50 ? `${displayCurrentStreak} / 50 days` : `${displayCurrentStreak} / 100 days`}</div>
+            </div>
 
             {/* Motivation Message */}
-            {(() => {
-              const cs = (state.manualStats?.currentStreak != null ? state.manualStats.currentStreak : heatmapData.currentStreak);
-              return (
-                <div className="motivation-message">
-                  {cs >= 30 ? '🔥 Discipline Level: Elite' : cs >= 15 ? '⚡ Momentum Building' : '🚀 Build Your Streak'}
-                </div>
-              );
-            })()}
+            <div className="motivation-message">
+              {displayCurrentStreak >= 30 ? '🔥 Discipline Level: Elite' : displayCurrentStreak >= 15 ? '⚡ Momentum Building' : '🚀 Build Your Streak'}
+            </div>
           </div>
 
           <div className="monthly-card">
