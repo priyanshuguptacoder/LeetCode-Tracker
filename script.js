@@ -1608,14 +1608,14 @@ function App() {
             <span className="navbar-stat-label">Active Days</span>
           </div>
           <div className="navbar-stat-divider" />
-          <div className="navbar-stat">
-            <span className="navbar-stat-value">{totalProblems}</span>
-            <span className="navbar-stat-label">Total Problems</span>
-          </div>
-          <div className="navbar-stat-divider" />
           <div className="navbar-stat navbar-stat-targeted">
             <span className="navbar-stat-value">🎯 {targetedProblems.totalCount}</span>
             <span className="navbar-stat-label">Targeted</span>
+          </div>
+          <div className="navbar-stat-divider" />
+          <div className="navbar-stat">
+            <span className="navbar-stat-value">{totalProblems}</span>
+            <span className="navbar-stat-label">Total Problems</span>
           </div>
         </div>
 

@@ -53,7 +53,13 @@ body {
 .container {
     max-width: 1400px;
     margin: 0 auto;
-    padding: 24px;
+    padding: 32px 24px;
+}
+
+@media (max-width: 768px) {
+    .container {
+        padding: 16px;
+    }
 }
 
 /* ============================================
@@ -230,35 +236,44 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 0;
     background: var(--bg-secondary);
     border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 12px 24px;
-    margin-bottom: 24px;
-    flex-wrap: wrap;
+    border-radius: 16px;
+    padding: 0;
+    margin-bottom: 32px;
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
 }
 
 .navbar-stat {
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 4px 24px;
+    padding: 16px 32px;
+    flex: 1;
+    transition: background 0.2s ease;
+    cursor: default;
+}
+
+.navbar-stat:hover {
+    background: rgba(255,255,255,0.03);
 }
 
 .navbar-stat-value {
-    font-size: 1.4rem;
-    font-weight: 700;
+    font-size: 1.6rem;
+    font-weight: 800;
     color: var(--text-primary);
-    line-height: 1.2;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
 }
 
 .navbar-stat-label {
-    font-size: 0.72rem;
+    font-size: 0.68rem;
     color: var(--text-secondary);
     text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-top: 2px;
+    letter-spacing: 0.07em;
+    margin-top: 4px;
+    font-weight: 600;
 }
 
 .navbar-stat-targeted .navbar-stat-value {
@@ -267,9 +282,37 @@ body {
 
 .navbar-stat-divider {
     width: 1px;
-    height: 36px;
+    height: 40px;
     background: var(--border);
     flex-shrink: 0;
+}
+
+body.light-mode .navbar-stats {
+    background: #fff;
+    border-color: #E2E8F0;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+
+body.light-mode .navbar-stat:hover {
+    background: #F8FAFC;
+}
+
+@media (max-width: 768px) {
+    .navbar-stats {
+        flex-wrap: wrap;
+        border-radius: 12px;
+        margin-bottom: 20px;
+    }
+    .navbar-stat {
+        padding: 12px 16px;
+        min-width: 50%;
+    }
+    .navbar-stat-value {
+        font-size: 1.3rem;
+    }
+    .navbar-stat-divider {
+        display: none;
+    }
 }
 
 /* ============================================
@@ -355,8 +398,13 @@ body {
     background: var(--bg-secondary);
     border: 1px solid var(--border);
     border-radius: 16px;
-    padding: 28px;
-    margin-bottom: 24px;
+    padding: 20px 24px;
+    margin-bottom: 32px;
+    box-shadow: var(--shadow-sm);
+    transition: all 0.25s ease;
+}
+
+.progress-card:hover {
     box-shadow: var(--shadow-md);
 }
 
@@ -569,9 +617,15 @@ body {
 
 .analytics-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
-    gap: 24px;
-    margin-bottom: 24px;
+    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+    gap: 20px;
+    margin-bottom: 32px;
+}
+
+@media (max-width: 900px) {
+    .analytics-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 .analytics-card-full {
@@ -582,21 +636,22 @@ body {
     background: var(--bg-secondary);
     border: 1px solid var(--border);
     border-radius: 16px;
-    padding: 24px;
-    box-shadow: var(--shadow-md);
-    transition: all 0.3s ease;
+    padding: 20px;
+    box-shadow: var(--shadow-sm);
+    transition: all 0.25s ease;
 }
 
 .analytics-card:hover {
     transform: translateY(-2px);
     box-shadow: var(--shadow-lg);
+    border-color: rgba(0,200,150,0.2);
 }
 
 .card-title {
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 700;
     color: var(--text-primary);
-    margin-bottom: 20px;
+    margin-bottom: 16px;
 }
 
 /* Difficulty Stats */
@@ -803,9 +858,9 @@ body {
     background: var(--bg-secondary);
     border: 1px solid var(--border);
     border-radius: 16px;
-    padding: 24px;
-    margin-bottom: 24px;
-    box-shadow: var(--shadow-md);
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow-sm);
 }
 
 .filters-grid {
@@ -963,27 +1018,35 @@ body {
     border: 1px solid var(--border);
     border-radius: 16px;
     overflow: hidden;
-    box-shadow: var(--shadow-md);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 32px;
 }
 
 .table-header {
-    padding: 20px 24px;
+    padding: 18px 24px;
     border-bottom: 1px solid var(--border);
     display: flex;
     justify-content: space-between;
     align-items: center;
+    background: var(--bg-secondary);
+    position: sticky;
+    top: 0;
+    z-index: 10;
 }
 
 .table-header h3 {
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 700;
     color: var(--text-primary);
 }
 
 .table-count {
-    font-size: 13px;
+    font-size: 12px;
     color: var(--text-secondary);
     font-weight: 600;
+    background: var(--bg-tertiary);
+    padding: 4px 10px;
+    border-radius: 20px;
     transition: all 0.3s ease;
 }
 
@@ -992,22 +1055,14 @@ body {
 }
 
 @keyframes countPulse {
-    0% {
-        transform: scale(1);
-        color: var(--text-secondary);
-    }
-    50% {
-        transform: scale(1.15);
-        color: var(--primary);
-    }
-    100% {
-        transform: scale(1);
-        color: var(--text-secondary);
-    }
+    0% { transform: scale(1); color: var(--text-secondary); }
+    50% { transform: scale(1.15); color: var(--primary); }
+    100% { transform: scale(1); color: var(--text-secondary); }
 }
 
 .table-wrapper {
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .problems-table {
@@ -1017,39 +1072,40 @@ body {
 
 .problems-table thead {
     background: var(--bg-tertiary);
+    position: sticky;
+    top: 57px;
+    z-index: 9;
 }
 
 .problems-table th {
-    padding: 14px 16px;
+    padding: 12px 16px;
     text-align: left;
     font-size: 11px;
     font-weight: 700;
     color: var(--text-secondary);
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.6px;
     border-bottom: 1px solid var(--border);
+    white-space: nowrap;
 }
 
 .problems-table tbody tr {
     border-bottom: 1px solid var(--border);
-    transition: all 0.2s ease;
+    transition: all 0.15s ease;
     animation: fadeInRow 0.3s ease;
 }
 
 @keyframes fadeInRow {
-    from {
-        opacity: 0;
-        transform: translateY(-5px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 .problems-table tbody tr:hover {
-    background: rgba(0, 200, 150, 0.03);
-    transform: translateX(2px);
+    background: rgba(0, 200, 150, 0.04);
+}
+
+.problems-table tbody tr:last-child {
+    border-bottom: none;
 }
 
 .problems-table tbody tr.highlight-row {
@@ -1058,34 +1114,60 @@ body {
 
 @keyframes highlightPulse {
     0%, 100% { background: transparent; }
-    50% { background: rgba(0, 200, 150, 0.15); }
+    50% { background: rgba(0, 200, 150, 0.12); }
 }
 
 @keyframes highlightRow {
-    0% { 
-        background: rgba(0, 200, 150, 0.3);
-        transform: scale(1.02);
-    }
-    100% { 
-        background: transparent;
-        transform: scale(1);
-    }
+    0% { background: rgba(0, 200, 150, 0.25); transform: scale(1.01); }
+    100% { background: transparent; transform: scale(1); }
 }
 
 .problems-table td {
-    padding: 16px;
-    font-size: 14px;
+    padding: 14px 16px;
+    font-size: 13px;
     font-weight: 500;
+    vertical-align: middle;
 }
 
 .problem-number {
     font-weight: 700;
     color: var(--primary);
-    font-size: 15px;
+    font-size: 13px;
+    white-space: nowrap;
 }
 
 .problem-title {
     font-weight: 600;
+    color: var(--text-primary);
+    max-width: 280px;
+}
+
+/* Mobile card view for table */
+@media (max-width: 768px) {
+    .table-wrapper {
+        overflow-x: auto;
+    }
+    .problems-table {
+        min-width: 640px;
+    }
+    .problem-title {
+        max-width: 160px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+}
+
+body.light-mode .problems-table thead {
+    background: #F1F5F9;
+}
+
+body.light-mode .problems-table tbody tr:hover {
+    background: rgba(0, 200, 150, 0.04);
+}
+
+body.light-mode .table-count {
+    background: #F1F5F9;
 }
 
 .problem-link {
@@ -1460,21 +1542,13 @@ body {
 }
 
 /* ============================================
-   RESPONSIVE DESIGN
+   RESPONSIVE DESIGN (consolidated)
    ============================================ */
 
 @media (max-width: 768px) {
-    .container {
-        padding: 16px;
-    }
-
     .header-content {
         flex-direction: column;
         align-items: flex-start;
-    }
-
-    .stats-grid {
-        grid-template-columns: 1fr;
     }
 
     .analytics-grid {
@@ -1493,46 +1567,26 @@ body {
         grid-template-columns: 1fr;
     }
 
-    .table-wrapper {
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-    }
-
-    .problems-table {
-        min-width: 800px;
-    }
-
     .modal-content {
         width: 95%;
         max-width: 95vw;
         max-height: 85vh;
         margin: 10px;
     }
-    
+
     .modal-body {
         padding: 16px;
         max-height: 60vh;
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
     }
-    
-    .modal-header {
-        padding: 16px;
-    }
-    
-    .modal-footer {
-        padding: 16px;
-    }
-    
-    /* Fix for iOS Safari */
-    body {
-        -webkit-overflow-scrolling: touch;
-    }
-    
-    /* Prevent zoom on input focus */
-    input, select, textarea {
-        font-size: 16px !important;
-    }
+
+    .modal-header { padding: 16px; }
+    .modal-footer { padding: 16px; }
+
+    body { -webkit-overflow-scrolling: touch; }
+
+    input, select, textarea { font-size: 16px !important; }
 }
 
 /* ============================================
@@ -1597,9 +1651,15 @@ body.light-mode .modal-overlay {
 
 .streak-monthly-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 1.5rem;
-    margin-bottom: 2rem;
+    grid-template-columns: 2fr 1.5fr;
+    gap: 20px;
+    margin-bottom: 32px;
+}
+
+@media (max-width: 1024px) {
+    .streak-monthly-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 .streak-card,
@@ -1607,16 +1667,16 @@ body.light-mode .modal-overlay {
     background: var(--bg-secondary);
     border: 1px solid var(--border);
     border-radius: 16px;
-    padding: 1.5rem;
-    backdrop-filter: blur(10px);
-    transition: all 0.3s ease;
+    padding: 20px;
+    transition: all 0.25s ease;
+    box-shadow: var(--shadow-sm);
 }
 
 .streak-card:hover,
 .monthly-card:hover {
     transform: translateY(-2px);
     box-shadow: var(--shadow-lg);
-    border-color: var(--primary);
+    border-color: rgba(0, 200, 150, 0.25);
 }
 
 .streak-stats {
@@ -1882,9 +1942,9 @@ body.light-mode .modal-overlay {
 
 .advanced-analytics-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 1.5rem;
-    margin-bottom: 2rem;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 20px;
+    margin-bottom: 32px;
 }
 
 /* Consistency Score */
@@ -2179,9 +2239,10 @@ body.light-mode .modal-overlay {
     background: var(--bg-secondary);
     border: 1px solid var(--border);
     border-radius: 16px;
-    padding: 1.5rem;
-    margin-bottom: 2rem;
-    backdrop-filter: blur(10px);
+    padding: 20px;
+    margin-bottom: 32px;
+    box-shadow: var(--shadow-sm);
+    transition: all 0.25s ease;
 }
 
 .solve-time-grid {
@@ -2222,30 +2283,34 @@ body.light-mode .modal-overlay {
     background: var(--bg-secondary);
     border: 1px solid var(--border);
     border-radius: 16px;
-    padding: 1.5rem;
-    margin-bottom: 2rem;
-    backdrop-filter: blur(10px);
+    padding: 20px;
+    margin-bottom: 32px;
+    box-shadow: var(--shadow-sm);
+    transition: all 0.25s ease;
 }
 
 .revision-list {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
-    margin-top: 1.5rem;
+    gap: 8px;
+    margin-top: 12px;
 }
 
 .revision-item {
     display: flex;
     align-items: center;
-    gap: 1rem;
-    padding: 1rem;
+    gap: 12px;
+    padding: 12px 14px;
     background: var(--bg-tertiary);
-    border-radius: 8px;
-    transition: all 0.3s ease;
+    border-radius: 10px;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
 }
 
 .revision-item:hover {
     background: var(--bg-primary);
+    border-color: rgba(0,200,150,0.15);
+    transform: translateX(2px);
 }
 
 .revision-number {
