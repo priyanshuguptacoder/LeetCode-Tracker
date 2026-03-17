@@ -1259,7 +1259,8 @@ function App() {
   // ============================================
   // PHASE 4: TARGETED PROBLEMS ENGINE
   // Only solved problems. Conditions: never revised, stale revision (>7d), or weak topic.
-  // Each entry gets a revision status label and a numeric priority score.
+  // Capped per difficulty (4 Medium, 3 Hard, 3 Easy) so list is balanced, not all-Hard.
+  // Header shows total count in DB, list shows top 10 balanced picks.
   // ============================================
   const targetedProblems = React.useMemo(() => {
     const today = new Date();
@@ -1284,10 +1285,10 @@ function App() {
       .slice(0, Math.max(1, Math.ceil(weaknessAnalysis.length / 2)))
       .forEach(w => weakTopicSet.add(w.topic));
 
-    const results = [];
+    const candidates = [];
 
     allProblems.forEach(p => {
-      if (p.status !== 'Done') return; // only solved problems
+      if (p.status !== 'Done') return;
 
       const topics = p.topics || [p.pattern];
       const isWeakTopic = topics.some(t => weakTopicSet.has(t));
@@ -1298,30 +1299,65 @@ function App() {
         : Infinity;
 
       const neverRevised = revCount === 0;
-      const stale = daysSinceRevision > 7;
+      const stale = isFinite(daysSinceRevision) && daysSinceRevision > 7;
 
       // Must meet at least one condition
       if (!neverRevised && !stale && !isWeakTopic) return;
 
-      const diffScore = p.difficulty === 'Hard' ? 3 : p.difficulty === 'Medium' ? 2 : 1;
-
+      // Priority: stale/weak beats never-revised-but-not-weak
+      // This prevents all-Hard domination
       let statusLabel, priority;
-      if (neverRevised) {
-        statusLabel = '❌ Never Revised';
-        priority = 90 + diffScore * 10;
+      if (stale && isWeakTopic) {
+        statusLabel = '⚠️ Needs Revision';
+        priority = 100 + Math.min(daysSinceRevision, 365);
       } else if (stale) {
-        statusLabel = `⚠️ Needs Revision`;
-        priority = 60 + diffScore * 5 + Math.min(daysSinceRevision, 365);
+        statusLabel = '⚠️ Needs Revision';
+        priority = 70 + Math.min(daysSinceRevision, 365);
+      } else if (neverRevised && isWeakTopic) {
+        statusLabel = '❌ Never Revised';
+        priority = 60;
+      } else if (neverRevised) {
+        statusLabel = '❌ Never Revised';
+        priority = 30;
       } else {
         statusLabel = '🔁 Recently Revised';
-        priority = 20 + diffScore * 3;
+        priority = 10;
       }
 
-      results.push({ ...p, _statusLabel: statusLabel, _priority: priority, _daysSinceRevision: daysSinceRevision });
+      candidates.push({ ...p, _statusLabel: statusLabel, _priority: priority, _daysSinceRevision: daysSinceRevision });
     });
 
-    results.sort((a, b) => b._priority - a._priority);
-    return results.slice(0, 10);
+    // Sort by priority desc
+    candidates.sort((a, b) => b._priority - a._priority);
+
+    // Total count before capping (shown in header)
+    const totalCount = candidates.length;
+
+    // Pick balanced top 10: up to 4 Medium, 3 Hard, 3 Easy
+    // Fill remaining slots from whatever is left
+    const caps = { Easy: 3, Medium: 4, Hard: 3 };
+    const counts = { Easy: 0, Medium: 0, Hard: 0 };
+    const picked = [];
+    for (const p of candidates) {
+      const diff = p.difficulty || 'Medium';
+      if ((counts[diff] || 0) < (caps[diff] || 3)) {
+        picked.push(p);
+        counts[diff] = (counts[diff] || 0) + 1;
+        if (picked.length === 10) break;
+      }
+    }
+    // If still under 10, fill with remaining
+    if (picked.length < 10) {
+      const pickedNums = new Set(picked.map(p => p.number));
+      for (const p of candidates) {
+        if (!pickedNums.has(p.number)) {
+          picked.push(p);
+          if (picked.length === 10) break;
+        }
+      }
+    }
+
+    return { list: picked, totalCount };
   }, [allProblems, weaknessAnalysis]);
 
   // ============================================
@@ -1960,14 +1996,14 @@ function App() {
         {/* Targeted Problems Engine */}
         <div className="revision-card" style={{ marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-            <h3 className="card-title" style={{ margin: 0 }}>🎯 Targeted Problems ({targetedProblems.length})</h3>
+            <h3 className="card-title" style={{ margin: 0 }}>🎯 Targeted Problems ({targetedProblems.totalCount})</h3>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-              Solved · needs revision or weak topic
+              showing top 10 · balanced by difficulty
             </span>
           </div>
-          {targetedProblems.length > 0 ? (
+          {targetedProblems.list.length > 0 ? (
             <div className="revision-list">
-              {targetedProblems.map(problem => (
+              {targetedProblems.list.map(problem => (
                 <div key={problem.number} className="revision-item">
                   <span className="revision-number">#{problem.number}</span>
                   <span className="revision-title" style={{ flex: 1 }}>{problem.title}</span>
