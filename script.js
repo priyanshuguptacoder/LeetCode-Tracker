@@ -515,6 +515,14 @@ function App() {
   const [isAdminUnlocked, setIsAdminUnlocked] = useState(
     () => sessionStorage.getItem('admin') === 'true'
   );
+  const [showScrollTop, setShowScrollTop] = React.useState(false);
+  React.useEffect(() => {
+    const onScroll = () => setShowScrollTop(window.scrollY > 400);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+  const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [pendingAction, setPendingAction] = useState(null);
   const autoLockTimerRef = useRef(null);
@@ -1641,7 +1649,8 @@ function App() {
         patternFilter === 'All' || problem.pattern === patternFilter;
 
       const matchesStatus =
-        statusFilter === 'All' || problem.status === statusFilter;
+        statusFilter === 'All' || 
+        (statusFilter === 'Targeted' ? problem.targeted === true : problem.status === statusFilter);
 
       return matchesSearch && matchesDifficulty && matchesPattern && matchesStatus;
     });
@@ -2441,6 +2450,7 @@ function App() {
                 <option>Not Started</option>
                 <option>In Progress</option>
                 <option>Done</option>
+                <option>Targeted</option>
               </select>
             </div>
             {(searchTerm || difficultyFilter !== 'All' || patternFilter !== 'All' || statusFilter !== 'All') && (
@@ -2812,6 +2822,15 @@ function App() {
           </div>
         );
       })()}
+
+
+
+      {/* Scroll to Top */}
+      {showScrollTop && (
+        <button className="scroll-to-top" onClick={scrollToTop} title="Back to top">
+          ↑
+        </button>
+      )}
 
 
 

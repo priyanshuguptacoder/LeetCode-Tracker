@@ -15,33 +15,48 @@ function dateStr(date, tz) {
 
 // Calendar-day difference between two YYYY-MM-DD strings (b minus a)
 function dayDiff(a, b) {
-  return Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000);
+  // Parse as local midnight to avoid UTC offset issues
+  const [ay, am, ad] = a.split('-').map(Number);
+  const [by, bm, bd] = b.split('-').map(Number);
+  const dateA = new Date(ay, am - 1, ad);
+  const dateB = new Date(by, bm - 1, bd);
+  return Math.round((dateB.getTime() - dateA.getTime()) / 86400000);
 }
 
 // ─── Streak update — 3-case logic ────────────────────────────────────────────
 async function applyStreakUpdate(settings) {
-  const today = todayStr();
-  const last  = settings.lastSolvedDate ? dateStr(settings.lastSolvedDate) : null;
+  const today = todayStr(); // YYYY-MM-DD in IST
+  // Always convert lastSolvedDate to IST date string for comparison
+  const last = settings.lastSolvedDate ? dateStr(settings.lastSolvedDate) : null;
   let { currentStreak, maxStreak, activeDays } = settings;
+
+  console.log(`[streak] today=${today} last=${last} currentStreak=${currentStreak} maxStreak=${maxStreak} activeDays=${activeDays}`);
 
   if (last === today) {
     // CASE 1: already solved today — no change
+    console.log('[streak] Case 1: same day, no change');
   } else if (last && dayDiff(last, today) === 1) {
-    // CASE 2: consecutive day
+    // CASE 2: consecutive day — extend streak
     currentStreak += 1;
     activeDays    += 1;
+    console.log(`[streak] Case 2: consecutive day → streak=${currentStreak} activeDays=${activeDays}`);
   } else {
-    // CASE 3: first solve ever OR gap > 1 day — reset streak
+    // CASE 3: first solve ever OR gap > 1 day — reset streak to 1
     currentStreak = 1;
     activeDays   += 1;
+    console.log(`[streak] Case 3: gap/new → streak=1 activeDays=${activeDays}`);
   }
 
   if (currentStreak > maxStreak) maxStreak = currentStreak;
   if (activeDays < currentStreak) activeDays = currentStreak;
 
+  // Store lastSolvedDate as start-of-day in IST to avoid timezone drift on next read
+  const [ty, tm, td] = today.split('-').map(Number);
+  const lastSolvedDate = new Date(Date.UTC(ty, tm - 1, td, 0, 0, 0));
+
   return Settings.findOneAndUpdate(
     { key: 'global' },
-    { $set: { currentStreak, maxStreak, activeDays, lastSolvedDate: new Date() } },
+    { $set: { currentStreak, maxStreak, activeDays, lastSolvedDate } },
     { new: true, upsert: true }
   );
 }
@@ -70,7 +85,7 @@ exports.getStreak = async (req, res) => {
 // ─── PUT /api/problems/streak ─────────────────────────────────────────────────
 exports.updateStreak = async (req, res) => {
   try {
-    const { currentStreak, maxStreak, activeDays, force } = req.body;
+    const { currentStreak, maxStreak, activeDays, lastSolvedDate, force } = req.body;
     let s = await Settings.findOne({ key: 'global' });
     if (!s) s = await Settings.create({ key: 'global' });
 
@@ -86,9 +101,18 @@ exports.updateStreak = async (req, res) => {
     if (isNaN(ms) || ms < cs) return res.status(400).json({ success: false, error: 'maxStreak must be >= currentStreak' });
     if (isNaN(ad) || ad < cs) return res.status(400).json({ success: false, error: 'activeDays must be >= currentStreak' });
 
+    const updateFields = { currentStreak: cs, maxStreak: ms, activeDays: ad, isSetup: true };
+    if (lastSolvedDate) updateFields.lastSolvedDate = new Date(lastSolvedDate);
+    // If no lastSolvedDate provided, set to UTC midnight of today in IST to avoid timezone drift
+    if (!lastSolvedDate) {
+      const todayIST = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      const [ty, tm, td] = todayIST.split('-').map(Number);
+      updateFields.lastSolvedDate = new Date(Date.UTC(ty, tm - 1, td, 0, 0, 0));
+    }
+
     s = await Settings.findOneAndUpdate(
       { key: 'global' },
-      { $set: { currentStreak: cs, maxStreak: ms, activeDays: ad, isSetup: true } },
+      { $set: updateFields },
       { new: true, upsert: true }
     );
     res.json({ success: true, data: streakPayload(s) });
