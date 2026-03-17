@@ -204,6 +204,29 @@ exports.reviseProblem = async (req, res) => {
   }
 };
 
+// ─── POST /api/problems/:id/unrevise ─────────────────────────────────────────
+exports.unreviseProblem = async (req, res) => {
+  try {
+    const current = await Problem.findOne({ id: parseInt(req.params.id) });
+    if (!current) return res.status(404).json({ success: false, error: 'Problem not found' });
+    if ((current.revisionCount || 0) === 0) {
+      return res.status(400).json({ success: false, error: 'revisionCount is already 0' });
+    }
+    const newCount = current.revisionCount - 1;
+    const problem = await Problem.findOneAndUpdate(
+      { id: parseInt(req.params.id) },
+      { $set: { revisionCount: newCount, lastRevisedAt: newCount === 0 ? null : current.lastRevisedAt } },
+      { new: true, runValidators: true }
+    );
+    res.json({
+      success: true,
+      data: { id: problem.id, revisionCount: problem.revisionCount, lastRevisedAt: problem.lastRevisedAt },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Failed to unrevise', message: err.message });
+  }
+};
+
 // ─── DELETE /api/problems/:id ─────────────────────────────────────────────────
 exports.deleteProblem = async (req, res) => {
   try {

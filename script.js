@@ -946,14 +946,14 @@ function App() {
   };
 
   const [revisingId, setRevisingId] = React.useState(null);
+  const [unrevisingId, setUnrevisingId] = React.useState(null);
 
   const handleRevise = async (number) => {
-    if (revisingId === number) return; // prevent double-click
+    if (revisingId === number) return;
     try {
       setRevisingId(number);
       const res = await window.API.reviseProblem(number);
       if (res.success) {
-        // Patch only the revised problem in state — no full refetch needed
         setApiProblems(prev => prev.map(p =>
           p.number === number
             ? { ...p, revisionCount: res.data.revisionCount, lastRevisedAt: res.data.lastRevisedAt }
@@ -965,6 +965,26 @@ function App() {
       showNotification(`❌ ${err.message}`, 'error');
     } finally {
       setRevisingId(null);
+    }
+  };
+
+  const handleUnrevise = async (number) => {
+    if (unrevisingId === number) return;
+    try {
+      setUnrevisingId(number);
+      const res = await window.API.unreviseProblem(number);
+      if (res.success) {
+        setApiProblems(prev => prev.map(p =>
+          p.number === number
+            ? { ...p, revisionCount: res.data.revisionCount, lastRevisedAt: res.data.lastRevisedAt }
+            : p
+        ));
+        showNotification('Revision removed ✅', 'success');
+      }
+    } catch (err) {
+      showNotification(`❌ ${err.message}`, 'error');
+    } finally {
+      setUnrevisingId(null);
     }
   };
 
@@ -1576,28 +1596,26 @@ function App() {
       </header>
 
       <div className="container">
-        {/* Stats Grid */}
-        <div className="stats-grid">
-          <div className="stat-card stat-primary">
-            <div className="stat-icon">🎯</div>
-            <div className="stat-content">
-              <div className="stat-value">{totalSolved}</div>
-              <div className="stat-label">Problems Solved</div>
-            </div>
+        {/* Navbar Stats Bar */}
+        <div className="navbar-stats">
+          <div className="navbar-stat">
+            <span className="navbar-stat-value">{totalSolved}</span>
+            <span className="navbar-stat-label">Problems Solved</span>
           </div>
-          <div className="stat-card stat-accent">
-            <div className="stat-icon">📅</div>
-            <div className="stat-content">
-              <div className="stat-value">{displayActiveDays}</div>
-              <div className="stat-label">Active Days</div>
-            </div>
+          <div className="navbar-stat-divider" />
+          <div className="navbar-stat">
+            <span className="navbar-stat-value">{displayActiveDays}</span>
+            <span className="navbar-stat-label">Active Days</span>
           </div>
-          <div className="stat-card stat-info">
-            <div className="stat-icon">📚</div>
-            <div className="stat-content">
-              <div className="stat-value">{totalProblems}</div>
-              <div className="stat-label">Total Problems</div>
-            </div>
+          <div className="navbar-stat-divider" />
+          <div className="navbar-stat">
+            <span className="navbar-stat-value">{totalProblems}</span>
+            <span className="navbar-stat-label">Total Problems</span>
+          </div>
+          <div className="navbar-stat-divider" />
+          <div className="navbar-stat navbar-stat-targeted">
+            <span className="navbar-stat-value">🎯 {targetedProblems.totalCount}</span>
+            <span className="navbar-stat-label">Targeted</span>
           </div>
         </div>
 
@@ -1705,7 +1723,7 @@ function App() {
           </div>
 
           <div className="monthly-card">
-            <h3 className="card-title">📅 Monthly Progress</h3>
+            <h3 className="card-title">📅 Monthly Planner</h3>
             <div className="monthly-header">
               <div className="current-month">
                 {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
@@ -1716,43 +1734,97 @@ function App() {
                 </div>
               )}
             </div>
-            <div className="monthly-progress" style={{ margin: '1rem 0' }}>
-              <div className="monthly-count">
-                <span className="monthly-value" style={{ fontSize: '2.5rem', fontWeight: '700' }}>{currentMonthStats.count}</span>
+
+            {/* Core metrics — compact grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', margin: '0.75rem 0' }}>
+              <div style={{ background: 'rgba(99,102,241,0.1)', borderRadius: '8px', padding: '0.5rem 0.75rem' }}>
+                <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--primary)' }}>{currentMonthStats.count}</div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>solved this month</div>
               </div>
-              <div className="monthly-label">Problems Solved</div>
+              {targetSuggestion.hasData ? (
+                <>
+                  <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '8px', padding: '0.5rem 0.75rem' }}>
+                    <div style={{ fontSize: '1.4rem', fontWeight: 700 }}>{targetSuggestion.moderateMonthlyTarget}</div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>monthly target</div>
+                  </div>
+                  <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '8px', padding: '0.5rem 0.75rem' }}>
+                    <div style={{ fontSize: '1.4rem', fontWeight: 700 }}>{targetSuggestion.avgLast30}</div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>avg/day (30d)</div>
+                  </div>
+                  <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '8px', padding: '0.5rem 0.75rem' }}>
+                    <div style={{ fontSize: '1.4rem', fontWeight: 700, color: parseFloat(targetSuggestion.dailyRequired) > parseFloat(targetSuggestion.avgLast30) ? 'var(--warning, #f59e0b)' : 'var(--success)' }}>{targetSuggestion.dailyRequired}</div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>required/day · {targetSuggestion.remainingDays}d left</div>
+                  </div>
+                </>
+              ) : (
+                <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '8px', padding: '0.5rem 0.75rem', gridColumn: 'span 1' }}>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Need 7+ days of data</div>
+                </div>
+              )}
             </div>
-            
-            {/* Suggested Target */}
-            {targetSuggestion.hasData ? (
-              <div className="suggestion-section">
-                <div className="suggestion-header">
-                  <span className="suggestion-icon">📊</span>
-                  <span className="suggestion-title">Daily Target</span>
-                </div>
-                <div style={{ display: 'flex', gap: '1.5rem', margin: '0.5rem 0', alignItems: 'center' }}>
-                  <div>
-                    <div className="suggestion-value" style={{ fontSize: '1.6rem' }}>{targetSuggestion.dailyRequired}</div>
-                    <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>required/day</div>
+
+            {/* 🎯 Today's Plan */}
+            {targetSuggestion.hasData && (() => {
+              const solveTarget = Math.max(1, Math.ceil(parseFloat(targetSuggestion.dailyRequired)));
+              const reviseTarget = Math.min(3, targetedProblems.totalCount);
+              const focusTopics = weaknessAnalysis.slice(0, 2).map(w => w.topic);
+              return (
+                <div style={{ background: 'rgba(99,102,241,0.08)', borderRadius: '8px', padding: '0.6rem 0.75rem', marginBottom: '0.75rem' }}>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)', marginBottom: '0.4rem' }}>🎯 Today's Plan</div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-primary)', lineHeight: 1.8 }}>
+                    <div>Solve: <strong>{solveTarget}</strong> &nbsp;·&nbsp; Revise: <strong>{reviseTarget}</strong></div>
+                    {focusTopics.length > 0 && (
+                      <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+                        Focus: {focusTopics.join(' · ')}
+                      </div>
+                    )}
                   </div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                    <div>Avg: <strong>{targetSuggestion.avgLast30}</strong>/day (last 30d)</div>
-                    <div>This month: <strong>{targetSuggestion.currentMonthCount}</strong> solved</div>
-                    <div>Days left: <strong>{targetSuggestion.remainingDays}</strong></div>
+                </div>
+              );
+            })()}
+
+            {/* 🚨 What to Focus */}
+            {(() => {
+              const focusItems = [];
+
+              // Inactive topics > 14 days
+              weaknessAnalysis
+                .filter(w => w.daysSinceLast >= 14)
+                .slice(0, 2)
+                .forEach(w => {
+                  focusItems.push({ icon: '🔴', msg: `${w.topic} inactive for ${w.daysSinceLast} days` });
+                });
+
+              // Weekly drop
+              if (weeklyPerformance.lastWeek > 0 && weeklyPerformance.change < -20) {
+                focusItems.push({ icon: '📉', msg: `Solving dropped ${Math.abs(weeklyPerformance.change)}% this week` });
+              }
+
+              // Low hard %
+              const totalD = easyCount + mediumCount + hardCount;
+              if (totalD > 0 && hardCount / totalD < 0.1) {
+                focusItems.push({ icon: '⚠️', msg: `Only ${Math.round((hardCount / totalD) * 100)}% Hard problems` });
+              }
+
+              // Positive signal
+              if (consistencyScore.score >= 70) {
+                focusItems.push({ icon: '🔥', msg: `${consistencyScore.score}% consistency — keep it up` });
+              }
+
+              if (focusItems.length === 0) return null;
+              return (
+                <div>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.35rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>🚨 What to Focus</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                    {focusItems.map((item, i) => (
+                      <div key={i} style={{ fontSize: '0.8rem', color: 'var(--text-primary)', display: 'flex', gap: '0.4rem', alignItems: 'flex-start' }}>
+                        <span>{item.icon}</span><span>{item.msg}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              </div>
-            ) : (
-              <div className="suggestion-section">
-                <div className="suggestion-header">
-                  <span className="suggestion-icon">📊</span>
-                  <span className="suggestion-title">Daily Target</span>
-                </div>
-                <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.5rem' }}>
-                  Need 7+ tracked days for target data.
-                </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
         </div>
 
@@ -1870,20 +1942,6 @@ function App() {
           </div>
         )}
 
-        {/* Performance Insights (Phase 10) */}
-        {performanceInsights.length > 0 && (
-          <div className="revision-card" style={{ marginBottom: '1.5rem' }}>
-            <h3 className="card-title">🧠 Performance Insights</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {performanceInsights.map((insight, idx) => (
-                <div key={idx} style={{ padding: '0.6rem 0.8rem', background: 'rgba(99,102,241,0.08)', borderRadius: '8px', fontSize: '0.85rem', lineHeight: '1.4', color: 'var(--text-primary)' }}>
-                  {insight}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Topic Weakness Analysis (Phase 3) */}
         <div className="revision-card" style={{ marginBottom: '1.5rem' }}>
           <h3 className="card-title">📊 Topic Strength Analysis</h3>
@@ -1992,49 +2050,6 @@ function App() {
             </div>
           );
         })()}
-
-        {/* Targeted Problems Engine */}
-        <div className="revision-card" style={{ marginBottom: '1.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-            <h3 className="card-title" style={{ margin: 0 }}>🎯 Targeted Problems ({targetedProblems.totalCount})</h3>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-              showing top 10 · balanced by difficulty
-            </span>
-          </div>
-          {targetedProblems.list.length > 0 ? (
-            <div className="revision-list">
-              {targetedProblems.list.map(problem => (
-                <div key={problem.number} className="revision-item">
-                  <span className="revision-number">#{problem.number}</span>
-                  <span className="revision-title" style={{ flex: 1 }}>{problem.title}</span>
-                  <span style={{
-                    fontSize: '0.7rem',
-                    color: problem._statusLabel.startsWith('❌') ? 'var(--danger)'
-                      : problem._statusLabel.startsWith('⚠') ? 'var(--warning, #f59e0b)'
-                      : 'var(--success)',
-                    marginRight: '0.5rem', whiteSpace: 'nowrap'
-                  }}>
-                    {problem._statusLabel}
-                  </span>
-                  <span className={`badge badge-${(problem.difficulty || 'medium').toLowerCase()}`} style={{ marginRight: '0.5rem' }}>
-                    {problem.difficulty}
-                  </span>
-                  <button
-                    className="btn-revised"
-                    onClick={() => handleRevise(problem.number)}
-                    disabled={revisingId === problem.number}
-                  >
-                    {revisingId === problem.number ? '⏳' : '🔁 Revise'}
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-secondary)' }}>
-              🎉 You're well revised!
-            </div>
-          )}
-        </div>
 
         {/* Progress Section */}
         <div className="progress-card">
@@ -2276,19 +2291,42 @@ function App() {
                             : null;
                           const label = daysAgo === null ? null
                             : daysAgo === 0 ? 'Today'
-                            : daysAgo === 1 ? '1 day ago'
-                            : `${daysAgo} days ago`;
+                            : daysAgo === 1 ? '1d ago'
+                            : `${daysAgo}d ago`;
                           return (
-                            <span style={{
-                              display: 'inline-flex', flexDirection: 'column', alignItems: 'center',
-                              padding: '0.2rem 0.5rem', borderRadius: '12px', fontSize: '0.8rem', fontWeight: '600',
-                              background: count > 0 ? 'rgba(99,102,241,0.15)' : 'rgba(255,255,255,0.05)',
-                              color: count > 0 ? 'var(--primary)' : 'var(--text-secondary)',
-                              lineHeight: 1.3,
-                            }} title={label ? `Last revised: ${label}` : 'Not revised yet'}>
-                              🔁 {count}
-                              {label && <span style={{ fontSize: '0.65rem', opacity: 0.75 }}>{label}</span>}
-                            </span>
+                            <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <button
+                                  onClick={() => handleUnrevise(problem.number)}
+                                  disabled={count === 0 || unrevisingId === problem.number}
+                                  style={{
+                                    width: '20px', height: '20px', borderRadius: '4px', border: '1px solid var(--border)',
+                                    background: 'transparent', color: count === 0 ? 'var(--text-secondary)' : 'var(--text-primary)',
+                                    cursor: count === 0 ? 'not-allowed' : 'pointer', fontSize: '0.85rem', lineHeight: 1,
+                                    opacity: count === 0 ? 0.3 : 1, padding: 0,
+                                  }}
+                                  title="Remove revision"
+                                >−</button>
+                                <span style={{
+                                  padding: '0.15rem 0.4rem', borderRadius: '10px', fontSize: '0.8rem', fontWeight: 600,
+                                  background: count > 0 ? 'rgba(99,102,241,0.15)' : 'rgba(255,255,255,0.05)',
+                                  color: count > 0 ? 'var(--primary)' : 'var(--text-secondary)', minWidth: '28px', textAlign: 'center',
+                                }}>
+                                  🔁 {count}
+                                </span>
+                                <button
+                                  onClick={() => handleRevise(problem.number)}
+                                  disabled={revisingId === problem.number}
+                                  style={{
+                                    width: '20px', height: '20px', borderRadius: '4px', border: '1px solid var(--border)',
+                                    background: 'transparent', color: 'var(--text-primary)',
+                                    cursor: 'pointer', fontSize: '0.85rem', lineHeight: 1, padding: 0,
+                                  }}
+                                  title="Add revision"
+                                >+</button>
+                              </div>
+                              {label && <span style={{ fontSize: '0.62rem', color: 'var(--text-secondary)', opacity: 0.75 }}>{label}</span>}
+                            </div>
                           );
                         })()}
                       </td>
@@ -2316,16 +2354,6 @@ function App() {
                       </td>
                       <td>
                         <div className="action-buttons">
-                          {problem.status === 'Done' && (
-                            <button
-                              className="btn-revision"
-                              onClick={() => handleRevise(problem.number)}
-                              disabled={revisingId === problem.number}
-                              title="Record a revision"
-                            >
-                              {revisingId === problem.number ? '⏳' : '🔁'}
-                            </button>
-                          )}
                           <button
                             className="btn-delete"
                             onClick={() => handleDelete(problem.number, problem.isCustom)}

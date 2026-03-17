@@ -223,6 +223,56 @@ body {
 }
 
 /* ============================================
+   NAVBAR STATS BAR
+   ============================================ */
+
+.navbar-stats {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 12px 24px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+}
+
+.navbar-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 4px 24px;
+}
+
+.navbar-stat-value {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.2;
+}
+
+.navbar-stat-label {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 2px;
+}
+
+.navbar-stat-targeted .navbar-stat-value {
+    color: var(--primary);
+}
+
+.navbar-stat-divider {
+    width: 1px;
+    height: 36px;
+    background: var(--border);
+    flex-shrink: 0;
+}
+
+/* ============================================
    STATS GRID
    ============================================ */
 

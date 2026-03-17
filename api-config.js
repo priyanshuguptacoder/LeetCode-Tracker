@@ -54,6 +54,11 @@ const api = {
     if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Failed to record revision'); }
     return r.json();
   },
+  unreviseProblem: async (id) => {
+    const r = await fetch(`${API_BASE_URL}/problems/${id}/unrevise`, { method: 'POST' });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Failed to unrevise'); }
+    return r.json();
+  },
   getStats: async () => {
     const r = await fetch(`${API_BASE_URL}/problems/stats`);
     if (!r.ok) throw new Error('Failed to fetch stats');
