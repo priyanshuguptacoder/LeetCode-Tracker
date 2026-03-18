@@ -4903,6 +4903,11 @@ body.light-mode .pc-empty small {
    MOBILE PROBLEM CARDS — replaces table on ≤768px
    ============================================ */
 
+/* Hide mobile cards on desktop — base rule MUST come before media query */
+.problems-mobile {
+    display: none;
+}
+
 /* Hide table on mobile, show cards */
 @media (max-width: 768px) {
     .table-wrapper {
@@ -4914,11 +4919,6 @@ body.light-mode .pc-empty small {
         gap: 10px;
         padding: 12px;
     }
-}
-
-/* Hide mobile cards on desktop */
-.problems-mobile {
-    display: none;
 }
 
 /* Individual mobile card */
