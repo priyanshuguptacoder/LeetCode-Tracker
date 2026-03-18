@@ -10,6 +10,8 @@ const {
   unreviseProblem,
   targetProblem,
   untargetProblem,
+  toggleStriver,
+  getStriverStats,
   getStats,
   getSettings,
   alignProblems,
@@ -22,6 +24,7 @@ router.get('/stats', getStats);
 router.get('/settings', getSettings);
 router.get('/streak', getStreak);
 router.put('/streak', updateStreak);
+router.get('/striver-stats', getStriverStats);
 router.post('/align', alignProblems);
 router.get('/', getAllProblems);
 router.post('/', createProblem);
@@ -31,6 +34,7 @@ router.post('/:id/revise', reviseProblem);
 router.post('/:id/unrevise', unreviseProblem);
 router.post('/:id/target', targetProblem);
 router.post('/:id/untarget', untargetProblem);
+router.patch('/:id/striver', toggleStriver);
 router.delete('/:id', deleteProblem);
 
 module.exports = router;

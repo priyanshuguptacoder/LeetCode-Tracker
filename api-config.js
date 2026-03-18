@@ -62,6 +62,16 @@ const api = {
     if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Failed to untarget problem'); }
     return r.json();
   },
+  toggleStriver: async (id) => {
+    const r = await fetch(`${API_BASE_URL}/problems/${id}/striver`, { method: 'PATCH' });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Failed to toggle striver'); }
+    return r.json();
+  },
+  getStriverStats: async () => {
+    const r = await fetch(`${API_BASE_URL}/problems/striver-stats`);
+    if (!r.ok) throw new Error('Failed to fetch striver stats');
+    return r.json();
+  },
   getStreak: async () => {
     const r = await fetch(`${API_BASE_URL}/problems/streak`);
     if (!r.ok) throw new Error('Failed to fetch streak');

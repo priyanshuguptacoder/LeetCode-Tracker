@@ -5607,3 +5607,145 @@ body.light-mode .scroll-btn:hover {
     background: #15803d;
     box-shadow: 0 6px 22px rgba(22,163,74,0.4), 0 2px 6px rgba(0,0,0,0.12);
 }
+
+/* ============================================
+   STRIVER BUTTON — table action button
+   ============================================ */
+
+.btn-striver {
+    background: rgba(100, 116, 139, 0.15);
+    border: 1.5px solid rgba(100, 116, 139, 0.3);
+    color: var(--text-secondary);
+    padding: 5px 8px;
+    border-radius: 7px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    opacity: 0.55;
+    transition: all 0.2s ease;
+}
+
+.btn-striver:hover {
+    opacity: 0.85;
+    border-color: rgba(59, 130, 246, 0.5);
+    background: rgba(59, 130, 246, 0.1);
+}
+
+.btn-striver.active {
+    opacity: 1;
+    background: rgba(59, 130, 246, 0.18);
+    border-color: rgba(59, 130, 246, 0.6);
+    box-shadow: 0 0 10px rgba(59, 130, 246, 0.25);
+    color: #3b82f6;
+}
+
+.btn-striver:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+}
+
+body.light-mode .btn-striver {
+    background: rgba(100, 116, 139, 0.08);
+    border-color: rgba(100, 116, 139, 0.25);
+    color: #64748b;
+}
+
+body.light-mode .btn-striver.active {
+    background: rgba(59, 130, 246, 0.12);
+    border-color: rgba(59, 130, 246, 0.5);
+    color: #2563eb;
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.2);
+}
+
+/* ============================================
+   STRIVER CARD — dashboard section
+   ============================================ */
+
+.striver-card {
+    margin-bottom: 24px;
+}
+
+.striver-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.striver-stat-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: var(--bg-tertiary);
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    transition: background 0.2s ease;
+}
+
+.striver-stat-row:hover {
+    background: rgba(59, 130, 246, 0.06);
+}
+
+.striver-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.striver-dot.easy   { background: #22c55e; }
+.striver-dot.medium { background: #f59e0b; }
+.striver-dot.hard   { background: #ef4444; }
+.striver-dot.total  { background: linear-gradient(135deg, #3b82f6, #6366f1); }
+
+.striver-label {
+    flex: 1;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.striver-value {
+    font-size: 1.2rem;
+    font-weight: 800;
+    color: var(--text-primary);
+}
+
+.striver-total-row {
+    border-color: rgba(59, 130, 246, 0.3);
+    background: rgba(59, 130, 246, 0.06);
+}
+
+.striver-total {
+    background: linear-gradient(135deg, #3b82f6, #6366f1);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.striver-empty {
+    margin-top: 12px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 8px;
+}
+
+body.light-mode .striver-stat-row {
+    background: #f8fafc;
+    border-color: #e2e8f0;
+}
+
+body.light-mode .striver-total-row {
+    background: rgba(59, 130, 246, 0.05);
+    border-color: rgba(59, 130, 246, 0.25);
+}
+
+body.light-mode .striver-label {
+    color: #475569;
+}
+
+body.light-mode .striver-value {
+    color: #0f172a;
+}

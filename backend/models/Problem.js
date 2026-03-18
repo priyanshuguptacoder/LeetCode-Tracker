@@ -17,6 +17,7 @@ const problemSchema = new mongoose.Schema(
     lastRevisedAt: { type: Date, default: null },
     targeted: { type: Boolean, default: false }, // manually marked as a goal
     targetedAt: { type: Date, default: null },   // when it was targeted
+    isStriver: { type: Boolean, default: false }, // part of Striver sheet
   },
   { timestamps: true }
 );

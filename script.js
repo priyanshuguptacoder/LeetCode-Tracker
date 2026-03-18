@@ -278,6 +278,58 @@ function PwModal({ modal, adminPassword, onClose }) {
   );
 }
 
+// ============================================
+// PURE HELPERS — module-level, no React deps
+// ============================================
+
+// Recompute streak/activeDays from an array of YYYY-MM-DD date strings.
+// Used after delete to keep dbStreak display in sync without a DB round-trip.
+function computeStreakFromDates(dateStrings) {
+  const parseLocal = (s) => { const [y,m,d] = s.split('-'); return new Date(y, m-1, d); };
+  const unique = [...new Set(dateStrings.filter(Boolean))].sort();
+  const activeDays = unique.length;
+  if (activeDays === 0) return { activeDays: 0, currentStreak: 0, maxStreak: 0 };
+
+  // Max streak
+  let maxStreak = 1, tempStreak = 1;
+  for (let i = 1; i < unique.length; i++) {
+    const diff = Math.round((parseLocal(unique[i]) - parseLocal(unique[i-1])) / 86400000);
+    if (diff === 1) { tempStreak++; } else { maxStreak = Math.max(maxStreak, tempStreak); tempStreak = 1; }
+  }
+  maxStreak = Math.max(maxStreak, tempStreak);
+
+  // Current streak — consecutive days ending today or yesterday
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2,'0');
+  const fmt = (d) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  const todayStr = fmt(now);
+  const yest = new Date(now); yest.setDate(yest.getDate()-1);
+  const yesterdayStr = fmt(yest);
+  const lastDate = unique[unique.length - 1];
+  let currentStreak = 0;
+  if (lastDate === todayStr || lastDate === yesterdayStr) {
+    let i = unique.length - 1;
+    currentStreak = 1;
+    while (i > 0) {
+      const diff = Math.round((parseLocal(unique[i]) - parseLocal(unique[i-1])) / 86400000);
+      if (diff === 1) { currentStreak++; i--; } else break;
+    }
+  }
+
+  return { activeDays, currentStreak, maxStreak };
+}
+
+// Compute striver stats from a problems array (pure, no side effects).
+function computeStriverStats(problems) {
+  const solved = problems.filter(p => p.isStriver && p.status === 'Done');
+  return {
+    easy:   solved.filter(p => p.difficulty === 'Easy').length,
+    medium: solved.filter(p => p.difficulty === 'Medium').length,
+    hard:   solved.filter(p => p.difficulty === 'Hard').length,
+    total:  solved.length,
+  };
+}
+
 function App() {
   // ============================================
   // API DATA FETCHING
@@ -289,6 +341,7 @@ function App() {
   const [apiProblems, setApiProblems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState(null);
+  const [striverId, setStriverId] = useState(null);
 
   // ── DB-backed streak state ────────────────────────────────────────────────
   // Source of truth lives in MongoDB Settings document.
@@ -433,6 +486,7 @@ function App() {
       link: p.leetcodeLink || p.link || '',
       _solvedDateISO: solvedDateISO,
       targeted: p.targeted || false,
+      isStriver: p.isStriver || false,
     };
   });
 
@@ -1180,8 +1234,22 @@ function App() {
       try {
         const response = await window.API.deleteProblem(number);
         if (response.success) {
-          const allProblemsResponse = await window.API.getAllProblems();
-          setApiProblems(transformProblems(allProblemsResponse.data));
+          // Remove from local state — all useMemo stats (striverStats, etc.) recompute automatically
+          setApiProblems(prev => prev.filter(p => p.number !== number));
+          // If deleted problem was solved, recompute streak from the post-delete dataset
+          if (problem && problem.status === 'Done') {
+            // Use current apiProblems minus the deleted one to compute new streak
+            const remainingDates = apiProblems
+              .filter(p => p.number !== number && p.status === 'Done' && p._solvedDateISO)
+              .map(p => p._solvedDateISO);
+            const computed = computeStreakFromDates(remainingDates);
+            setDbStreak(s => ({
+              ...s,
+              activeDays:    computed.activeDays,
+              currentStreak: computed.currentStreak,
+              maxStreak:     computed.maxStreak,
+            }));
+          }
           showNotification(`✅ Problem #${number} deleted`, 'success');
         }
       } catch (error) {
@@ -1189,15 +1257,13 @@ function App() {
         showNotification(`❌ Delete failed: ${error.message}`, 'error');
       }
     };
-    // If already admin-unlocked, just confirm with a simple modal (no re-auth)
-    // If locked, requireAdmin will prompt for password first, then confirm
     requireAdmin(() => {
       openPwModal(
         `Delete #${number}${problem ? ` — ${problem.title}` : ''}`,
         'This action cannot be undone.',
         doDelete,
         true,
-        true  // noAuth — admin already verified
+        true
       );
     });
   };
@@ -1281,6 +1347,33 @@ function App() {
   };
 
   // ============================================
+  // STRIVER TOGGLE
+  // ============================================
+  const handleToggleStriver = (number) => {
+    requireAdmin(async () => {
+      if (striverId === number) return;
+      try {
+        setStriverId(number);
+        const res = await window.API.toggleStriver(number);
+        if (res.success) {
+          // Update local state — striverStats useMemo recomputes automatically
+          setApiProblems(prev => prev.map(p =>
+            p.number === number ? { ...p, isStriver: res.data.isStriver } : p
+          ));
+          showNotification(
+            res.data.isStriver ? '📘 Added to Striver sheet' : '✅ Removed from Striver',
+            'success'
+          );
+        }
+      } catch (err) {
+        showNotification(`❌ ${err.message}`, 'error');
+      } finally {
+        setStriverId(null);
+      }
+    });
+  };
+
+  // ============================================
   // ALIGN — Re-fetch problems + streak from backend
   // ============================================
   const handleAlignHistoricalActivity = async () => {
@@ -1340,6 +1433,9 @@ function App() {
   // DYNAMIC ANALYTICS CALCULATIONS
   // ============================================
   
+  // ── Derived: striver stats — always computed from apiProblems, never stored in state ──
+  const striverStats = React.useMemo(() => computeStriverStats(apiProblems), [apiProblems]);
+
   const totalSolved = allProblems.filter(p => p.status === 'Done').length;
   const totalProblems = allProblems.length;
 
@@ -2278,6 +2374,36 @@ function App() {
           );
         })()}
 
+        {/* Striver Progress Card */}
+        <div className="analytics-card striver-card fade-up">
+          <h3 className="card-title">📘 Striver Progress</h3>
+          <div className="striver-stats">
+            <div className="striver-stat-row">
+              <span className="striver-dot easy"></span>
+              <span className="striver-label">Easy</span>
+              <span className="striver-value">{striverStats.easy}</span>
+            </div>
+            <div className="striver-stat-row">
+              <span className="striver-dot medium"></span>
+              <span className="striver-label">Medium</span>
+              <span className="striver-value">{striverStats.medium}</span>
+            </div>
+            <div className="striver-stat-row">
+              <span className="striver-dot hard"></span>
+              <span className="striver-label">Hard</span>
+              <span className="striver-value">{striverStats.hard}</span>
+            </div>
+            <div className="striver-stat-row striver-total-row">
+              <span className="striver-dot total"></span>
+              <span className="striver-label">Total Solved</span>
+              <span className="striver-value striver-total">{striverStats.total}</span>
+            </div>
+          </div>
+          {striverStats.total === 0 && (
+            <div className="striver-empty">Click 📘 on any problem in the table to mark it as Striver</div>
+          )}
+        </div>
+
         {/* Progress Section */}
         <div className="progress-card">
           <div className="progress-header">
@@ -2579,6 +2705,14 @@ function App() {
                             title={problem.targeted ? 'Remove from Targeted' : 'Add to Targeted'}
                           >
                             {targetingId === problem.number ? '⏳' : problem.targeted ? '🎯' : '○'}
+                          </button>
+                          <button
+                            className={`btn-striver${problem.isStriver ? ' active' : ''}`}
+                            onClick={() => handleToggleStriver(problem.number)}
+                            disabled={striverId === problem.number}
+                            title={problem.isStriver ? 'Remove from Striver' : 'Mark as Striver'}
+                          >
+                            {striverId === problem.number ? '⏳' : '📘'}
                           </button>
                           <button
                             className="btn-delete"

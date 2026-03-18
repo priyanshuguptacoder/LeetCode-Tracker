@@ -295,7 +295,53 @@ exports.deleteProblem = async (req, res) => {
   try {
     const problem = await Problem.findOneAndDelete({ id: parseInt(req.params.id) });
     if (!problem) return res.status(404).json({ success: false, error: 'Problem not found' });
-    res.json({ success: true, data: problem });
+
+    // If deleted problem was solved, recompute streak from remaining problems
+    let streakData = null;
+    if (problem.solved) {
+      const remaining = await Problem.find({ solved: true }).sort({ solvedDate: 1 });
+      const dates = [...new Set(
+        remaining.map(p => p.solvedDate
+          ? new Date(p.solvedDate).toLocaleDateString('en-CA', { timeZone: TZ })
+          : null
+        ).filter(Boolean)
+      )].sort();
+
+      const activeDays = dates.length;
+      let maxStreak = dates.length > 0 ? 1 : 0;
+      let tempStreak = 1;
+      for (let i = 1; i < dates.length; i++) {
+        const diff = dayDiff(dates[i - 1], dates[i]);
+        if (diff === 1) { tempStreak++; } else { maxStreak = Math.max(maxStreak, tempStreak); tempStreak = 1; }
+      }
+      maxStreak = Math.max(maxStreak, tempStreak);
+
+      // Current streak: consecutive days ending on the last solve date
+      let currentStreak = 0;
+      if (dates.length > 0) {
+        let i = dates.length - 1;
+        currentStreak = 1;
+        while (i > 0) {
+          if (dayDiff(dates[i - 1], dates[i]) === 1) { currentStreak++; i--; } else break;
+        }
+      }
+
+      const lastDate = dates.length > 0 ? dates[dates.length - 1] : null;
+      let lastSolvedDate = null;
+      if (lastDate) {
+        const [ty, tm, td] = lastDate.split('-').map(Number);
+        lastSolvedDate = new Date(Date.UTC(ty, tm - 1, td, 0, 0, 0));
+      }
+
+      const updated = await Settings.findOneAndUpdate(
+        { key: 'global' },
+        { $set: { activeDays, currentStreak, maxStreak, lastSolvedDate } },
+        { returnDocument: 'after', upsert: true }
+      );
+      streakData = streakPayload(updated);
+    }
+
+    res.json({ success: true, data: problem, streak: streakData });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to delete problem', message: err.message });
   }
@@ -386,5 +432,33 @@ exports.alignProblems = async (req, res) => {
     res.json({ success: true, count: ops.length, streak: streakPayload(s) });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Align failed', message: err.message });
+  }
+};
+
+// ─── PATCH /api/problems/:id/striver ─────────────────────────────────────────
+exports.toggleStriver = async (req, res) => {
+  try {
+    const problem = await Problem.findOne({ id: parseInt(req.params.id) });
+    if (!problem) return res.status(404).json({ success: false, error: 'Problem not found' });
+
+    problem.isStriver = !problem.isStriver;
+    await problem.save();
+
+    res.json({ success: true, data: { id: problem.id, isStriver: problem.isStriver } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Failed to toggle striver', message: err.message });
+  }
+};
+
+// ─── GET /api/problems/striver-stats ─────────────────────────────────────────
+exports.getStriverStats = async (req, res) => {
+  try {
+    const problems = await Problem.find({ isStriver: true, solved: true });
+    const easy   = problems.filter(p => p.difficulty === 'Easy').length;
+    const medium = problems.filter(p => p.difficulty === 'Medium').length;
+    const hard   = problems.filter(p => p.difficulty === 'Hard').length;
+    res.json({ success: true, data: { easy, medium, hard, total: problems.length } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Failed to fetch striver stats', message: err.message });
   }
 };
