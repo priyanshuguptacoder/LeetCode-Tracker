@@ -1456,20 +1456,13 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
     max-width: 280px;
 }
 
-/* Mobile card view for table */
-@media (max-width: 768px) {
-    .table-wrapper {
-        overflow-x: auto;
-    }
-    .problems-table {
-        min-width: 640px;
-    }
-    .problem-title {
-        max-width: 160px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
+/* Desktop: table scrollable horizontally */
+.table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+.problems-table {
+    min-width: 640px;
 }
 
 body.light-mode .problems-table thead {
