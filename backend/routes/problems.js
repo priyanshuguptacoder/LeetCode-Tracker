@@ -12,6 +12,7 @@ const {
   untargetProblem,
   toggleStriver,
   getStriverStats,
+  markStriverProblems,
   getStats,
   getSettings,
   alignProblems,
@@ -25,6 +26,7 @@ router.get('/settings', getSettings);
 router.get('/streak', getStreak);
 router.put('/streak', updateStreak);
 router.get('/striver-stats', getStriverStats);
+router.post('/mark-striver', markStriverProblems);
 router.post('/align', alignProblems);
 router.get('/', getAllProblems);
 router.post('/', createProblem);

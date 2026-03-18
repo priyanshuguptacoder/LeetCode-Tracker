@@ -450,6 +450,51 @@ exports.toggleStriver = async (req, res) => {
   }
 };
 
+// ─── POST /api/problems/mark-striver ─────────────────────────────────────────
+// Bulk-marks problems as isStriver=true. Idempotent — safe to call multiple times.
+// Accepts optional problemIds array in request body; falls back to hardcoded list.
+const DEFAULT_STRIVER_IDS = [
+  1, 2, 3, 5, 7, 8, 9, 11, 13, 14, 15, 18, 19, 20, 21, 22, 25, 26,
+  31, 33, 34, 35, 37, 39, 40, 46, 48, 50, 51, 53, 54, 56, 61, 69, 70,
+  73, 74, 75, 76, 78, 81, 84, 85, 88, 90, 94, 102, 104, 112, 118, 121,
+  128, 131, 136, 137, 138, 141, 142, 148, 151, 152, 153, 155, 160, 162,
+  169, 189, 204, 205, 206, 225, 231, 232, 234, 235, 237, 238, 239, 240,
+  242, 268, 287, 328, 402, 409, 410, 424, 451, 485, 496, 503, 509, 540,
+  543, 560, 700, 704, 735, 739, 796, 875, 876, 901, 907, 930, 992, 1004,
+  1011, 1021, 1143, 1248, 1283, 1423, 1482, 1539, 1614, 1752, 1781,
+  1901, 2095, 2149, 2220,
+];
+
+exports.markStriverProblems = async (req, res) => {
+  try {
+    const problemIds = Array.isArray(req.body?.problemIds)
+      ? req.body.problemIds.map(Number)
+      : DEFAULT_STRIVER_IDS;
+
+    // Bulk update — only touches isStriver, never creates new docs
+    const result = await Problem.updateMany(
+      { id: { $in: problemIds } },
+      { $set: { isStriver: true } }
+    );
+
+    // Find which IDs don't exist in DB
+    const existing = await Problem.find({ id: { $in: problemIds } }, { id: 1, _id: 0 });
+    const existingIds = new Set(existing.map(p => p.id));
+    const missingIds = problemIds.filter(id => !existingIds.has(id));
+
+    console.log(`[mark-striver] matched=${result.matchedCount} modified=${result.modifiedCount} missing=${missingIds.length}`);
+
+    res.json({
+      success: true,
+      matched: result.matchedCount,
+      modified: result.modifiedCount,
+      missingIds,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Failed to mark striver problems', message: err.message });
+  }
+};
+
 // ─── GET /api/problems/striver-stats ─────────────────────────────────────────
 exports.getStriverStats = async (req, res) => {
   try {

@@ -343,6 +343,10 @@ function App() {
   const [apiError, setApiError] = useState(null);
   const [striverId, setStriverId] = useState(null);
 
+  // Ref to always access latest apiProblems without stale closure issues
+  const apiProblemsRef = useRef([]);
+  useEffect(() => { apiProblemsRef.current = apiProblems; }, [apiProblems]);
+
   // ── DB-backed streak state ────────────────────────────────────────────────
   // Source of truth lives in MongoDB Settings document.
   // Fetched on mount, updated after every createProblem/updateProblem (solved).
@@ -1223,9 +1227,9 @@ function App() {
   };
 
   const handleDelete = (number, isCustom) => {
-    const problem = allProblems.find(p => p.number === number);
+    const problem = apiProblemsRef.current.find(p => p.number === number);
     const doDelete = async () => {
-      const tableRow = document.querySelector(`tr[data-problem-number="${number}"]`);
+      const tableRow = document.querySelector(`[data-problem-number="${number}"]`);
       if (tableRow) {
         tableRow.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
         tableRow.style.opacity = '0';
@@ -1238,8 +1242,8 @@ function App() {
           setApiProblems(prev => prev.filter(p => p.number !== number));
           // If deleted problem was solved, recompute streak from the post-delete dataset
           if (problem && problem.status === 'Done') {
-            // Use current apiProblems minus the deleted one to compute new streak
-            const remainingDates = apiProblems
+            // Use ref to get fresh state even after admin modal delay
+            const remainingDates = apiProblemsRef.current
               .filter(p => p.number !== number && p.status === 'Done' && p._solvedDateISO)
               .map(p => p._solvedDateISO);
             const computed = computeStreakFromDates(remainingDates);
@@ -1320,7 +1324,8 @@ function App() {
   const handleToggleTarget = (number) => {
     requireAdmin(async () => {
       if (targetingId === number) return;
-      const problem = allProblems.find(p => p.number === number);
+      // Use ref to get fresh state even after admin modal delay
+      const problem = apiProblemsRef.current.find(p => p.number === number);
       const isCurrentlyTargeted = problem?.targeted || false;
       try {
         setTargetingId(number);
@@ -1754,7 +1759,9 @@ function App() {
 
       const matchesStatus =
         statusFilter === 'All' || 
-        (statusFilter === 'Targeted' ? problem.targeted === true : problem.status === statusFilter);
+        (statusFilter === 'Targeted' ? problem.targeted === true :
+         statusFilter === 'Striver'  ? problem.isStriver === true :
+         problem.status === statusFilter);
 
       return matchesSearch && matchesDifficulty && matchesPattern && matchesStatus;
     });
@@ -2317,6 +2324,36 @@ function App() {
           </div>
         </div>
 
+        {/* Striver Progress Card — ABOVE Needs Revision */}
+        <div className="analytics-card striver-card fade-up fade-up-4">
+          <h3 className="card-title">📘 Striver Progress</h3>
+          <div className="striver-stats">
+            <div className="striver-stat-row">
+              <span className="striver-dot easy"></span>
+              <span className="striver-label">Easy</span>
+              <span className="striver-value">{striverStats.easy}</span>
+            </div>
+            <div className="striver-stat-row">
+              <span className="striver-dot medium"></span>
+              <span className="striver-label">Medium</span>
+              <span className="striver-value">{striverStats.medium}</span>
+            </div>
+            <div className="striver-stat-row">
+              <span className="striver-dot hard"></span>
+              <span className="striver-label">Hard</span>
+              <span className="striver-value">{striverStats.hard}</span>
+            </div>
+            <div className="striver-stat-row striver-total-row">
+              <span className="striver-dot total"></span>
+              <span className="striver-label">Total Solved</span>
+              <span className="striver-value striver-total">{striverStats.total}</span>
+            </div>
+          </div>
+          {striverStats.total === 0 && (
+            <div className="striver-empty">Click 📘 on any problem in the table to mark it as Striver</div>
+          )}
+        </div>
+
         {/* Needs Revision — problems with revisionCount > 0, sorted by most recently revised */}
         <ProblemSection
           title="🔁 Needs Revision"
@@ -2373,36 +2410,6 @@ function App() {
             />
           );
         })()}
-
-        {/* Striver Progress Card */}
-        <div className="analytics-card striver-card fade-up">
-          <h3 className="card-title">📘 Striver Progress</h3>
-          <div className="striver-stats">
-            <div className="striver-stat-row">
-              <span className="striver-dot easy"></span>
-              <span className="striver-label">Easy</span>
-              <span className="striver-value">{striverStats.easy}</span>
-            </div>
-            <div className="striver-stat-row">
-              <span className="striver-dot medium"></span>
-              <span className="striver-label">Medium</span>
-              <span className="striver-value">{striverStats.medium}</span>
-            </div>
-            <div className="striver-stat-row">
-              <span className="striver-dot hard"></span>
-              <span className="striver-label">Hard</span>
-              <span className="striver-value">{striverStats.hard}</span>
-            </div>
-            <div className="striver-stat-row striver-total-row">
-              <span className="striver-dot total"></span>
-              <span className="striver-label">Total Solved</span>
-              <span className="striver-value striver-total">{striverStats.total}</span>
-            </div>
-          </div>
-          {striverStats.total === 0 && (
-            <div className="striver-empty">Click 📘 on any problem in the table to mark it as Striver</div>
-          )}
-        </div>
 
         {/* Progress Section */}
         <div className="progress-card">
@@ -2531,21 +2538,13 @@ function App() {
             <div className="filter-group">
               <label>Search</label>
               <div className="search-input-wrapper">
-                <span className="search-icon">🔍</span>
                 <input
                   type="text"
-                  placeholder="Name, #ID, or difficulty..."
+                  placeholder="Search name, #ID, difficulty..."
                   value={searchTerm}
                   onChange={(e) => handleSearchChange(e.target.value)}
-                  className="filter-input search-input"
+                  className="filter-input"
                 />
-                {searchTerm && (
-                  <button
-                    className="search-clear-btn"
-                    onClick={() => handleSearchChange('')}
-                    title="Clear search"
-                  >×</button>
-                )}
               </div>
             </div>
             <div className="filter-group">
@@ -2585,29 +2584,32 @@ function App() {
                 <option>In Progress</option>
                 <option>Done</option>
                 <option>Targeted</option>
+                <option>Striver</option>
               </select>
             </div>
             {(searchTerm || difficultyFilter !== 'All' || patternFilter !== 'All' || statusFilter !== 'All') && (
               <div className="filter-group filter-clear-group">
                 <label>&nbsp;</label>
-                <button 
+                <button
                   className="btn-clear-filters"
                   onClick={handleClearAllFilters}
                   title="Clear all filters (ESC)"
                 >
-                  Clear
+                  ✕ Clear
                 </button>
               </div>
             )}
           </div>
         </div>
 
-        {/* Table */}
+        {/* Problem List — desktop table + mobile cards */}
         <div className="table-card">
           <div className="table-header">
             <h3>Problem List</h3>
             <span className="table-count">{filteredProblems.length} problems</span>
           </div>
+
+          {/* ── DESKTOP TABLE ── */}
           <div className="table-wrapper">
             <table className="problems-table">
               <thead>
@@ -2675,9 +2677,9 @@ function App() {
                         {(problem.revisionCount || 0) === 0 ? '—' : formatDate(problem.lastRevisedAt)}
                       </td>
                       <td>
-                        <a 
+                        <a
                           href={problem.link || `https://leetcode.com/problems/${problem.number}/`}
-                          target="_blank" 
+                          target="_blank"
                           rel="noopener noreferrer"
                           className="problem-link-btn"
                           title="Open on LeetCode"
@@ -2704,7 +2706,7 @@ function App() {
                             disabled={targetingId === problem.number}
                             title={problem.targeted ? 'Remove from Targeted' : 'Add to Targeted'}
                           >
-                            {targetingId === problem.number ? '⏳' : problem.targeted ? '🎯' : '○'}
+                            {targetingId === problem.number ? '⏳' : '🎯'}
                           </button>
                           <button
                             className={`btn-striver${problem.isStriver ? ' active' : ''}`}
@@ -2750,6 +2752,116 @@ function App() {
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* ── MOBILE CARDS ── */}
+          <div className="problems-mobile">
+            {filteredProblems.length > 0 ? (
+              filteredProblems.map(problem => (
+                <div key={problem.number} className="pm-card" data-problem-number={problem.number}>
+                  {/* Row 1: number + badges */}
+                  <div className="pm-top">
+                    <span className="pm-number">#{problem.number}</span>
+                    <span className={`badge badge-${(problem.difficulty || 'medium').toLowerCase()}`}>
+                      {problem.difficulty}
+                    </span>
+                    {problem.status === 'Done' && problem._solvedDateISO && (
+                      <span className="pm-date">📅 {formatDate(problem._solvedDateISO)}</span>
+                    )}
+                    {problem.targeted && <span className="pm-tag pm-tag-target">🎯</span>}
+                    {problem.isStriver && <span className="pm-tag pm-tag-striver">📘</span>}
+                  </div>
+
+                  {/* Row 2: title */}
+                  <div className="pm-title">{problem.title}</div>
+
+                  {/* Row 3: revision count */}
+                  <div className="pm-meta">
+                    <span className={`rev-chip${(problem.revisionCount || 0) === 0 ? ' zero' : ''}`}>
+                      🔁 {problem.revisionCount || 0}×
+                    </span>
+                    {(problem.revisionCount || 0) > 0 && problem.lastRevisedAt && (
+                      <span className="pm-date">Last: {formatDate(problem.lastRevisedAt)}</span>
+                    )}
+                  </div>
+
+                  {/* Row 4: primary actions */}
+                  <div className="pm-actions-primary">
+                    <a
+                      href={problem.link || `https://leetcode.com/problems/${problem.number}/`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="pm-btn pm-btn-open"
+                    >🔗 Open</a>
+                    <select
+                      className={`pm-status-select status-${(problem.status || 'not-started').toLowerCase().replace(' ', '-')}`}
+                      value={problem.status}
+                      onChange={(e) => handleStatusChange(problem.number, e.target.value)}
+                    >
+                      <option>Not Started</option>
+                      <option>In Progress</option>
+                      <option>Done</option>
+                    </select>
+                  </div>
+
+                  {/* Row 5: secondary actions */}
+                  <div className="pm-actions-secondary">
+                    <select
+                      className={`pm-diff-select difficulty-${(problem.userDifficulty || problem.difficulty || 'medium').toLowerCase()}`}
+                      value={problem.userDifficulty || problem.difficulty || 'Medium'}
+                      onChange={(e) => handleUserDifficultyChange(problem.number, e.target.value)}
+                      title="Your experience"
+                    >
+                      <option value="Easy">Easy ✓</option>
+                      <option value="Medium">Medium ~</option>
+                      <option value="Hard">Hard ✗</option>
+                    </select>
+                    <div className="pm-rev-controls">
+                      <button
+                        className="rev-btn"
+                        onClick={() => handleUnrevise(problem.number)}
+                        disabled={(problem.revisionCount || 0) === 0 || unrevisingId === problem.number}
+                        title="Remove revision"
+                      >−</button>
+                      <span className="pm-rev-label">Rev</span>
+                      <button
+                        className="rev-btn"
+                        onClick={() => handleRevise(problem.number)}
+                        disabled={revisingId === problem.number}
+                        title="Add revision"
+                      >+</button>
+                    </div>
+                    <button
+                      className={`btn-target${problem.targeted ? ' active' : ''}`}
+                      onClick={() => handleToggleTarget(problem.number)}
+                      disabled={targetingId === problem.number}
+                      title={problem.targeted ? 'Remove from Targeted' : 'Add to Targeted'}
+                    >
+                      {targetingId === problem.number ? '⏳' : '🎯'}
+                    </button>
+                    <button
+                      className={`btn-striver${problem.isStriver ? ' active' : ''}`}
+                      onClick={() => handleToggleStriver(problem.number)}
+                      disabled={striverId === problem.number}
+                      title={problem.isStriver ? 'Remove from Striver' : 'Mark as Striver'}
+                    >
+                      {striverId === problem.number ? '⏳' : '📘'}
+                    </button>
+                    <button
+                      className="btn-delete"
+                      onClick={() => handleDelete(problem.number, problem.isCustom)}
+                      title="Delete problem"
+                    >🗑️</button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="pm-empty">
+                <div className="empty-icon">{allProblems.length === 0 ? '📚' : '🔍'}</div>
+                <p>{allProblems.length === 0 ? 'No Problems Yet' : 'No results found'}</p>
+                <small>{allProblems.length === 0 ? 'Click "Add Problem" to start' : 'Try adjusting your filters'}</small>
+              </div>
+            )}
           </div>
         </div>
       </div>
