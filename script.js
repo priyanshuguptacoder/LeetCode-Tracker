@@ -1444,10 +1444,134 @@ function App() {
   const totalSolved = allProblems.filter(p => p.status === 'Done').length;
   const totalProblems = allProblems.length;
 
-  // Rolling 100
+  // Rolling 100 (kept for progress bar)
   const completedCycles = Math.floor(totalSolved / 100);
   const last100Progress = totalSolved % 100;
   const rollingProgressPercentage = last100Progress;
+
+  // ============================================
+  // COACHING INTELLIGENCE — derived metrics
+  // ============================================
+  const coachingMetrics = React.useMemo(() => {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const solved = allProblems.filter(p => p.status === 'Done');
+    const revised = allProblems.filter(p => (p.revisionCount || 0) > 0);
+
+    // revisionRate: how many solved problems have been revised at least once
+    const revisionRate = solved.length > 0 ? revised.filter(p => p.status === 'Done').length / solved.length : 0;
+
+    // avgGap: average days between solvedDate and lastRevisedAt (for revised problems)
+    const gaps = revised
+      .filter(p => p._solvedDateISO && p.lastRevisedAt)
+      .map(p => {
+        const s = parseLocalDate(p._solvedDateISO);
+        const r = new Date(p.lastRevisedAt); r.setHours(0,0,0,0);
+        return Math.max(0, Math.round((r - s) / 86400000));
+      });
+    const avgGap = gaps.length > 0 ? gaps.reduce((a,b) => a+b, 0) / gaps.length : 0;
+
+    // forgottenCount: solved problems not revised in > 7 days (or never revised)
+    const forgottenCount = solved.filter(p => {
+      if ((p.revisionCount || 0) === 0) return true;
+      if (!p.lastRevisedAt) return true;
+      const r = new Date(p.lastRevisedAt); r.setHours(0,0,0,0);
+      return Math.round((today - r) / 86400000) > 7;
+    }).length;
+
+    // topicDistribution: % of solved problems per topic
+    const topicCounts = {};
+    solved.forEach(p => {
+      const t = p.pattern || 'Misc';
+      topicCounts[t] = (topicCounts[t] || 0) + 1;
+    });
+    const topicDist = Object.entries(topicCounts)
+      .map(([t, c]) => ({ topic: t, count: c, pct: solved.length > 0 ? Math.round((c / solved.length) * 100) : 0 }))
+      .sort((a,b) => b.count - a.count);
+
+    // lastSolvedByTopic: most recent solve date per topic
+    const lastSolvedByTopic = {};
+    solved.forEach(p => {
+      const t = p.pattern || 'Misc';
+      if (!lastSolvedByTopic[t] || (p._solvedDateISO && p._solvedDateISO > lastSolvedByTopic[t]))
+        lastSolvedByTopic[t] = p._solvedDateISO;
+    });
+
+    // inactiveTopics: topics not solved in > 7 days
+    const inactiveTopics = Object.entries(lastSolvedByTopic)
+      .filter(([, d]) => {
+        if (!d) return true;
+        return Math.round((today - parseLocalDate(d)) / 86400000) > 7;
+      })
+      .map(([t]) => t);
+
+    // difficultyTrend: last 20 solved problems difficulty
+    const last20 = [...solved]
+      .sort((a,b) => (b._solvedDateISO||'') > (a._solvedDateISO||'') ? 1 : -1)
+      .slice(0, 20);
+    const hardPct20 = last20.length > 0 ? last20.filter(p => p.difficulty === 'Hard').length / last20.length : 0;
+
+    // weeklySolveFrequency
+    const weekAgo = new Date(today); weekAgo.setDate(weekAgo.getDate() - 7);
+    const thisWeekCount = solved.filter(p => p._solvedDateISO && parseLocalDate(p._solvedDateISO) >= weekAgo).length;
+
+    return {
+      revisionRate, avgGap: parseFloat(avgGap.toFixed(1)), forgottenCount,
+      topicDist, inactiveTopics, lastSolvedByTopic, hardPct20,
+      thisWeekCount, revisedSolvedCount: revised.filter(p => p.status === 'Done').length,
+    };
+  }, [allProblems, solvedDates]);
+
+  // ── Smart Coach Insights ──────────────────────────────────────────────────
+  const smartCoachInsights = React.useMemo(() => {
+    const insights = [];
+    const { revisionRate, avgGap, forgottenCount, topicDist, inactiveTopics, hardPct20, thisWeekCount } = coachingMetrics;
+    const totalD = easyCount + mediumCount + hardCount;
+
+    // Critical
+    if (forgottenCount > 40)
+      insights.push({ sev: 'critical', icon: '🧠', msg: `${forgottenCount} problems forgotten`, action: 'Revise 5 today' });
+    if (revisionRate < 0.3 && totalSolved > 10)
+      insights.push({ sev: 'critical', icon: '⚠️', msg: 'Revising too slowly', action: `Only ${Math.round(revisionRate*100)}% of solved problems revised` });
+
+    // Warning
+    if (avgGap > 5 && coachingMetrics.revisedSolvedCount > 0)
+      insights.push({ sev: 'warning', icon: '📉', msg: `Large revision gap: avg ${avgGap}d`, action: 'Revise sooner after solving' });
+    if (totalD > 0 && hardCount / totalD < 0.1)
+      insights.push({ sev: 'warning', icon: '⚠️', msg: `Only ${Math.round((hardCount/totalD)*100)}% Hard problems`, action: 'Attempt 1 Hard today' });
+    if (topicDist.length > 0 && topicDist[0].pct > 40)
+      insights.push({ sev: 'warning', icon: '⚖️', msg: `Over-focused on ${topicDist[0].topic} (${topicDist[0].pct}%)`, action: 'Diversify topics' });
+    inactiveTopics.slice(0, 2).forEach(t =>
+      insights.push({ sev: 'warning', icon: '🚫', msg: `${t} ignored 7+ days`, action: `Solve 2 ${t} today` })
+    );
+
+    // Positive
+    if (revisionRate >= 0.5)
+      insights.push({ sev: 'positive', icon: '🟢', msg: `Strong revision habit: ${Math.round(revisionRate*100)}%`, action: 'Keep it up' });
+    if (thisWeekCount >= 7)
+      insights.push({ sev: 'positive', icon: '🔥', msg: `${thisWeekCount} problems this week`, action: 'Great pace' });
+
+    return insights;
+  }, [coachingMetrics, easyCount, mediumCount, hardCount, totalSolved]);
+
+  // ── What To Do Today ─────────────────────────────────────────────────────
+  const whatToDoToday = React.useMemo(() => {
+    const { topicDist, inactiveTopics, forgottenCount } = coachingMetrics;
+    const totalD = easyCount + mediumCount + hardCount;
+    const items = [];
+
+    // Solve targets
+    const weakestTopic = topicDist.length > 0 ? topicDist[topicDist.length - 1]?.topic : null;
+    const inactiveTopic = inactiveTopics[0] || null;
+    if (weakestTopic) items.push({ icon: '💪', text: `Solve 2 Medium (${weakestTopic})`, type: 'solve' });
+    if (inactiveTopic && inactiveTopic !== weakestTopic) items.push({ icon: '🚀', text: `Solve 2 from ${inactiveTopic}`, type: 'solve' });
+    if (totalD > 0 && hardCount / totalD < 0.1) items.push({ icon: '🔥', text: 'Attempt 1 Hard problem', type: 'solve' });
+
+    // Revise targets
+    if (forgottenCount > 0) items.push({ icon: '🔁', text: `Revise ${Math.min(5, forgottenCount)} forgotten problems`, type: 'revise' });
+    else if (coachingMetrics.revisedSolvedCount > 0) items.push({ icon: '🔁', text: 'Revise 3 recent problems', type: 'revise' });
+
+    return items;
+  }, [coachingMetrics, easyCount, mediumCount, hardCount]);
 
   // Resolved display values:
   // Priority: dbStreak (from MongoDB) > manualStats (localStorage override) > heatmapData (auto-computed)
@@ -2108,39 +2232,49 @@ function App() {
           <div className="monthly-card">
             <h3 className="card-title">📅 Monthly Planner</h3>
 
-            {/* ── SECTION 1: Progress Overview ── */}
+            {/* ── Progress Overview ── */}
             <div className="mp-section">
               <div className="mp-month-row">
                 <span className="mp-month-name">{new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
-                {bestMonth && (
-                  <span className="best-month-badge">🏆 Best: {new Date(bestMonth.year, bestMonth.month).toLocaleDateString('en-US', { month: 'short' })} ({bestMonth.count})</span>
-                )}
+                {(() => {
+                  const pace = targetSuggestion.hasData
+                    ? parseFloat(targetSuggestion.avgLast30) >= parseFloat(targetSuggestion.dailyRequired)
+                    : null;
+                  if (pace === null) return null;
+                  return (
+                    <span className={`mp-track-badge ${pace ? 'on-track' : 'behind'}`}>
+                      {pace ? '🟢 On track' : '🔴 Behind'}
+                    </span>
+                  );
+                })()}
               </div>
               {targetSuggestion.hasData ? (
                 <>
-                  {/* Progress bar */}
                   <div className="mp-progress-bar-track">
-                    <div
-                      className="mp-progress-bar-fill"
-                      style={{ width: `${Math.min(100, Math.round((currentMonthStats.count / targetSuggestion.moderateMonthlyTarget) * 100))}%` }}
-                    />
+                    <div className="mp-progress-bar-fill" style={{ width: `${Math.min(100, Math.round((currentMonthStats.count / targetSuggestion.moderateMonthlyTarget) * 100))}%` }} />
+                    {/* Expected progress marker */}
+                    {(() => {
+                      const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth()+1, 0).getDate();
+                      const dayOfMonth = new Date().getDate();
+                      const expectedPct = Math.round((dayOfMonth / daysInMonth) * 100);
+                      return <div className="mp-expected-marker" style={{ left: `${expectedPct}%` }} title={`Expected: ${expectedPct}%`} />;
+                    })()}
                   </div>
                   <div className="mp-progress-label">
-                    <span><strong style={{ color: 'var(--primary)' }}>{currentMonthStats.count}</strong> / {targetSuggestion.moderateMonthlyTarget} solved</span>
+                    <span><strong style={{ color: 'var(--primary)' }}>{currentMonthStats.count}</strong> solved · {targetSuggestion.moderateMonthlyTarget - currentMonthStats.count} remaining</span>
                     <span style={{ color: 'var(--text-muted)' }}>{Math.min(100, Math.round((currentMonthStats.count / targetSuggestion.moderateMonthlyTarget) * 100))}%</span>
                   </div>
-                  {/* Mini stats row */}
                   <div className="mp-stats-row">
                     <div className="mp-stat">
                       <span className="mp-stat-val">{targetSuggestion.avgLast30}</span>
-                      <span className="mp-stat-lbl">avg/day</span>
+                      <span className="mp-stat-lbl">your pace/day</span>
                     </div>
                     <div className="mp-stat-divider" />
                     <div className="mp-stat">
                       <span className="mp-stat-val" style={{ color: parseFloat(targetSuggestion.dailyRequired) > parseFloat(targetSuggestion.avgLast30) ? 'var(--warning, #f59e0b)' : 'var(--success)' }}>
                         {targetSuggestion.dailyRequired}
                       </span>
-                      <span className="mp-stat-lbl">needed/day</span>
+                      <span className="mp-stat-lbl">required/day</span>
                     </div>
                     <div className="mp-stat-divider" />
                     <div className="mp-stat">
@@ -2148,6 +2282,11 @@ function App() {
                       <span className="mp-stat-lbl">days left</span>
                     </div>
                   </div>
+                  {parseFloat(targetSuggestion.dailyRequired) > parseFloat(targetSuggestion.avgLast30) && (
+                    <div className="mp-pace-gap">
+                      +{(parseFloat(targetSuggestion.dailyRequired) - parseFloat(targetSuggestion.avgLast30)).toFixed(1)} more/day needed
+                    </div>
+                  )}
                 </>
               ) : (
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', padding: '0.5rem 0' }}>
@@ -2156,10 +2295,10 @@ function App() {
               )}
             </div>
 
-            {/* ── SECTION 2: Today's Plan (primary focus) ── */}
+            {/* ── Today's Plan ── */}
             {targetSuggestion.hasData && (() => {
               const solveTarget = Math.max(1, Math.ceil(parseFloat(targetSuggestion.dailyRequired)));
-              const reviseTarget = Math.min(3, targetedProblems.list.length);
+              const reviseTarget = Math.min(3, coachingMetrics.forgottenCount > 0 ? 5 : 3);
               const focusTopics = weaknessAnalysis.slice(0, 2).map(w => w.topic);
               return (
                 <div className="mp-today-plan">
@@ -2176,51 +2315,24 @@ function App() {
                     </div>
                   </div>
                   {focusTopics.length > 0 && (
-                    <div className="mp-today-focus">
-                      Focus: {focusTopics.join(' · ')}
-                    </div>
+                    <div className="mp-today-focus">Focus: {focusTopics.join(' · ')}</div>
                   )}
                 </div>
               );
             })()}
 
-            {/* ── SECTION 3: Action Insights ── */}
-            {(() => {
-              const urgent = [], improve = [], positive = [];
-
-              weaknessAnalysis.filter(w => w.daysSinceLast >= 14).slice(0, 2)
-                .forEach(w => urgent.push(`${w.topic} inactive ${w.daysSinceLast}d`));
-
-              if (weeklyPerformance.lastWeek > 0 && weeklyPerformance.change < -20)
-                improve.push(`Solving ↓${Math.abs(weeklyPerformance.change)}% this week`);
-
-              const totalD = easyCount + mediumCount + hardCount;
-              if (totalD > 0 && hardCount / totalD < 0.1)
-                improve.push(`Only ${Math.round((hardCount / totalD) * 100)}% Hard problems`);
-
-              if (consistencyScore.score >= 70)
-                positive.push(`${consistencyScore.score}% consistency`);
-              if (weeklyPerformance.change > 20)
-                positive.push(`Solving ↑${weeklyPerformance.change}% this week`);
-
-              const hasAny = urgent.length || improve.length || positive.length;
-              if (!hasAny) return null;
-
-              return (
-                <div className="mp-section mp-insights">
-                  <div className="mp-insights-title">Insights</div>
-                  {urgent.map((m, i) => (
-                    <div key={`u${i}`} className="mp-insight-row mp-insight-urgent">🔥 {m}</div>
-                  ))}
-                  {improve.map((m, i) => (
-                    <div key={`i${i}`} className="mp-insight-row mp-insight-improve">⚠️ {m}</div>
-                  ))}
-                  {positive.map((m, i) => (
-                    <div key={`p${i}`} className="mp-insight-row mp-insight-positive">🟢 {m}</div>
-                  ))}
-                </div>
-              );
-            })()}
+            {/* ── Action Insights (severity system) ── */}
+            {smartCoachInsights.length > 0 && (
+              <div className="mp-section mp-insights">
+                <div className="mp-insights-title">Insights</div>
+                {smartCoachInsights.map((ins, i) => (
+                  <div key={i} className={`mp-insight-row mp-insight-${ins.sev === 'critical' ? 'urgent' : ins.sev === 'warning' ? 'improve' : 'positive'}`}>
+                    <span>{ins.icon} {ins.msg}</span>
+                    <span className="mp-insight-action">→ {ins.action}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -2411,14 +2523,14 @@ function App() {
           );
         })()}
 
-        {/* Progress Section */}
+        {/* Rolling Focus — Intelligent */}
         <div className="progress-card">
           <div className="progress-header">
             <div>
-              <h2>Rolling Focus: Latest 100 Problems</h2>
+              <h2>Rolling Focus</h2>
               <p className="progress-subtitle">
-                Current Cycle: {last100Progress} / 100 
-                {completedCycles > 0 && ` • Completed ${completedCycles} cycle${completedCycles > 1 ? 's' : ''}`}
+                {totalSolved} solved · {totalProblems - totalSolved} remaining
+                {completedCycles > 0 && ` · ${completedCycles} cycle${completedCycles > 1 ? 's' : ''} done`}
               </p>
             </div>
             <div className="progress-actions">
@@ -2429,17 +2541,31 @@ function App() {
           </div>
           <div className="progress-bar-wrapper">
             <div className="progress-bar-track">
-              <div 
-                className="progress-bar-fill" 
-                style={{ width: `${rollingProgressPercentage}%` }}
-              >
+              <div className="progress-bar-fill" style={{ width: `${rollingProgressPercentage}%` }}>
                 <span className="progress-bar-text">{rollingProgressPercentage}%</span>
               </div>
             </div>
           </div>
+          {/* Coaching insight badges */}
+          <div className="rolling-insight-badges">
+            <span className={`rib ${coachingMetrics.revisionRate < 0.3 ? 'rib-red' : coachingMetrics.revisionRate < 0.5 ? 'rib-yellow' : 'rib-green'}`}>
+              🔁 {Math.round(coachingMetrics.revisionRate * 100)}% revised
+            </span>
+            <span className={`rib ${coachingMetrics.avgGap > 5 ? 'rib-yellow' : 'rib-green'}`}>
+              ⏱ {coachingMetrics.avgGap}d avg gap
+            </span>
+            <span className={`rib ${coachingMetrics.forgottenCount > 40 ? 'rib-red' : coachingMetrics.forgottenCount > 20 ? 'rib-yellow' : 'rib-green'}`}>
+              🧠 {coachingMetrics.forgottenCount} forgotten
+            </span>
+            {coachingMetrics.topicDist[0] && (
+              <span className={`rib ${coachingMetrics.topicDist[0].pct > 40 ? 'rib-yellow' : 'rib-green'}`}>
+                📊 {coachingMetrics.topicDist[0].topic} {coachingMetrics.topicDist[0].pct}%
+              </span>
+            )}
+          </div>
           <div className="rolling-stats">
             <div className="rolling-stat-item">
-              <span className="rolling-stat-label">Total Problems:</span>
+              <span className="rolling-stat-label">Total:</span>
               <span className="rolling-stat-value">{totalProblems}</span>
             </div>
             <div className="rolling-stat-divider"></div>
@@ -2447,6 +2573,51 @@ function App() {
               <span className="rolling-stat-label">Solved:</span>
               <span className="rolling-stat-value solved">{totalSolved}</span>
             </div>
+            <div className="rolling-stat-divider"></div>
+            <div className="rolling-stat-item">
+              <span className="rolling-stat-label">Revised:</span>
+              <span className="rolling-stat-value">{coachingMetrics.revisedSolvedCount}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* 🧠 Smart Coach */}
+        <div className="smart-coach-card fade-up">
+          <div className="sc-header">
+            <h3 className="card-title">🧠 Smart Coach</h3>
+            <span className="sc-subtitle">Personalized insights based on your data</span>
+          </div>
+          <div className="sc-insights">
+            {smartCoachInsights.length === 0 ? (
+              <div className="sc-empty">✅ All good — keep solving and revising!</div>
+            ) : (
+              smartCoachInsights.map((ins, i) => (
+                <div key={i} className={`sc-insight sc-${ins.sev}`}>
+                  <span className="sc-icon">{ins.icon}</span>
+                  <div className="sc-body">
+                    <span className="sc-msg">{ins.msg}</span>
+                    <span className="sc-action">→ {ins.action}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* 🎯 What You Should Do Today */}
+        <div className="what-todo-card fade-up">
+          <h3 className="card-title">🎯 What You Should Do Today</h3>
+          <div className="wtd-list">
+            {whatToDoToday.length === 0 ? (
+              <div className="wtd-empty">🎉 No specific actions — just keep your streak going!</div>
+            ) : (
+              whatToDoToday.map((item, i) => (
+                <div key={i} className={`wtd-item wtd-${item.type}`}>
+                  <span className="wtd-icon">{item.icon}</span>
+                  <span className="wtd-text">{item.text}</span>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
