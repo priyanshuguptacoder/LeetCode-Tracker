@@ -154,14 +154,24 @@ exports.createProblem = async (req, res) => {
 
     const isSolved = solved === true || solved === 'true';
     const isTargeted = targeted === true || targeted === 'true';
-    const resolvedSolvedDate = isSolved ? (solvedDate ? new Date(solvedDate) : new Date()) : null;
-    const resolvedTargetedAt = isTargeted ? (targetedAt ? new Date(targetedAt) : new Date()) : null;
+    const now = new Date();
+    const resolvedSolvedDate = isSolved ? (solvedDate ? new Date(solvedDate) : now) : null;
+    const resolvedTargetedAt = isTargeted ? (targetedAt ? new Date(targetedAt) : now) : null;
+
+    // nextRevisionAt = solvedDate + 1 day (first revision due after 1 day)
+    let nextRevisionAt = null;
+    if (isSolved) {
+      nextRevisionAt = new Date(resolvedSolvedDate);
+      nextRevisionAt.setDate(nextRevisionAt.getDate() + 1);
+    }
 
     const problem = await Problem.create({
       id: parseInt(id), title, difficulty,
       topics: Array.isArray(topics) ? topics : [],
       solved: isSolved, notes: notes || '', leetcodeLink,
       solvedDate: resolvedSolvedDate,
+      submittedAt: isSolved ? now : null,  // always use current time as submittedAt
+      nextRevisionAt,
       targeted: isTargeted,
       targetedAt: resolvedTargetedAt,
       // Revision Intelligence Engine — auto-detection
@@ -170,7 +180,7 @@ exports.createProblem = async (req, res) => {
       wrongAttempts: req.body.wrongAttempts != null ? parseInt(req.body.wrongAttempts) : 0,
       mistakeType: req.body.mistakeType || null,
       needsRevision: req.body.needsRevision === true || req.body.needsRevision === 'true',
-      confidence: req.body.needsRevision ? 1 : 3, // LOW if auto-flagged
+      confidence: req.body.needsRevision ? 1 : 3,
     });
 
     let streakData = null;
@@ -197,7 +207,8 @@ exports.updateProblem = async (req, res) => {
     delete updates.id;
     if (updates.solved !== undefined) updates.solved = updates.solved === true || updates.solved === 'true';
     if (updates.solved === true && !updates.solvedDate) updates.solvedDate = new Date();
-    if (updates.solved === false) updates.solvedDate = null;
+    if (updates.solved === true) updates.submittedAt = new Date(); // always refresh submittedAt on solve
+    if (updates.solved === false) { updates.solvedDate = null; updates.submittedAt = null; }
 
     // Fetch BEFORE updating to check if it was previously unsolved
     const before = await Problem.findOne({ id: parseInt(req.params.id) });
@@ -254,17 +265,14 @@ exports.reviseProblem = async (req, res) => {
     // ── Removal check: HIGH + 2 consecutive successes + time <= 12 ────────
     const shouldRemove = confidence === 5 && consecutiveSuccess >= 2 && timeTaken != null && timeTaken <= 12;
 
-    // ── Spaced repetition ─────────────────────────────────────────────────
-    // success: +2d → +4d (doubling); failure: reset to +1d
+    // ── Spaced repetition — fixed intervals per spec ──────────────────────
+    // revisionCount after this revision: 1→+3d, 2→+7d, 3+→+15d; failure→+1d
     let intervalDays;
     if (!success) {
-      intervalDays = 1; // reset
+      intervalDays = 1; // reset on failure
     } else {
-      // Double the previous interval, capped at 14
-      const prevInterval = current.nextRevisionAt
-        ? Math.round((new Date(current.nextRevisionAt) - new Date(current.lastRevisedAt || Date.now())) / 86400000)
-        : 1;
-      intervalDays = Math.min(prevInterval > 0 ? prevInterval * 2 : 2, 14);
+      const intervals = [3, 7, 15]; // index = newCount-1, capped at last
+      intervalDays = intervals[Math.min(newCount - 1, intervals.length - 1)];
     }
     const nextRevisionAt = new Date();
     nextRevisionAt.setDate(nextRevisionAt.getDate() + intervalDays);
@@ -419,17 +427,14 @@ exports.deleteProblem = async (req, res) => {
 };
 
 // ─── GET /api/problems/revision-list ─────────────────────────────────────────
-// Problems that need revision: revisionCount===0 OR now > nextRevisionAt OR confidence <= 2
+// Only problems where nextRevisionAt <= now (due for revision)
 exports.getRevisionList = async (req, res) => {
   try {
     const now = new Date();
     const problems = await Problem.find({ solved: true });
     const list = problems.filter(p => {
-      if ((p.revisionCount || 0) === 0) return true;
-      if (p.nextRevisionAt && now > p.nextRevisionAt) return true;
-      // Only flag low confidence for problems revised at least once (strictly below 3)
-      if ((p.revisionCount || 0) > 0 && (p.confidence ?? 3) <= 2) return true;
-      return false;
+      if (!p.nextRevisionAt) return false; // not yet scheduled
+      return now >= new Date(p.nextRevisionAt);
     });
     res.json({ success: true, count: list.length, data: list });
   } catch (err) {

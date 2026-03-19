@@ -752,6 +752,7 @@ function App() {
       pattern: topics[0] || (p.pattern || 'Miscellaneous'),
       link: p.leetcodeLink || p.link || '',
       _solvedDateISO: solvedDateISO,
+      submittedAt: p.submittedAt || p.solvedDate || null, // timestamp for sorting Recently Solved
       targeted: p.targeted || false,
       isStriver: p.isStriver || false,
       confidence: p.confidence ?? 3,
@@ -2176,50 +2177,36 @@ function App() {
 
   // ============================================
   // PHASE 5: INTELLIGENT REVISION SYSTEM
-  // Needs revision if: needsRevision flag OR never revised OR overdue OR low confidence
-  // Priority sort: 1. LOW confidence first  2. highest solveTime  3. most recent failure
+  // Only shows problems where nextRevisionAt <= now (due for revision).
+  // New solves get nextRevisionAt = solvedAt + 1 day, so they don't appear immediately.
+  // Sub-sections: Due Now (overdue) | Upcoming (not yet due, shown for awareness)
+  // Sort: nextRevisionAt ASC (most urgent first)
   // Cap: max 9.
   // ============================================
   const intelligentRevision = React.useMemo(() => {
     const now = new Date();
-    now.setHours(0, 0, 0, 0);
 
-    const list = allProblems.filter(p => {
-      if (p.status !== 'Done') return false;
-      if (p.needsRevision === true) return true;
-      if ((p.revisionCount || 0) === 0) return true;
-      if (p.nextRevisionAt && new Date(p.nextRevisionAt) <= now) return true;
-      if ((p.revisionCount || 0) > 0 && (p.confidence ?? 3) <= 2) return true;
-      return false;
-    });
-
-    if (list.length === 0) return [];
-
-    return list
+    return allProblems
+      .filter(p => {
+        if (p.status !== 'Done') return false;
+        if (!p.nextRevisionAt) return false;           // not scheduled yet
+        return new Date(p.nextRevisionAt) <= now;      // only due problems
+      })
       .map(p => {
         const solvedDateStr = solvedDates[p.number];
         const daysSinceSolved = solvedDateStr
           ? Math.max(1, Math.ceil((now - parseLocalDate(solvedDateStr)) / 86400000))
           : null;
-        const isOverdue = p.nextRevisionAt && new Date(p.nextRevisionAt) <= now;
-        const neverRevised = (p.revisionCount || 0) === 0;
         const conf = p.confidence ?? 3;
         const confidenceLevel = conf <= 1 ? 'LOW' : conf <= 3 ? 'MEDIUM' : 'HIGH';
-        return { ...p, daysSinceSolved, isOverdue, neverRevised, confidenceLevel };
+        const neverRevised = (p.revisionCount || 0) === 0;
+        return { ...p, daysSinceSolved, neverRevised, confidenceLevel };
       })
       .sort((a, b) => {
-        // 1. LOW confidence first
-        const confOrder = { LOW: 0, MEDIUM: 1, HIGH: 2 };
-        if (confOrder[a.confidenceLevel] !== confOrder[b.confidenceLevel])
-          return confOrder[a.confidenceLevel] - confOrder[b.confidenceLevel];
-        // 2. Highest solveTime first
-        const aTime = a.solveTime || 0;
-        const bTime = b.solveTime || 0;
-        if (bTime !== aTime) return bTime - aTime;
-        // 3. Most recent failure (lastRevisedAt desc)
-        const aRev = a.lastRevisedAt ? new Date(a.lastRevisedAt).getTime() : 0;
-        const bRev = b.lastRevisedAt ? new Date(b.lastRevisedAt).getTime() : 0;
-        return bRev - aRev;
+        // Most urgent (earliest nextRevisionAt) first
+        const aNext = a.nextRevisionAt ? new Date(a.nextRevisionAt).getTime() : 0;
+        const bNext = b.nextRevisionAt ? new Date(b.nextRevisionAt).getTime() : 0;
+        return aNext - bNext;
       })
       .slice(0, 9);
   }, [allProblems, solvedDates]);
@@ -2935,13 +2922,12 @@ function App() {
           )}
         </div>
 
-        {/* Needs Revision — Intelligence Engine */}
+        {/* Needs Revision — Spaced Repetition Queue */}
         {(() => {
-          const lowConf      = intelligentRevision.filter(p => p.confidenceLevel === 'LOW');
-          const overdue      = intelligentRevision.filter(p => p.isOverdue && p.confidenceLevel !== 'LOW');
-          const neverRevised = intelligentRevision.filter(p => p.neverRevised && !p.isOverdue && p.confidenceLevel !== 'LOW');
-          const failureLoop  = intelligentRevision.filter(p => p.failureLoopFlagged);
-          const pendingCount = intelligentRevision.length;
+          const now = new Date();
+          const dueNow    = intelligentRevision; // already filtered to nextRevisionAt <= now
+          const failureLoop = intelligentRevision.filter(p => p.failureLoopFlagged);
+          const pendingCount = dueNow.length;
           const limitReached = dailyRevisionCount >= DAILY_REVISION_LIMIT;
 
           const RevSubSection = ({ title, items }) => {
@@ -2985,50 +2971,48 @@ function App() {
                 </span>
               </div>
 
-              {/* Daily limit warning */}
               {limitReached && (
                 <div style={{
                   background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
                   borderRadius: 8, padding: '0.6rem 1rem', marginBottom: '1rem',
                   fontSize: '0.82rem', color: '#ef4444',
                 }}>
-                  🚫 Daily revision limit reached (5/5). Focus on new problems tomorrow.
+                  🚫 Daily revision limit reached (5/5). Come back tomorrow.
                 </div>
               )}
 
-              {/* Failure loop alert */}
               {failureLoop.length > 0 && (
                 <div style={{
                   background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)',
                   borderRadius: 8, padding: '0.6rem 1rem', marginBottom: '1rem',
                   fontSize: '0.82rem', color: 'var(--text-secondary)',
                 }}>
-                  ⚠️ <strong style={{ color: '#ef4444' }}>{failureLoop.length} problem{failureLoop.length > 1 ? 's' : ''}</strong> stuck in failure loop — study the pattern, watch an explanation, then retry after 24h.
+                  ⚠️ <strong style={{ color: '#ef4444' }}>{failureLoop.length} problem{failureLoop.length > 1 ? 's' : ''}</strong> stuck in failure loop — study the pattern, then retry after 24h.
                 </div>
               )}
 
               {pendingCount === 0 ? (
                 <div className="pc-empty">
                   <div className="pc-empty-icon">🎉</div>
-                  <div>No problems need revision yet</div>
-                  <small>Start revising solved problems to track them here</small>
+                  <div>No revisions due right now</div>
+                  <small>Problems appear here when their scheduled revision date arrives</small>
                 </div>
               ) : (
-                <>
-                  <RevSubSection title="❌ Low Confidence" items={lowConf} />
-                  <RevSubSection title="⚠️ Overdue" items={overdue} />
-                  <RevSubSection title="📝 Never Revised" items={neverRevised} />
-                </>
+                <RevSubSection title="📅 Due Now" items={dueNow} />
               )}
             </div>
           );
         })()}
 
-        {/* Recently Solved — latest 9 */}
+        {/* Recently Solved — sorted by submittedAt DESC (full timestamp) */}
         {(() => {
           const recentProblems = [...allProblems]
             .filter(p => p.status === 'Done')
-            .sort((a, b) => new Date(b._solvedDateISO || 0) - new Date(a._solvedDateISO || 0))
+            .sort((a, b) => {
+              const aT = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
+              const bT = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
+              return bT - aT;
+            })
             .slice(0, 9);
           return (
             <ProblemSection
