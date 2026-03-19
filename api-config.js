@@ -86,6 +86,16 @@ const api = {
     if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Failed to update streak'); }
     return r.json();
   },
+  getRevisionList: async () => {
+    const r = await fetch(`${API_BASE_URL}/problems/revision-list`);
+    if (!r.ok) throw new Error('Failed to fetch revision list');
+    return r.json();
+  },
+  getSuggestions: async () => {
+    const r = await fetch(`${API_BASE_URL}/problems/suggestions`);
+    if (!r.ok) throw new Error('Failed to fetch suggestions');
+    return r.json();
+  },
 };
 
 window.API = api;

@@ -15,6 +15,8 @@ const problemSchema = new mongoose.Schema(
     userDifficulty: { type: String, enum: ['Easy', 'Medium', 'Hard'], default: null },
     revisionCount: { type: Number, default: 0, min: 0 },
     lastRevisedAt: { type: Date, default: null },
+    confidence: { type: Number, default: 3, min: 0, max: 5 }, // 0=very weak, 5=mastered
+    nextRevisionAt: { type: Date, default: null }, // spaced repetition next date
     targeted: { type: Boolean, default: false }, // manually marked as a goal
     targetedAt: { type: Date, default: null },   // when it was targeted
     isStriver: { type: Boolean, default: false }, // part of Striver sheet

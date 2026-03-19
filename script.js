@@ -48,12 +48,15 @@ function StatCard({ value, label, icon, gradient, delay = 0, isReady }) {
 // Used by: Recently Solved, Needs Revision, Targeted Problems
 // variant: 'solved' | 'revision' | 'targeted'
 // ============================================
-function ProblemCard({ p, variant, onRevise, revisingId, formatDate, onUserDiffChange, onTarget, targetingId }) {
+function ProblemCard({ p, variant, onRevise, revisingId, formatDate, onUserDiffChange, onTarget, targetingId, onClickCard }) {
   const diffLower = (p.difficulty || 'medium').toLowerCase();
   const userDiff = p.userDifficulty || p.difficulty || 'Medium';
 
   return (
-    <div className="pc-card">
+    <div className="pc-card" onClick={variant === 'targeted' && onClickCard ? () => onClickCard(p.number) : undefined}
+      style={variant === 'targeted' && onClickCard ? { cursor: 'pointer' } : {}}
+      title={variant === 'targeted' ? 'Click to find in table' : undefined}
+    >
       {/* Top row: ID + user difficulty dropdown */}
       <div className="pc-top-row">
         <span className="pc-id">#{p.number}</span>
@@ -155,7 +158,7 @@ function getPcGridClass(count) {
 }
 
 // Reusable section renderer
-function ProblemSection({ title, items, variant, emptyIcon, emptyMsg, emptyHint, onRevise, revisingId, formatDate, onUserDiffChange, onTarget, targetingId }) {
+function ProblemSection({ title, items, variant, emptyIcon, emptyMsg, emptyHint, onRevise, revisingId, formatDate, onUserDiffChange, onTarget, targetingId, onClickCard }) {
   const gridClass = getPcGridClass(items.length);
   return (
     <div className="pc-section">
@@ -173,6 +176,7 @@ function ProblemSection({ title, items, variant, emptyIcon, emptyMsg, emptyHint,
               onUserDiffChange={onUserDiffChange}
               onTarget={onTarget}
               targetingId={targetingId}
+              onClickCard={onClickCard}
             />
           ))}
         </div>
@@ -188,9 +192,101 @@ function ProblemSection({ title, items, variant, emptyIcon, emptyMsg, emptyHint,
 }
 
 // ============================================
-// ADMIN AUTH MODAL — session-based unlock
-// Password: '0' (UI-level lock only, not real security)
+// DIFFICULTY NAVBAR — Easy/Medium/Hard/Total filter bar
 // ============================================
+function DifficultyNavbar({ easy, medium, hard, total, selectedFilter, onFilterChange }) {
+  const tabs = [
+    { key: 'easy',   label: 'Easy',   count: easy,   color: '#22c55e' },
+    { key: 'medium', label: 'Medium', count: medium, color: '#f59e0b' },
+    { key: 'hard',   label: 'Hard',   count: hard,   color: '#ef4444' },
+    { key: 'solved', label: 'Total',  count: total,  color: '#6366f1' },
+  ];
+  return (
+    <div className="diff-navbar">
+      {tabs.map((t, i) => (
+        <button
+          key={i}
+          className={`diff-nav-btn${selectedFilter === t.key ? ' active' : ''}`}
+          style={{ '--diff-color': t.color }}
+          onClick={() => onFilterChange(selectedFilter === t.key ? null : t.key)}
+        >
+          <span className="diff-nav-count">{t.count}</span>
+          <span className="diff-nav-label">{t.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ============================================
+// SUGGESTION CARD — single suggestion item
+// ============================================
+function SuggestionCard({ s, onClickSuggestion }) {
+  const diffLower = (s.difficulty || 'medium').toLowerCase();
+  return (
+    <div className="sug-card" onClick={() => onClickSuggestion(s.problemId)} title="Click to find in table">
+      <div className="sug-card-top">
+        <span className="sug-id">#{s.problemId}</span>
+        <span className={`badge badge-${diffLower}`}>{s.difficulty}</span>
+      </div>
+      <div className="sug-title">{s.title}</div>
+      <div className="sug-meta">
+        <span className="sug-topic">{s.topic}</span>
+        <span className="sug-reason">{s.reason}</span>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// SUGGESTIONS SECTION — 3 sub-sections
+// ============================================
+function SuggestionsSection({ suggestions, onClickSuggestion }) {
+  if (!suggestions || suggestions.length === 0) return null;
+
+  // Categorize by reason keywords — must match backend reason strings exactly
+  const weakTopics   = suggestions.filter(s => s.reason.startsWith('Weak in'));
+  const continueList = suggestions.filter(s =>
+    s.reason === 'Never revised' ||
+    s.reason === 'Overdue revision' ||
+    s.reason === 'Low confidence' ||
+    s.reason.includes('revision') ||
+    s.reason.includes('revised') ||
+    s.reason.includes('confidence')
+  );
+  const challenge    = suggestions.filter(s => s.reason === 'Challenge yourself');
+
+  // Fallback: if categorization leaves some uncategorized, put them in weakTopics
+  const categorized = new Set([...weakTopics, ...continueList, ...challenge].map(s => s.problemId));
+  const uncategorized = suggestions.filter(s => !categorized.has(s.problemId));
+  const allWeak = [...weakTopics, ...uncategorized];
+
+  const Section = ({ title, items }) => {
+    if (items.length === 0) return null;
+    return (
+      <div className="sug-section">
+        <div className="sug-section-title">{title}</div>
+        <div className="sug-grid">
+          {items.map(s => (
+            <SuggestionCard key={s.problemId} s={s} onClickSuggestion={onClickSuggestion} />
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="suggestions-card fade-up">
+      <div className="sug-header">
+        <h3 className="card-title">💡 Suggested for You</h3>
+        <span className="sug-subtitle">Based on your weak topics, revision backlog, and progress</span>
+      </div>
+      <Section title="🧠 Weak Topics" items={allWeak} />
+      <Section title="🔁 Continue Progress" items={continueList} />
+      <Section title="🔥 Challenge Yourself" items={challenge} />
+    </div>
+  );
+}
 function AdminModal({ onClose, onUnlock, adminPassword }) {
   const [pwVal, setPwVal] = React.useState('');
   const [pwErr, setPwErr] = React.useState('');
@@ -478,7 +574,6 @@ function App() {
       ? toLocalDateStr(new Date(p.solvedDate))
       : parseDDMMM(p.date);
     const topics = getTopicsForProblem(p);
-    // Derive status from DB booleans: solved > inProgress > Not Started
     const status = p.solved ? 'Done' : p.inProgress ? 'In Progress' : 'Not Started';
     return {
       ...p,
@@ -491,6 +586,8 @@ function App() {
       _solvedDateISO: solvedDateISO,
       targeted: p.targeted || false,
       isStriver: p.isStriver || false,
+      confidence: p.confidence ?? 3,
+      nextRevisionAt: p.nextRevisionAt || null,
     };
   });
 
@@ -506,6 +603,11 @@ function App() {
         if (probRes.success) setApiProblems(transformProblems(probRes.data));
         if (streakRes.success) setDbStreak(streakRes.data);
         setLoading(false);
+        // Fetch suggestions after main data loads (non-blocking)
+        try {
+          const sugRes = await window.API.getSuggestions();
+          if (sugRes.success) setSuggestions(sugRes.data || []);
+        } catch (_) {}
       } catch (error) {
         console.error('Failed to fetch data:', error);
         setApiError(error.message);
@@ -545,6 +647,11 @@ function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const debounceRef = useRef(null);
+
+  // ── Difficulty navbar + suggestion state ─────────────────────────────────
+  const [selectedFilter, setSelectedFilter] = useState(null); // 'easy'|'medium'|'hard'|null
+  const [selectedProblemId, setSelectedProblemId] = useState(null);
+  const [suggestions, setSuggestions] = useState([]);
 
   const handleSearchChange = (val) => {
     setSearchTerm(val);
@@ -1274,17 +1381,26 @@ function App() {
 
   const [revisingId, setRevisingId] = React.useState(null);
   const [unrevisingId, setUnrevisingId] = React.useState(null);
+  const revisingIdRef = React.useRef(null);
+  const unrevisingIdRef = React.useRef(null);
 
   const handleRevise = (number) => {
     requireAdmin(async () => {
-      if (revisingId === number) return;
+      if (revisingIdRef.current === number) return; // use ref to avoid stale closure
       try {
+        revisingIdRef.current = number;
         setRevisingId(number);
         const res = await window.API.reviseProblem(number);
         if (res.success) {
           setApiProblems(prev => prev.map(p =>
             p.number === number
-              ? { ...p, revisionCount: res.data.revisionCount, lastRevisedAt: res.data.lastRevisedAt }
+              ? {
+                  ...p,
+                  revisionCount: res.data.revisionCount,
+                  lastRevisedAt: res.data.lastRevisedAt,
+                  nextRevisionAt: res.data.nextRevisionAt,
+                  confidence: res.data.confidence,
+                }
               : p
           ));
           showNotification('Revision recorded ✅', 'success');
@@ -1292,6 +1408,7 @@ function App() {
       } catch (err) {
         showNotification(`❌ ${err.message}`, 'error');
       } finally {
+        revisingIdRef.current = null;
         setRevisingId(null);
       }
     });
@@ -1299,14 +1416,22 @@ function App() {
 
   const handleUnrevise = (number) => {
     requireAdmin(async () => {
-      if (unrevisingId === number) return;
+      if (unrevisingIdRef.current === number) return;
       try {
+        unrevisingIdRef.current = number;
         setUnrevisingId(number);
         const res = await window.API.unreviseProblem(number);
         if (res.success) {
           setApiProblems(prev => prev.map(p =>
             p.number === number
-              ? { ...p, revisionCount: res.data.revisionCount, lastRevisedAt: res.data.lastRevisedAt }
+              ? {
+                  ...p,
+                  revisionCount: res.data.revisionCount,
+                  lastRevisedAt: res.data.lastRevisedAt,
+                  // Reset nextRevisionAt and confidence when count drops to 0
+                  nextRevisionAt: res.data.revisionCount === 0 ? null : p.nextRevisionAt,
+                  confidence: res.data.revisionCount === 0 ? 3 : p.confidence,
+                }
               : p
           ));
           showNotification('Revision removed ✅', 'success');
@@ -1314,6 +1439,7 @@ function App() {
       } catch (err) {
         showNotification(`❌ ${err.message}`, 'error');
       } finally {
+        unrevisingIdRef.current = null;
         setUnrevisingId(null);
       }
     });
@@ -1351,6 +1477,59 @@ function App() {
     });
   };
 
+  // ── Pending scroll target — set by handleClickSuggestion, consumed by useEffect ──
+  const [pendingScrollId, setPendingScrollId] = React.useState(null);
+
+  // ── Click suggestion / targeted card → scroll + highlight table row ─────
+  const handleClickSuggestion = (problemId) => {
+    // Clear all filters first so the row will be in the DOM
+    setSelectedFilter(null);
+    setDifficultyFilter('All');
+    setStatusFilter('All');
+    setPatternFilter('All');
+    setSearchTerm('');
+    setDebouncedSearch('');
+    // Signal the scroll effect to fire after React re-renders
+    setPendingScrollId(problemId);
+    setSelectedProblemId(problemId);
+  };
+
+  // ── Fire scroll after filters have cleared and DOM has updated ───────────
+  React.useEffect(() => {
+    if (pendingScrollId == null) return;
+    // rAF ensures we're after the paint
+    const raf = requestAnimationFrame(() => {
+      const row = document.querySelector(`[data-problem-number="${pendingScrollId}"]`);
+      if (row) {
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        row.classList.add('highlight-row');
+        setTimeout(() => {
+          row.classList.remove('highlight-row');
+          setSelectedProblemId(null);
+        }, 2500);
+      }
+      setPendingScrollId(null);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [pendingScrollId]);
+
+  // ── Table header scroll-elevation effect ─────────────────────────────────
+  const tableHeaderRef = React.useRef(null);
+  React.useEffect(() => {
+    const header = tableHeaderRef.current;
+    if (!header) return;
+    const tableCard = header.closest('.table-card');
+    if (!tableCard) return;
+    const onScroll = () => {
+      const rect = tableCard.getBoundingClientRect();
+      // header is sticky at top:0; elevate when table has scrolled past its natural position
+      header.classList.toggle('scrolled-header', rect.top < 0);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [loading]);
+
+  // ── Striver toggle ────────────────────────────────────────────────────────
   // ============================================
   // STRIVER TOGGLE
   // ============================================
@@ -1395,44 +1574,38 @@ function App() {
   };
 
   const handleClearAllFilters = () => {
-    // Add animation class to all filter inputs
     const filterInputs = document.querySelectorAll('.filter-input, .filter-select');
     filterInputs.forEach(input => {
       input.classList.add('filter-reset-animation');
     });
-    
-    // Remove animation class after animation completes
     setTimeout(() => {
       filterInputs.forEach(input => {
         input.classList.remove('filter-reset-animation');
       });
     }, 400);
-    
-    // Reset all filters
+
     setSearchTerm('');
     setDebouncedSearch('');
     setDifficultyFilter('All');
     setPatternFilter('All');
     setStatusFilter('All');
-    
-    // Show notification
+    setSelectedFilter(null); // also clear DifficultyNavbar filter
+
     showNotification('✨ All filters cleared', 'success');
   };
 
-  // ESC key to clear all filters
+  // ESC key to clear all filters (including DifficultyNavbar)
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
-        // Only clear if any filter is active
-        if (searchTerm || debouncedSearch || difficultyFilter !== 'All' || patternFilter !== 'All' || statusFilter !== 'All') {
+        if (searchTerm || debouncedSearch || difficultyFilter !== 'All' || patternFilter !== 'All' || statusFilter !== 'All' || selectedFilter !== null) {
           handleClearAllFilters();
         }
       }
     };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [searchTerm, debouncedSearch, difficultyFilter, patternFilter, statusFilter]);
+  }, [searchTerm, debouncedSearch, difficultyFilter, patternFilter, statusFilter, selectedFilter]);
 
   // ============================================
   // DYNAMIC ANALYTICS CALCULATIONS
@@ -1448,6 +1621,19 @@ function App() {
   const completedCycles = Math.floor(totalSolved / 100);
   const last100Progress = totalSolved % 100;
   const rollingProgressPercentage = last100Progress;
+
+  // LeetCode Difficulty distribution — declared BEFORE useMemos that reference them
+  const easyCount = allProblems.filter(p => p.difficulty === 'Easy' && p.status === 'Done').length;
+  const mediumCount = allProblems.filter(p => p.difficulty === 'Medium' && p.status === 'Done').length;
+  const hardCount = allProblems.filter(p => p.difficulty === 'Hard' && p.status === 'Done').length;
+
+  const totalEasy = allProblems.filter(p => p.difficulty === 'Easy').length;
+  const totalMedium = allProblems.filter(p => p.difficulty === 'Medium').length;
+  const totalHard = allProblems.filter(p => p.difficulty === 'Hard').length;
+
+  const easyPercent = totalEasy > 0 ? Math.round((easyCount / totalEasy) * 100) : 0;
+  const mediumPercent = totalMedium > 0 ? Math.round((mediumCount / totalMedium) * 100) : 0;
+  const hardPercent = totalHard > 0 ? Math.round((hardCount / totalHard) * 100) : 0;
 
   // ============================================
   // COACHING INTELLIGENCE — derived metrics
@@ -1623,20 +1809,8 @@ function App() {
     [allProblems.length, solvedDates]
   );
 
-  // LeetCode Difficulty distribution
-  const easyCount = allProblems.filter(p => p.difficulty === 'Easy' && p.status === 'Done').length;
-  const mediumCount = allProblems.filter(p => p.difficulty === 'Medium' && p.status === 'Done').length;
-  const hardCount = allProblems.filter(p => p.difficulty === 'Hard' && p.status === 'Done').length;
-  
-  const totalEasy = allProblems.filter(p => p.difficulty === 'Easy').length;
-  const totalMedium = allProblems.filter(p => p.difficulty === 'Medium').length;
-  const totalHard = allProblems.filter(p => p.difficulty === 'Hard').length;
+  // LeetCode Difficulty distribution — declared above (before coaching useMemos)
 
-  const easyPercent = totalEasy > 0 ? Math.round((easyCount / totalEasy) * 100) : 0;
-  const mediumPercent = totalMedium > 0 ? Math.round((mediumCount / totalMedium) * 100) : 0;
-  const hardPercent = totalHard > 0 ? Math.round((hardCount / totalHard) * 100) : 0;
-
-  // User Difficulty distribution
   const userEasyCount = allProblems.filter(p => p.userDifficulty === 'Easy' && p.status === 'Done').length;
   const userMediumCount = allProblems.filter(p => p.userDifficulty === 'Medium' && p.status === 'Done').length;
   const userHardCount = allProblems.filter(p => p.userDifficulty === 'Hard' && p.status === 'Done').length;
@@ -1750,31 +1924,47 @@ function App() {
 
   // ============================================
   // PHASE 5: INTELLIGENT REVISION SYSTEM
-  // Data Rule: problems where revisionCount > 0
-  // Sort: most recently revised first (lastRevisedAt desc)
-  // Cap: max 9. Show all if ≤ 9.
+  // Needs revision if: revisionCount===0 (solved, never revised)
+  //   OR now > nextRevisionAt (overdue)
+  //   OR confidence <= 2 (low confidence, revised at least once)
+  // Sort: overdue first, then by nextRevisionAt asc, then never-revised
+  // Cap: max 9.
   // ============================================
   const intelligentRevision = React.useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
 
-    // Include ALL problems with revisionCount > 0 (regardless of solved status)
-    const revisedProblems = allProblems.filter(p => (p.revisionCount || 0) > 0);
-    if (revisedProblems.length === 0) return [];
+    const needsRevision = allProblems.filter(p => {
+      if (p.status !== 'Done') return false; // only solved problems
+      if ((p.revisionCount || 0) === 0) return true; // never revised
+      if (p.nextRevisionAt && new Date(p.nextRevisionAt) <= now) return true; // overdue
+      // Only flag low confidence for problems that have been revised at least once
+      // (default confidence=3 is neutral — only flag if strictly below 3)
+      if ((p.revisionCount || 0) > 0 && (p.confidence ?? 3) <= 2) return true; // low confidence
+      return false;
+    });
 
-    return revisedProblems
+    if (needsRevision.length === 0) return [];
+
+    return needsRevision
       .map(p => {
         const solvedDateStr = solvedDates[p.number];
         const daysSinceSolved = solvedDateStr
-          ? Math.max(1, Math.ceil((today - parseLocalDate(solvedDateStr)) / 86400000))
+          ? Math.max(1, Math.ceil((now - parseLocalDate(solvedDateStr)) / 86400000))
           : null;
-        return { ...p, daysSinceSolved };
+        const isOverdue = p.nextRevisionAt && new Date(p.nextRevisionAt) <= now;
+        const neverRevised = (p.revisionCount || 0) === 0;
+        return { ...p, daysSinceSolved, isOverdue, neverRevised };
       })
       .sort((a, b) => {
-        // Sort by lastRevisedAt descending (most recently revised first)
-        const aTime = a.lastRevisedAt ? new Date(a.lastRevisedAt).getTime() : 0;
-        const bTime = b.lastRevisedAt ? new Date(b.lastRevisedAt).getTime() : 0;
-        return bTime - aTime;
+        // Overdue first, then never-revised, then by nextRevisionAt asc
+        if (a.isOverdue && !b.isOverdue) return -1;
+        if (!a.isOverdue && b.isOverdue) return 1;
+        if (a.neverRevised && !b.neverRevised) return -1;
+        if (!a.neverRevised && b.neverRevised) return 1;
+        const aNext = a.nextRevisionAt ? new Date(a.nextRevisionAt).getTime() : 0;
+        const bNext = b.nextRevisionAt ? new Date(b.nextRevisionAt).getTime() : 0;
+        return aNext - bNext;
       })
       .slice(0, 9);
   }, [allProblems, solvedDates]);
@@ -1887,9 +2077,18 @@ function App() {
          statusFilter === 'Striver'  ? problem.isStriver === true :
          problem.status === statusFilter);
 
-      return matchesSearch && matchesDifficulty && matchesPattern && matchesStatus;
+      // selectedFilter from DifficultyNavbar
+      const matchesSelectedFilter =
+        selectedFilter === null ||
+        (selectedFilter === 'easy'   ? problem.difficulty === 'Easy'   && problem.status === 'Done' :
+         selectedFilter === 'medium' ? problem.difficulty === 'Medium' && problem.status === 'Done' :
+         selectedFilter === 'hard'   ? problem.difficulty === 'Hard'   && problem.status === 'Done' :
+         selectedFilter === 'solved' ? problem.status === 'Done' :
+         true);
+
+      return matchesSearch && matchesDifficulty && matchesPattern && matchesStatus && matchesSelectedFilter;
     });
-  }, [allProblems, debouncedSearch, difficultyFilter, patternFilter, statusFilter]);
+  }, [allProblems, debouncedSearch, difficultyFilter, patternFilter, statusFilter, selectedFilter]);
 
   // Animate table count when filtered problems change
   useEffect(() => {
@@ -1937,6 +2136,11 @@ function App() {
         ]);
         if (probRes.success) setApiProblems(transformProblems(probRes.data));
         if (streakRes.success) setDbStreak(streakRes.data);
+        // Refresh suggestions too
+        try {
+          const sugRes = await window.API.getSuggestions();
+          if (sugRes.success) setSuggestions(sugRes.data || []);
+        } catch (_) {}
         console.log('✅ Synced with backend');
       } catch (error) {
         console.error('Background sync failed:', error);
@@ -2125,6 +2329,16 @@ function App() {
           <div className="navbar-stat-divider" />
           <StatCard value={totalProblems} label="Total Problems"  icon="📚" delay={0.20} isReady={statsReady} />
         </div>
+
+        {/* Difficulty Navbar — filter by Easy/Medium/Hard */}
+        <DifficultyNavbar
+          easy={easyCount}
+          medium={mediumCount}
+          hard={hardCount}
+          total={totalSolved}
+          selectedFilter={selectedFilter}
+          onFilterChange={setSelectedFilter}
+        />
 
         {/* Streak & Monthly Stats */}
         <div className="streak-monthly-grid fade-up fade-up-2">
@@ -2519,6 +2733,7 @@ function App() {
               onUserDiffChange={handleUserDifficultyChange}
               onTarget={handleToggleTarget}
               targetingId={targetingId}
+              onClickCard={handleClickSuggestion}
             />
           );
         })()}
@@ -2703,6 +2918,12 @@ function App() {
           </div>
         </div>
 
+        {/* Suggestions — shown when revision list is empty or always */}
+        <SuggestionsSection
+          suggestions={suggestions}
+          onClickSuggestion={handleClickSuggestion}
+        />
+
         {/* Filters */}
         <div className="filters-card">
           <div className="filters-grid">
@@ -2723,7 +2944,7 @@ function App() {
               <select 
                 value={difficultyFilter}
                 onChange={(e) => setDifficultyFilter(e.target.value)}
-                className="filter-select"
+                className={`filter-select${difficultyFilter !== 'All' ? ' filter-active' : ''}`}
               >
                 <option>All</option>
                 <option>Easy</option>
@@ -2736,7 +2957,7 @@ function App() {
               <select 
                 value={patternFilter}
                 onChange={(e) => setPatternFilter(e.target.value)}
-                className="filter-select"
+                className={`filter-select${patternFilter !== 'All' ? ' filter-active' : ''}`}
               >
                 {patterns.map(pattern => (
                   <option key={pattern}>{pattern}</option>
@@ -2748,7 +2969,7 @@ function App() {
               <select 
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="filter-select"
+                className={`filter-select${statusFilter !== 'All' ? ' filter-active' : ''}`}
               >
                 <option>All</option>
                 <option>Not Started</option>
@@ -2758,7 +2979,7 @@ function App() {
                 <option>Striver</option>
               </select>
             </div>
-            {(searchTerm || difficultyFilter !== 'All' || patternFilter !== 'All' || statusFilter !== 'All') && (
+            {(searchTerm || difficultyFilter !== 'All' || patternFilter !== 'All' || statusFilter !== 'All' || selectedFilter !== null) && (
               <div className="filter-group filter-clear-group">
                 <label>&nbsp;</label>
                 <button
@@ -2775,9 +2996,17 @@ function App() {
 
         {/* Problem List — desktop table + mobile cards */}
         <div className="table-card">
-          <div className="table-header">
+          <div className="table-header" ref={tableHeaderRef}>
             <h3>Problem List</h3>
-            <span className="table-count">{filteredProblems.length} problems</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {selectedFilter && (
+                <span className={`diff-active-badge diff-active-${selectedFilter}`}>
+                  {selectedFilter === 'solved' ? 'All Solved' : selectedFilter.charAt(0).toUpperCase() + selectedFilter.slice(1)} only
+                  <button className="diff-active-clear" onClick={() => setSelectedFilter(null)}>✕</button>
+                </span>
+              )}
+              <span className="table-count">{filteredProblems.length} problems</span>
+            </div>
           </div>
 
           {/* ── DESKTOP TABLE ── */}
@@ -2800,7 +3029,9 @@ function App() {
               <tbody>
                 {filteredProblems.length > 0 ? (
                   filteredProblems.map(problem => (
-                    <tr key={problem.number} data-problem-number={problem.number}>
+                    <tr key={problem.number} data-problem-number={problem.number}
+                      className={selectedProblemId === problem.number ? 'highlight-row' : ''}
+                    >
                       <td className="problem-number">{problem.number}</td>
                       <td className="problem-title">{problem.title}</td>
                       <td>

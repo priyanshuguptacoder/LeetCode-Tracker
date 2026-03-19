@@ -1165,7 +1165,7 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
 }
 
 /* ============================================
-   FILTERS CARD
+   FILTERS CARD — entry + hover animations
    ============================================ */
 
 .filters-card {
@@ -1175,6 +1175,13 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
     padding: 16px;
     margin-bottom: 16px;
     box-shadow: var(--shadow-sm);
+    animation: filterCardEntry 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+    transform-origin: top center;
+}
+
+@keyframes filterCardEntry {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
 }
 
 .filters-grid {
@@ -1200,6 +1207,12 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
     color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    transition: color 0.2s ease;
+}
+
+/* Highlight label when its input is focused */
+.filter-group:focus-within label {
+    color: var(--primary);
 }
 
 .filter-input,
@@ -1211,19 +1224,67 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
     border-radius: 8px;
     font-size: 14px;
     font-weight: 500;
-    transition: all 0.3s ease;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease, background 0.2s ease;
     font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    position: relative;
+}
+
+/* Hover: subtle lift + glow */
+.filter-input:hover,
+.filter-select:hover {
+    border-color: rgba(34, 197, 94, 0.4);
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.06), 0 2px 8px rgba(0,0,0,0.12);
+    transform: translateY(-1px);
 }
 
 .filter-input:focus,
 .filter-select:focus {
     outline: none;
     border-color: var(--primary);
-    box-shadow: 0 0 0 3px rgba(0, 200, 150, 0.1);
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.12), 0 2px 12px rgba(34, 197, 94, 0.1);
+    transform: translateY(-1px);
+}
+
+/* Active (non-default) select — pill highlight via border + bg tint */
+.filter-select.filter-active {
+    border-color: var(--primary);
+    background: rgba(34, 197, 94, 0.07);
+    color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.15);
+}
+
+/* Click feedback — scale down then snap back */
+.filter-input:active,
+.filter-select:active {
+    transform: scale(0.97) translateY(0);
+    transition: transform 0.08s ease;
 }
 
 .filter-input::placeholder {
     color: var(--text-muted);
+}
+
+/* Active filter underline indicator */
+.filter-group {
+    position: relative;
+}
+
+.filter-group::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 0%;
+    height: 2px;
+    background: var(--primary);
+    border-radius: 2px;
+    transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none;
+}
+
+.filter-group:focus-within::after {
+    width: 100%;
 }
 
 .btn-clear-filters {
@@ -1235,7 +1296,8 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease,
+                transform 0.15s ease, box-shadow 0.2s ease;
     white-space: nowrap;
     height: 42px;
     animation: fadeInSlide 0.3s ease;
@@ -1244,14 +1306,8 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
 }
 
 @keyframes fadeInSlide {
-    from {
-        opacity: 0;
-        transform: translateX(-10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateX(0);
-    }
+    from { opacity: 0; transform: translateX(-10px); }
+    to   { opacity: 1; transform: translateX(0); }
 }
 
 .btn-clear-filters::before {
@@ -1264,7 +1320,7 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
     border-radius: 50%;
     background: rgba(239, 68, 68, 0.2);
     transform: translate(-50%, -50%);
-    transition: width 0.6s, height 0.6s;
+    transition: width 0.5s ease, height 0.5s ease;
 }
 
 .btn-clear-filters:active::before {
@@ -1276,55 +1332,30 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
     border-color: #ef4444;
     color: #ef4444;
     background: rgba(239, 68, 68, 0.05);
-    transform: translateY(-1px);
+    transform: translateY(-1px) scale(1.02);
     box-shadow: 0 4px 12px rgba(239, 68, 68, 0.15);
 }
 
 .btn-clear-filters:active {
-    transform: translateY(0) scale(0.98);
-    transition: all 0.1s ease;
+    transform: scale(0.97);
+    transition: transform 0.08s ease;
 }
 
 /* Filter reset animation */
-.filter-input,
-.filter-select {
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border);
-    color: var(--text-primary);
-    padding: 10px 14px;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 500;
-    transition: all 0.3s ease;
-    font-family: 'Inter', sans-serif;
-}
-
 .filter-input.filter-reset-animation,
 .filter-select.filter-reset-animation {
     animation: filterReset 0.4s ease;
 }
 
 @keyframes filterReset {
-    0% {
-        transform: scale(1);
-        background: var(--bg-tertiary);
-    }
-    25% {
-        transform: scale(0.98);
-        background: rgba(0, 200, 150, 0.1);
-    }
-    50% {
-        transform: scale(1.02);
-        background: rgba(0, 200, 150, 0.15);
-    }
-    100% {
-        transform: scale(1);
-        background: var(--bg-tertiary);
-    }
+    0%   { transform: scale(1);    background: var(--bg-tertiary); }
+    25%  { transform: scale(0.98); background: rgba(34, 197, 94, 0.08); }
+    50%  { transform: scale(1.02); background: rgba(34, 197, 94, 0.12); }
+    100% { transform: scale(1);    background: var(--bg-tertiary); }
 }
 
 /* ============================================
-   TABLE
+   TABLE — entry + sticky header blur
    ============================================ */
 
 .table-card {
@@ -1334,6 +1365,7 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
     overflow: hidden;
     box-shadow: var(--shadow-sm);
     margin-bottom: 24px;
+    animation: filterCardEntry 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both;
 }
 
 .table-header {
@@ -1342,10 +1374,20 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: var(--bg-secondary);
+    background: rgba(19, 28, 46, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     position: sticky;
     top: 0;
     z-index: 10;
+    transition: box-shadow 0.25s ease, background 0.25s ease;
+}
+
+/* Elevated state when table is scrolled (JS adds this class) */
+.table-header.scrolled-header {
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+    background: rgba(13, 20, 36, 0.95);
+    border-bottom-color: rgba(34, 197, 94, 0.15);
 }
 
 .table-header h3 {
@@ -1369,9 +1411,9 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
 }
 
 @keyframes countPulse {
-    0% { transform: scale(1); color: var(--text-secondary); }
-    50% { transform: scale(1.15); color: var(--primary); }
-    100% { transform: scale(1); color: var(--text-secondary); }
+    0%   { transform: scale(1);    color: var(--text-secondary); }
+    50%  { transform: scale(1.15); color: var(--primary); }
+    100% { transform: scale(1);    color: var(--text-secondary); }
 }
 
 .table-wrapper {
@@ -1405,17 +1447,17 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
 
 .problems-table tbody tr {
     border-bottom: 1px solid var(--border);
-    transition: all 0.15s ease;
+    transition: background 0.15s ease, box-shadow 0.15s ease;
     animation: fadeInRow 0.3s ease;
 }
 
 @keyframes fadeInRow {
     from { opacity: 0; transform: translateY(-4px); }
-    to { opacity: 1; transform: translateY(0); }
+    to   { opacity: 1; transform: translateY(0); }
 }
 
 .problems-table tbody tr:hover {
-    background: rgba(0, 200, 150, 0.04);
+    background: rgba(34, 197, 94, 0.04);
 }
 
 .problems-table tbody tr:last-child {
@@ -1423,7 +1465,7 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
 }
 
 .problems-table tbody tr.highlight-row {
-    animation: highlightPulse 2s ease;
+    animation: highlightRowPulse 2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
 @keyframes highlightPulse {
@@ -6267,4 +6309,230 @@ body.light-mode .wtd-text { color: #0f172a; }
     .sc-insight { padding: 8px 10px; }
     .wtd-item { padding: 8px 10px; }
     .smart-coach-card, .what-todo-card { padding: 16px; }
+}
+
+/* ============================================
+   DIFFICULTY NAVBAR
+   ============================================ */
+
+.diff-navbar {
+    display: flex;
+    gap: 8px;
+    margin: 12px 0 20px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 8px;
+    flex-wrap: wrap;
+}
+
+.diff-nav-btn {
+    flex: 1;
+    min-width: 80px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 10px 12px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    background: transparent;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: var(--text-secondary);
+}
+
+.diff-nav-btn:hover {
+    background: rgba(255,255,255,0.05);
+    border-color: var(--diff-color, var(--border));
+    color: var(--text-primary);
+}
+
+.diff-nav-btn.active {
+    background: color-mix(in srgb, var(--diff-color, #6366f1) 15%, transparent);
+    border-color: var(--diff-color, #6366f1);
+    color: var(--diff-color, #6366f1);
+    box-shadow: 0 0 12px color-mix(in srgb, var(--diff-color, #6366f1) 25%, transparent);
+}
+
+.diff-nav-count {
+    font-size: 1.3rem;
+    font-weight: 800;
+    line-height: 1;
+    color: inherit;
+}
+
+.diff-nav-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: inherit;
+    opacity: 0.85;
+}
+
+/* Active filter badge in table header */
+.diff-active-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px 3px 12px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.diff-active-easy   { background: rgba(34,197,94,0.15);  color: #22c55e; border: 1px solid rgba(34,197,94,0.3); }
+.diff-active-medium { background: rgba(245,158,11,0.15); color: #f59e0b; border: 1px solid rgba(245,158,11,0.3); }
+.diff-active-hard   { background: rgba(239,68,68,0.15);  color: #ef4444; border: 1px solid rgba(239,68,68,0.3); }
+.diff-active-solved { background: rgba(99,102,241,0.15); color: #6366f1; border: 1px solid rgba(99,102,241,0.3); }
+
+.diff-active-clear {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: inherit;
+    opacity: 0.7;
+    font-size: 0.75rem;
+    padding: 0;
+    line-height: 1;
+}
+.diff-active-clear:hover { opacity: 1; }
+
+@media (max-width: 480px) {
+    .diff-nav-btn { min-width: 60px; padding: 8px 6px; }
+    .diff-nav-count { font-size: 1.1rem; }
+}
+
+/* ============================================
+   SUGGESTIONS SECTION
+   ============================================ */
+
+.suggestions-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.sug-header {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.sug-subtitle {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.sug-section {
+    margin-bottom: 16px;
+}
+
+.sug-section:last-child { margin-bottom: 0; }
+
+.sug-section-title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 10px;
+}
+
+.sug-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 10px;
+}
+
+.sug-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.sug-card:hover {
+    border-color: var(--primary);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(34,197,94,0.15);
+}
+
+.sug-card-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.sug-id {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.sug-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+    line-height: 1.3;
+}
+
+.sug-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.sug-topic {
+    font-size: 0.72rem;
+    color: var(--accent);
+    font-weight: 600;
+    background: rgba(99,102,241,0.1);
+    padding: 2px 7px;
+    border-radius: 6px;
+    display: inline-block;
+    width: fit-content;
+}
+
+.sug-reason {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+@media (max-width: 600px) {
+    .sug-grid { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 400px) {
+    .sug-grid { grid-template-columns: 1fr; }
+}
+
+/* ============================================
+   HIGHLIGHT ROW ANIMATION (table)
+   ============================================ */
+
+@keyframes highlightRowPulse {
+    0%   { background: rgba(34,197,94,0.18); box-shadow: inset 0 0 0 1px rgba(34,197,94,0.4); }
+    40%  { background: rgba(34,197,94,0.10); box-shadow: inset 0 0 0 1px rgba(34,197,94,0.2); }
+    70%  { background: rgba(34,197,94,0.15); box-shadow: inset 0 0 0 1px rgba(34,197,94,0.35); }
+    100% { background: transparent;          box-shadow: none; }
+}
+
+tr.highlight-row {
+    animation: highlightRowPulse 2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.pm-card.highlight-row {
+    animation: highlightRowPulse 2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    border-radius: 12px;
 }

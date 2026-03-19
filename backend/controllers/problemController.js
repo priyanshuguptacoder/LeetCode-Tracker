@@ -222,15 +222,26 @@ exports.updateProblem = async (req, res) => {
 // ─── POST /api/problems/:id/revise ───────────────────────────────────────────
 exports.reviseProblem = async (req, res) => {
   try {
+    const current = await Problem.findOne({ id: parseInt(req.params.id) });
+    if (!current) return res.status(404).json({ success: false, error: 'Problem not found' });
+
+    const newCount = (current.revisionCount || 0) + 1;
+    const confidence = req.body.confidence != null ? parseInt(req.body.confidence) : (current.confidence || 3);
+
+    // Spaced repetition intervals: 0→+1d, 1→+3d, 2→+7d, 3+→+14d
+    const intervals = [1, 3, 7, 14];
+    const intervalDays = intervals[Math.min(newCount - 1, intervals.length - 1)];
+    const nextRevisionAt = new Date();
+    nextRevisionAt.setDate(nextRevisionAt.getDate() + intervalDays);
+
     const problem = await Problem.findOneAndUpdate(
       { id: parseInt(req.params.id) },
-      { $inc: { revisionCount: 1 }, $set: { lastRevisedAt: new Date() } },
+      { $set: { revisionCount: newCount, lastRevisedAt: new Date(), confidence, nextRevisionAt } },
       { new: true, runValidators: true }
     );
-    if (!problem) return res.status(404).json({ success: false, error: 'Problem not found' });
     res.json({
       success: true,
-      data: { id: problem.id, revisionCount: problem.revisionCount, lastRevisedAt: problem.lastRevisedAt },
+      data: { id: problem.id, revisionCount: problem.revisionCount, lastRevisedAt: problem.lastRevisedAt, confidence: problem.confidence, nextRevisionAt: problem.nextRevisionAt },
     });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to record revision', message: err.message });
@@ -344,6 +355,110 @@ exports.deleteProblem = async (req, res) => {
     res.json({ success: true, data: problem, streak: streakData });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to delete problem', message: err.message });
+  }
+};
+
+// ─── GET /api/problems/revision-list ─────────────────────────────────────────
+// Problems that need revision: revisionCount===0 OR now > nextRevisionAt OR confidence <= 2
+exports.getRevisionList = async (req, res) => {
+  try {
+    const now = new Date();
+    const problems = await Problem.find({ solved: true });
+    const list = problems.filter(p => {
+      if ((p.revisionCount || 0) === 0) return true;
+      if (p.nextRevisionAt && now > p.nextRevisionAt) return true;
+      // Only flag low confidence for problems revised at least once (strictly below 3)
+      if ((p.revisionCount || 0) > 0 && (p.confidence ?? 3) <= 2) return true;
+      return false;
+    });
+    res.json({ success: true, count: list.length, data: list });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Failed to fetch revision list', message: err.message });
+  }
+};
+
+// ─── GET /api/problems/suggestions ───────────────────────────────────────────
+// 70% weak topics, 20% revision backlog, 10% random
+exports.getSuggestions = async (req, res) => {
+  try {
+    const now = new Date();
+    const problems = await Problem.find({ solved: true });
+
+    // Compute topic weakness scores
+    const topicStats = {};
+    problems.forEach(p => {
+      (p.topics || []).forEach(t => {
+        if (!topicStats[t]) topicStats[t] = { count: 0, totalConf: 0, lastSolved: null };
+        topicStats[t].count++;
+        topicStats[t].totalConf += (p.confidence || 3);
+        if (!topicStats[t].lastSolved || (p.solvedDate && p.solvedDate > topicStats[t].lastSolved))
+          topicStats[t].lastSolved = p.solvedDate;
+      });
+    });
+
+    const weakTopics = Object.entries(topicStats)
+      .map(([t, s]) => {
+        const avgConf = s.count > 0 ? s.totalConf / s.count : 3;
+        const daysSince = s.lastSolved ? Math.ceil((now - new Date(s.lastSolved)) / 86400000) : 999;
+        const score = (5 - avgConf) * 2 + (daysSince > 7 ? 1 : 0) + (1 / Math.max(1, s.count)) * 0.6;
+        return { topic: t, score, avgConf, daysSince };
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5)
+      .map(w => w.topic);
+
+    // Revision backlog
+    const revisionBacklog = problems.filter(p =>
+      (p.revisionCount || 0) === 0 ||
+      (p.nextRevisionAt && now > p.nextRevisionAt) ||
+      ((p.revisionCount || 0) > 0 && (p.confidence ?? 3) <= 2)
+    );
+
+    const suggestions = [];
+    const used = new Set();
+
+    const addSuggestion = (p, reason) => {
+      if (!p || used.has(p.id)) return;
+      used.add(p.id);
+      suggestions.push({
+        problemId: p.id,
+        title: p.title,
+        difficulty: p.difficulty,
+        topic: (p.topics || [])[0] || 'General',
+        reason,
+      });
+    };
+
+    // 70% weak topics (up to 7)
+    for (const topic of weakTopics) {
+      const candidates = problems.filter(p => (p.topics || []).includes(topic) && !used.has(p.id));
+      if (candidates.length > 0) {
+        const pick = candidates.sort((a, b) => (a.confidence || 3) - (b.confidence || 3))[0];
+        addSuggestion(pick, `Weak in ${topic}`);
+      }
+    }
+
+    // 20% revision backlog (up to 2)
+    const backlogSorted = revisionBacklog
+      .filter(p => !used.has(p.id))
+      .sort((a, b) => (a.confidence || 3) - (b.confidence || 3));
+    for (let i = 0; i < Math.min(2, backlogSorted.length); i++) {
+      const p = backlogSorted[i];
+      const reason = (p.revisionCount || 0) === 0 ? 'Never revised' :
+        p.nextRevisionAt && now > p.nextRevisionAt ? `Overdue revision` : 'Low confidence';
+      addSuggestion(p, reason);
+    }
+
+    // 10% random (1 problem)
+    const remaining = problems.filter(p => !used.has(p.id));
+    if (remaining.length > 0) {
+      const pick = remaining[Math.floor(Math.random() * remaining.length)];
+      addSuggestion(pick, 'Challenge yourself');
+    }
+
+    res.json({ success: true, count: suggestions.length, data: suggestions });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Failed to fetch suggestions', message: err.message });
   }
 };
 
