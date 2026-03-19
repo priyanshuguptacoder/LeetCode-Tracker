@@ -20,6 +20,18 @@ const problemSchema = new mongoose.Schema(
     targeted: { type: Boolean, default: false }, // manually marked as a goal
     targetedAt: { type: Date, default: null },   // when it was targeted
     isStriver: { type: Boolean, default: false }, // part of Striver sheet
+    // ── Revision Intelligence Engine ──────────────────────────────────────
+    solveTime: { type: Number, default: null },       // minutes taken to solve
+    hintsUsed: { type: Boolean, default: false },     // used hint while solving
+    wrongAttempts: { type: Number, default: 0 },      // wrong submissions before AC
+    mistakeType: { type: String, default: null,       // root cause of struggle
+      enum: [null, 'pattern_not_recognized', 'logic_error', 'edge_case_missed',
+             'optimization_issue', 'forgot_approach', 'slow_execution'] },
+    needsRevision: { type: Boolean, default: false }, // auto-flagged for revision
+    lastRevisionSuccess: { type: Boolean, default: null }, // last attempt result
+    lastRevisionTime: { type: Number, default: null },     // minutes in last revision
+    consecutiveSuccess: { type: Number, default: 0 },      // streak of successful revisions
+    failureLoopFlagged: { type: Boolean, default: false }, // revision_count>=3 AND LOW
   },
   { timestamps: true }
 );

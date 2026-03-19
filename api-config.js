@@ -42,9 +42,22 @@ const api = {
     if (!r.ok) throw new Error('Failed to delete problem');
     return r.json();
   },
-  reviseProblem: async (id) => {
-    const r = await fetch(`${API_BASE_URL}/problems/${id}/revise`, { method: 'POST' });
+  reviseProblem: async (id, data = {}) => {
+    const r = await fetch(`${API_BASE_URL}/problems/${id}/revise`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
     if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Failed to record revision'); }
+    return r.json();
+  },
+  setMistakeType: async (id, mistakeType) => {
+    const r = await fetch(`${API_BASE_URL}/problems/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mistakeType, needsRevision: true }),
+    });
+    if (!r.ok) throw new Error('Failed to set mistake type');
     return r.json();
   },
   unreviseProblem: async (id) => {

@@ -287,6 +287,174 @@ function SuggestionsSection({ suggestions, onClickSuggestion }) {
     </div>
   );
 }
+// ============================================
+// MISTAKE TYPE MODAL — mandatory root cause selection
+// ============================================
+function MistakeTypeModal({ problemTitle, onConfirm, onClose }) {
+  const [selected, setSelected] = React.useState('');
+  const options = [
+    { value: 'pattern_not_recognized', label: '🧩 Pattern not recognized' },
+    { value: 'logic_error',            label: '🐛 Logic error' },
+    { value: 'edge_case_missed',       label: '⚠️ Edge case missed' },
+    { value: 'optimization_issue',     label: '⚡ Optimization issue' },
+    { value: 'forgot_approach',        label: '🧠 Forgot approach' },
+    { value: 'slow_execution',         label: '🐢 Slow execution' },
+  ];
+  return (
+    <div className="pw-modal-overlay">
+      <div className="pw-modal" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+        <div className="admin-modal-icon">🔍</div>
+        <h3>Why did you struggle?</h3>
+        <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+          <strong style={{ color: 'var(--primary)' }}>{problemTitle}</strong> was added to Needs Revision.
+          Select the root cause — this cannot be skipped.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%' }}>
+          {options.map(o => (
+            <button
+              key={o.value}
+              onClick={() => setSelected(o.value)}
+              style={{
+                padding: '0.6rem 1rem', borderRadius: 8, border: '1.5px solid',
+                borderColor: selected === o.value ? 'var(--primary)' : 'var(--border)',
+                background: selected === o.value ? 'rgba(99,102,241,0.12)' : 'var(--bg-tertiary)',
+                color: 'var(--text-primary)', cursor: 'pointer', textAlign: 'left', fontSize: '0.85rem',
+                fontWeight: selected === o.value ? 700 : 400,
+              }}
+            >{o.label}</button>
+          ))}
+        </div>
+        <div className="pw-modal-actions" style={{ marginTop: '1.2rem' }}>
+          <button className="btn-secondary" onClick={onClose}>Skip</button>
+          <button
+            className="btn-confirm"
+            disabled={!selected}
+            onClick={() => selected && onConfirm(selected)}
+          >Confirm</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// REVISION MODE MODAL — 15-min timer, evaluate result
+// ============================================
+function RevisionModeModal({ problem, onComplete, onClose }) {
+  const LIMIT = 15;
+  const [phase, setPhase]       = React.useState('ready'); // ready | solving | done
+  const [elapsed, setElapsed]   = React.useState(0);
+  const [hintsUsed, setHintsUsed] = React.useState(false);
+  const [success, setSuccess]   = React.useState(null);
+  const timerRef = React.useRef(null);
+
+  const startTimer = () => {
+    setPhase('solving');
+    timerRef.current = setInterval(() => {
+      setElapsed(prev => {
+        if (prev + 1 >= LIMIT * 60) {
+          clearInterval(timerRef.current);
+          setPhase('done');
+          return LIMIT * 60;
+        }
+        return prev + 1;
+      });
+    }, 1000);
+  };
+
+  const stopTimer = (result) => {
+    clearInterval(timerRef.current);
+    setSuccess(result);
+    setPhase('done');
+  };
+
+  React.useEffect(() => () => clearInterval(timerRef.current), []);
+
+  const mins = Math.floor(elapsed / 60);
+  const secs = elapsed % 60;
+  const timeTakenMins = parseFloat((elapsed / 60).toFixed(1));
+  const isOverTime = elapsed >= LIMIT * 60;
+
+  const confidenceLabel = () => {
+    if (success && !hintsUsed) {
+      if (timeTakenMins <= 12) return { label: 'HIGH ✅', color: 'var(--success)' };
+      if (timeTakenMins <= 15) return { label: 'MEDIUM ⚡', color: 'var(--warning, #f59e0b)' };
+    }
+    return { label: 'LOW ❌', color: 'var(--danger, #ef4444)' };
+  };
+
+  return (
+    <div className="pw-modal-overlay">
+      <div className="pw-modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()}>
+        {phase === 'ready' && (
+          <>
+            <div className="admin-modal-icon">🔁</div>
+            <h3>Revision Mode</h3>
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+              <strong style={{ color: 'var(--primary)' }}>#{problem.number} {problem.title}</strong>
+            </p>
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+              Solve from scratch. No hints. You have <strong>15 minutes</strong>.
+            </p>
+            <div className="pw-modal-actions">
+              <button className="btn-secondary" onClick={onClose}>Cancel</button>
+              <a
+                href={problem.link || `https://leetcode.com/problems/${problem.number}/`}
+                target="_blank" rel="noopener noreferrer"
+                className="btn-confirm"
+                style={{ textDecoration: 'none' }}
+                onClick={startTimer}
+              >Open & Start Timer ↗</a>
+            </div>
+          </>
+        )}
+
+        {phase === 'solving' && (
+          <>
+            <div className="admin-modal-icon" style={{ fontSize: '2rem' }}>
+              {isOverTime ? '⏰' : '⏱'}
+            </div>
+            <h3 style={{ color: isOverTime ? 'var(--danger, #ef4444)' : 'var(--text-primary)' }}>
+              {isOverTime ? 'Time Up!' : `${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`}
+            </h3>
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+              {isOverTime ? 'Mark your result below.' : 'Solving from scratch — no hints allowed.'}
+            </p>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem',
+              color: 'var(--text-secondary)', marginBottom: '1rem', cursor: 'pointer' }}>
+              <input type="checkbox" checked={hintsUsed} onChange={e => setHintsUsed(e.target.checked)} />
+              I used a hint
+            </label>
+            <div className="pw-modal-actions">
+              <button className="btn-danger" onClick={() => stopTimer(false)}>❌ Failed</button>
+              <button className="btn-confirm" onClick={() => stopTimer(true)}>✅ Solved</button>
+            </div>
+          </>
+        )}
+
+        {phase === 'done' && success !== null && (
+          <>
+            <div className="admin-modal-icon">{success ? '🎉' : '😓'}</div>
+            <h3>{success ? 'Nice work!' : 'Keep practicing'}</h3>
+            <p style={{ fontSize: '0.85rem', marginBottom: '0.5rem' }}>
+              Time: <strong>{timeTakenMins} min</strong> · Hints: <strong>{hintsUsed ? 'Yes' : 'No'}</strong>
+            </p>
+            <p style={{ fontSize: '0.85rem', marginBottom: '1rem' }}>
+              Confidence: <strong style={{ color: confidenceLabel().color }}>{confidenceLabel().label}</strong>
+            </p>
+            <div className="pw-modal-actions">
+              <button className="btn-secondary" onClick={onClose}>Cancel</button>
+              <button className="btn-confirm" onClick={() => onComplete({ timeTaken: timeTakenMins, hintsUsed, success })}>
+                Save Result
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AdminModal({ onClose, onUnlock, adminPassword }) {
   const [pwVal, setPwVal] = React.useState('');
   const [pwErr, setPwErr] = React.useState('');
@@ -588,6 +756,16 @@ function App() {
       isStriver: p.isStriver || false,
       confidence: p.confidence ?? 3,
       nextRevisionAt: p.nextRevisionAt || null,
+      // Revision Intelligence Engine fields
+      needsRevision: p.needsRevision || false,
+      solveTime: p.solveTime || null,
+      hintsUsed: p.hintsUsed || false,
+      wrongAttempts: p.wrongAttempts || 0,
+      mistakeType: p.mistakeType || null,
+      lastRevisionSuccess: p.lastRevisionSuccess ?? null,
+      lastRevisionTime: p.lastRevisionTime || null,
+      consecutiveSuccess: p.consecutiveSuccess || 0,
+      failureLoopFlagged: p.failureLoopFlagged || false,
     };
   });
 
@@ -745,7 +923,10 @@ function App() {
     difficulty: 'Medium',
     type: 'Solved',
     pattern: '',
-    link: ''
+    link: '',
+    solveTime: '',
+    hintsUsed: false,
+    wrongAttempts: '',
   });
 
   // ============================================
@@ -1234,7 +1415,6 @@ function App() {
   const handleAddProblem = async (e) => {
     e.preventDefault();
 
-    // Validation first (no auth needed to validate)
     if (!formData.number || !formData.title || !formData.link) {
       showNotification('Please fill in all required fields', 'error');
       return;
@@ -1258,6 +1438,17 @@ function App() {
     requireAdmin(async () => {
       const hasPattern = formData.pattern && formData.pattern.trim() !== '';
       const detectedPattern = hasPattern ? formData.pattern : detectPattern(formData.title);
+
+      // ── Auto-detection: should this go to Needs Revision? ──────────────
+      const solveTime     = formData.solveTime ? parseFloat(formData.solveTime) : null;
+      const hintsUsed     = formData.hintsUsed || false;
+      const wrongAttempts = formData.wrongAttempts ? parseInt(formData.wrongAttempts) : 0;
+      const autoRevision  = formData.type === 'Solved' && (
+        (solveTime != null && solveTime > 25) ||
+        hintsUsed === true ||
+        wrongAttempts >= 2
+      );
+
       const newProblem = {
         id: problemNumber,
         title: formData.title,
@@ -1268,6 +1459,10 @@ function App() {
         solvedDate: formData.type === 'Solved' ? toLocalDateStr(new Date()) : null,
         targeted: formData.type === 'Target',
         targetedAt: formData.type === 'Target' ? new Date().toISOString() : null,
+        solveTime,
+        hintsUsed,
+        wrongAttempts,
+        needsRevision: autoRevision,
       };
       try {
         const response = await window.API.createProblem(newProblem);
@@ -1275,9 +1470,13 @@ function App() {
           if (response.streak) setDbStreak(response.streak);
           const allProblemsResponse = await window.API.getAllProblems();
           setApiProblems(transformProblems(allProblemsResponse.data));
-          showNotification(`✅ Problem #${problemNumber} added!${formData.type === 'Solved' ? ' — Streak updated!' : ''}`, 'success');
+          showNotification(`✅ Problem #${problemNumber} added!${formData.type === 'Solved' ? ' — Streak updated!' : ''}${autoRevision ? ' Added to Needs Revision.' : ''}`, 'success');
           setShowModal(false);
-          setFormData({ number: '', title: '', difficulty: 'Medium', type: 'Solved', pattern: '', link: '' });
+          setFormData({ number: '', title: '', difficulty: 'Medium', type: 'Solved', pattern: '', link: '', solveTime: '', hintsUsed: false, wrongAttempts: '' });
+          // If auto-flagged, prompt for mistake type
+          if (autoRevision) {
+            setMistakeModal({ number: problemNumber, title: formData.title });
+          }
           setTimeout(() => {
             const tableRow = document.querySelector(`tr[data-problem-number="${problemNumber}"]`);
             if (tableRow) {
@@ -1290,6 +1489,21 @@ function App() {
         showNotification(`❌ Error: ${error.message}`, 'error');
       }
     });
+  };
+
+  const handleMistakeTypeConfirm = async (mistakeType) => {
+    if (!mistakeModal) return;
+    try {
+      await window.API.setMistakeType(mistakeModal.number, mistakeType);
+      setApiProblems(prev => prev.map(p =>
+        p.number === mistakeModal.number ? { ...p, mistakeType } : p
+      ));
+      showNotification(`Root cause saved: ${mistakeType.replace(/_/g, ' ')}`, 'success');
+    } catch (err) {
+      showNotification(`❌ ${err.message}`, 'error');
+    } finally {
+      setMistakeModal(null);
+    }
   };
 
   // ============================================
@@ -1384,34 +1598,72 @@ function App() {
   const revisingIdRef = React.useRef(null);
   const unrevisingIdRef = React.useRef(null);
 
+  // ── Revision Intelligence Engine state ───────────────────────────────────
+  const [revisionModal, setRevisionModal] = React.useState(null);   // problem being revised
+  const [mistakeModal, setMistakeModal]   = React.useState(null);   // { number, title } after add
+  const [dailyRevisionCount, setDailyRevisionCount] = React.useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('dailyRevision') || '{}');
+      const today = new Date().toLocaleDateString('en-CA');
+      return saved.date === today ? (saved.count || 0) : 0;
+    } catch { return 0; }
+  });
+  const DAILY_REVISION_LIMIT = 5;
+
+  const incrementDailyRevision = () => {
+    const today = new Date().toLocaleDateString('en-CA');
+    const newCount = dailyRevisionCount + 1;
+    setDailyRevisionCount(newCount);
+    localStorage.setItem('dailyRevision', JSON.stringify({ date: today, count: newCount }));
+  };
+
   const handleRevise = (number) => {
-    requireAdmin(async () => {
-      if (revisingIdRef.current === number) return; // use ref to avoid stale closure
-      try {
-        revisingIdRef.current = number;
-        setRevisingId(number);
-        const res = await window.API.reviseProblem(number);
-        if (res.success) {
-          setApiProblems(prev => prev.map(p =>
-            p.number === number
-              ? {
-                  ...p,
-                  revisionCount: res.data.revisionCount,
-                  lastRevisedAt: res.data.lastRevisedAt,
-                  nextRevisionAt: res.data.nextRevisionAt,
-                  confidence: res.data.confidence,
-                }
-              : p
-          ));
-          showNotification('Revision recorded ✅', 'success');
-        }
-      } catch (err) {
-        showNotification(`❌ ${err.message}`, 'error');
-      } finally {
-        revisingIdRef.current = null;
-        setRevisingId(null);
-      }
+    requireAdmin(() => {
+      const problem = apiProblemsRef.current.find(p => p.number === number);
+      if (!problem) return;
+      setRevisionModal(problem);
     });
+  };
+
+  const handleRevisionComplete = async ({ timeTaken, hintsUsed, success }) => {
+    const problem = revisionModal;
+    setRevisionModal(null);
+    if (!problem) return;
+    if (revisingIdRef.current === problem.number) return;
+    try {
+      revisingIdRef.current = problem.number;
+      setRevisingId(problem.number);
+      const res = await window.API.reviseProblem(problem.number, { timeTaken, hintsUsed, success });
+      if (res.success) {
+        setApiProblems(prev => prev.map(p =>
+          p.number === problem.number
+            ? {
+                ...p,
+                revisionCount: res.data.revisionCount,
+                lastRevisedAt: res.data.lastRevisedAt,
+                nextRevisionAt: res.data.nextRevisionAt,
+                confidence: res.data.confidence,
+                needsRevision: res.data.needsRevision,
+                consecutiveSuccess: res.data.consecutiveSuccess,
+                failureLoopFlagged: res.data.failureLoopFlagged,
+              }
+            : p
+        ));
+        incrementDailyRevision();
+        if (res.removed) {
+          showNotification(`🏆 #${problem.number} mastered — removed from revision!`, 'success');
+        } else if (res.data.failureLoopFlagged) {
+          showNotification(`⚠️ Pattern not learned — study the approach again`, 'warning');
+        } else {
+          showNotification(`Revision recorded ✅ (${success ? 'Success' : 'Failed'})`, success ? 'success' : 'error');
+        }
+      }
+    } catch (err) {
+      showNotification(`❌ ${err.message}`, 'error');
+    } finally {
+      revisingIdRef.current = null;
+      setRevisingId(null);
+    }
   };
 
   const handleUnrevise = (number) => {
@@ -1924,29 +2176,26 @@ function App() {
 
   // ============================================
   // PHASE 5: INTELLIGENT REVISION SYSTEM
-  // Needs revision if: revisionCount===0 (solved, never revised)
-  //   OR now > nextRevisionAt (overdue)
-  //   OR confidence <= 2 (low confidence, revised at least once)
-  // Sort: overdue first, then by nextRevisionAt asc, then never-revised
+  // Needs revision if: needsRevision flag OR never revised OR overdue OR low confidence
+  // Priority sort: 1. LOW confidence first  2. highest solveTime  3. most recent failure
   // Cap: max 9.
   // ============================================
   const intelligentRevision = React.useMemo(() => {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
 
-    const needsRevision = allProblems.filter(p => {
-      if (p.status !== 'Done') return false; // only solved problems
-      if ((p.revisionCount || 0) === 0) return true; // never revised
-      if (p.nextRevisionAt && new Date(p.nextRevisionAt) <= now) return true; // overdue
-      // Only flag low confidence for problems that have been revised at least once
-      // (default confidence=3 is neutral — only flag if strictly below 3)
-      if ((p.revisionCount || 0) > 0 && (p.confidence ?? 3) <= 2) return true; // low confidence
+    const list = allProblems.filter(p => {
+      if (p.status !== 'Done') return false;
+      if (p.needsRevision === true) return true;
+      if ((p.revisionCount || 0) === 0) return true;
+      if (p.nextRevisionAt && new Date(p.nextRevisionAt) <= now) return true;
+      if ((p.revisionCount || 0) > 0 && (p.confidence ?? 3) <= 2) return true;
       return false;
     });
 
-    if (needsRevision.length === 0) return [];
+    if (list.length === 0) return [];
 
-    return needsRevision
+    return list
       .map(p => {
         const solvedDateStr = solvedDates[p.number];
         const daysSinceSolved = solvedDateStr
@@ -1954,17 +2203,23 @@ function App() {
           : null;
         const isOverdue = p.nextRevisionAt && new Date(p.nextRevisionAt) <= now;
         const neverRevised = (p.revisionCount || 0) === 0;
-        return { ...p, daysSinceSolved, isOverdue, neverRevised };
+        const conf = p.confidence ?? 3;
+        const confidenceLevel = conf <= 1 ? 'LOW' : conf <= 3 ? 'MEDIUM' : 'HIGH';
+        return { ...p, daysSinceSolved, isOverdue, neverRevised, confidenceLevel };
       })
       .sort((a, b) => {
-        // Overdue first, then never-revised, then by nextRevisionAt asc
-        if (a.isOverdue && !b.isOverdue) return -1;
-        if (!a.isOverdue && b.isOverdue) return 1;
-        if (a.neverRevised && !b.neverRevised) return -1;
-        if (!a.neverRevised && b.neverRevised) return 1;
-        const aNext = a.nextRevisionAt ? new Date(a.nextRevisionAt).getTime() : 0;
-        const bNext = b.nextRevisionAt ? new Date(b.nextRevisionAt).getTime() : 0;
-        return aNext - bNext;
+        // 1. LOW confidence first
+        const confOrder = { LOW: 0, MEDIUM: 1, HIGH: 2 };
+        if (confOrder[a.confidenceLevel] !== confOrder[b.confidenceLevel])
+          return confOrder[a.confidenceLevel] - confOrder[b.confidenceLevel];
+        // 2. Highest solveTime first
+        const aTime = a.solveTime || 0;
+        const bTime = b.solveTime || 0;
+        if (bTime !== aTime) return bTime - aTime;
+        // 3. Most recent failure (lastRevisedAt desc)
+        const aRev = a.lastRevisedAt ? new Date(a.lastRevisedAt).getTime() : 0;
+        const bRev = b.lastRevisedAt ? new Date(b.lastRevisedAt).getTime() : 0;
+        return bRev - aRev;
       })
       .slice(0, 9);
   }, [allProblems, solvedDates]);
@@ -2680,19 +2935,94 @@ function App() {
           )}
         </div>
 
-        {/* Needs Revision — problems with revisionCount > 0, sorted by most recently revised */}
-        <ProblemSection
-          title="🔁 Needs Revision"
-          items={intelligentRevision}
-          variant="revision"
-          emptyIcon="🎉"
-          emptyMsg="No problems need revision yet"
-          emptyHint="Start revising solved problems to track them here"
-          onRevise={handleRevise}
-          revisingId={revisingId}
-          formatDate={formatDate}
-          onUserDiffChange={handleUserDifficultyChange}
-        />
+        {/* Needs Revision — Intelligence Engine */}
+        {(() => {
+          const lowConf      = intelligentRevision.filter(p => p.confidenceLevel === 'LOW');
+          const overdue      = intelligentRevision.filter(p => p.isOverdue && p.confidenceLevel !== 'LOW');
+          const neverRevised = intelligentRevision.filter(p => p.neverRevised && !p.isOverdue && p.confidenceLevel !== 'LOW');
+          const failureLoop  = intelligentRevision.filter(p => p.failureLoopFlagged);
+          const pendingCount = intelligentRevision.length;
+          const limitReached = dailyRevisionCount >= DAILY_REVISION_LIMIT;
+
+          const RevSubSection = ({ title, items }) => {
+            if (items.length === 0) return null;
+            return (
+              <div className="sug-section">
+                <div className="sug-section-title">{title}</div>
+                <div className={getPcGridClass(items.length)}>
+                  {items.map(p => (
+                    <div key={p.number} style={{ position: 'relative' }}>
+                      {p.failureLoopFlagged && (
+                        <div style={{
+                          position: 'absolute', top: 6, right: 6, zIndex: 2,
+                          background: 'rgba(239,68,68,0.15)', border: '1px solid #ef4444',
+                          borderRadius: 6, padding: '2px 7px', fontSize: '0.7rem',
+                          color: '#ef4444', fontWeight: 700,
+                        }}>⚠️ Pattern not learned</div>
+                      )}
+                      <ProblemCard
+                        p={p}
+                        variant="revision"
+                        onRevise={handleRevise}
+                        revisingId={revisingId}
+                        formatDate={formatDate}
+                        onUserDiffChange={handleUserDifficultyChange}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          };
+
+          return (
+            <div className="suggestions-card fade-up">
+              <div className="sug-header">
+                <h3 className="card-title">🔁 Needs Revision ({pendingCount})</h3>
+                <span className="sug-subtitle">
+                  {dailyRevisionCount}/{DAILY_REVISION_LIMIT} revised today
+                  {limitReached ? ' · Daily limit reached' : ''}
+                </span>
+              </div>
+
+              {/* Daily limit warning */}
+              {limitReached && (
+                <div style={{
+                  background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+                  borderRadius: 8, padding: '0.6rem 1rem', marginBottom: '1rem',
+                  fontSize: '0.82rem', color: '#ef4444',
+                }}>
+                  🚫 Daily revision limit reached (5/5). Focus on new problems tomorrow.
+                </div>
+              )}
+
+              {/* Failure loop alert */}
+              {failureLoop.length > 0 && (
+                <div style={{
+                  background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)',
+                  borderRadius: 8, padding: '0.6rem 1rem', marginBottom: '1rem',
+                  fontSize: '0.82rem', color: 'var(--text-secondary)',
+                }}>
+                  ⚠️ <strong style={{ color: '#ef4444' }}>{failureLoop.length} problem{failureLoop.length > 1 ? 's' : ''}</strong> stuck in failure loop — study the pattern, watch an explanation, then retry after 24h.
+                </div>
+              )}
+
+              {pendingCount === 0 ? (
+                <div className="pc-empty">
+                  <div className="pc-empty-icon">🎉</div>
+                  <div>No problems need revision yet</div>
+                  <small>Start revising solved problems to track them here</small>
+                </div>
+              ) : (
+                <>
+                  <RevSubSection title="❌ Low Confidence" items={lowConf} />
+                  <RevSubSection title="⚠️ Overdue" items={overdue} />
+                  <RevSubSection title="📝 Never Revised" items={neverRevised} />
+                </>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Recently Solved — latest 9 */}
         {(() => {
@@ -2796,29 +3126,6 @@ function App() {
           </div>
         </div>
 
-        {/* 🧠 Smart Coach */}
-        <div className="smart-coach-card fade-up">
-          <div className="sc-header">
-            <h3 className="card-title">🧠 Smart Coach</h3>
-            <span className="sc-subtitle">Personalized insights based on your data</span>
-          </div>
-          <div className="sc-insights">
-            {smartCoachInsights.length === 0 ? (
-              <div className="sc-empty">✅ All good — keep solving and revising!</div>
-            ) : (
-              smartCoachInsights.map((ins, i) => (
-                <div key={i} className={`sc-insight sc-${ins.sev}`}>
-                  <span className="sc-icon">{ins.icon}</span>
-                  <div className="sc-body">
-                    <span className="sc-msg">{ins.msg}</span>
-                    <span className="sc-action">→ {ins.action}</span>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
         {/* 🎯 What You Should Do Today */}
         <div className="what-todo-card fade-up">
           <h3 className="card-title">🎯 What You Should Do Today</h3>
@@ -2917,12 +3224,6 @@ function App() {
             </div>
           </div>
         </div>
-
-        {/* Suggestions — shown when revision list is empty or always */}
-        <SuggestionsSection
-          suggestions={suggestions}
-          onClickSuggestion={handleClickSuggestion}
-        />
 
         {/* Filters */}
         <div className="filters-card">
@@ -3351,6 +3652,50 @@ function App() {
                 <div className="form-hint">
                   💡 Pattern will be automatically detected from the title if not provided
                 </div>
+                {formData.type === 'Solved' && (
+                  <>
+                    <div className="form-row" style={{ marginTop: '0.5rem' }}>
+                      <div className="form-group">
+                        <label>Solve Time (minutes)</label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={formData.solveTime}
+                          onChange={(e) => setFormData({...formData, solveTime: e.target.value})}
+                          placeholder="e.g., 30"
+                          className="form-input"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Wrong Attempts</label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={formData.wrongAttempts}
+                          onChange={(e) => setFormData({...formData, wrongAttempts: e.target.value})}
+                          placeholder="e.g., 2"
+                          className="form-input"
+                        />
+                      </div>
+                    </div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem',
+                      fontSize: '0.82rem', color: 'var(--text-secondary)', cursor: 'pointer', marginTop: '0.4rem' }}>
+                      <input
+                        type="checkbox"
+                        checked={formData.hintsUsed}
+                        onChange={(e) => setFormData({...formData, hintsUsed: e.target.checked})}
+                      />
+                      Used a hint / looked at solution
+                    </label>
+                    {((formData.solveTime && parseFloat(formData.solveTime) > 25) || formData.hintsUsed || (formData.wrongAttempts && parseInt(formData.wrongAttempts) >= 2)) && (
+                      <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.75rem', borderRadius: 7,
+                        background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+                        fontSize: '0.78rem', color: '#ef4444' }}>
+                        ⚠️ Auto-flagged for Needs Revision — you'll be asked for the root cause.
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
               <div className="modal-footer">
                 <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>
@@ -3380,6 +3725,24 @@ function App() {
           modal={pwModal}
           adminPassword={ADMIN_PASSWORD}
           onClose={closePwModal}
+        />
+      )}
+
+      {/* Mistake Type Modal — mandatory after auto-flagging */}
+      {mistakeModal && (
+        <MistakeTypeModal
+          problemTitle={`#${mistakeModal.number} ${mistakeModal.title}`}
+          onConfirm={handleMistakeTypeConfirm}
+          onClose={() => setMistakeModal(null)}
+        />
+      )}
+
+      {/* Revision Mode Modal — 15-min timer */}
+      {revisionModal && (
+        <RevisionModeModal
+          problem={revisionModal}
+          onComplete={handleRevisionComplete}
+          onClose={() => setRevisionModal(null)}
         />
       )}
 

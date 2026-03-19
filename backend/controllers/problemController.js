@@ -164,6 +164,13 @@ exports.createProblem = async (req, res) => {
       solvedDate: resolvedSolvedDate,
       targeted: isTargeted,
       targetedAt: resolvedTargetedAt,
+      // Revision Intelligence Engine — auto-detection
+      solveTime: req.body.solveTime != null ? parseInt(req.body.solveTime) : null,
+      hintsUsed: req.body.hintsUsed === true || req.body.hintsUsed === 'true',
+      wrongAttempts: req.body.wrongAttempts != null ? parseInt(req.body.wrongAttempts) : 0,
+      mistakeType: req.body.mistakeType || null,
+      needsRevision: req.body.needsRevision === true || req.body.needsRevision === 'true',
+      confidence: req.body.needsRevision ? 1 : 3, // LOW if auto-flagged
     });
 
     let streakData = null;
@@ -226,22 +233,75 @@ exports.reviseProblem = async (req, res) => {
     if (!current) return res.status(404).json({ success: false, error: 'Problem not found' });
 
     const newCount = (current.revisionCount || 0) + 1;
-    const confidence = req.body.confidence != null ? parseInt(req.body.confidence) : (current.confidence || 3);
+    const timeTaken = req.body.timeTaken != null ? parseFloat(req.body.timeTaken) : null;
+    const hintsUsed = req.body.hintsUsed === true || req.body.hintsUsed === 'true';
+    const success   = req.body.success === true || req.body.success === 'true';
 
-    // Spaced repetition intervals: 0→+1d, 1→+3d, 2→+7d, 3+→+14d
-    const intervals = [1, 3, 7, 14];
-    const intervalDays = intervals[Math.min(newCount - 1, intervals.length - 1)];
+    // ── Confidence evaluation ──────────────────────────────────────────────
+    let confidence;
+    if (success && !hintsUsed) {
+      if (timeTaken != null && timeTaken <= 12)      confidence = 5; // HIGH
+      else if (timeTaken != null && timeTaken <= 15) confidence = 3; // MEDIUM
+      else                                           confidence = 1; // LOW
+    } else {
+      confidence = 1; // LOW — failed or used hints
+    }
+
+    // ── Consecutive success tracking ──────────────────────────────────────
+    const prevConsecutive = current.consecutiveSuccess || 0;
+    const consecutiveSuccess = success ? prevConsecutive + 1 : 0;
+
+    // ── Removal check: HIGH + 2 consecutive successes + time <= 12 ────────
+    const shouldRemove = confidence === 5 && consecutiveSuccess >= 2 && timeTaken != null && timeTaken <= 12;
+
+    // ── Spaced repetition ─────────────────────────────────────────────────
+    // success: +2d → +4d (doubling); failure: reset to +1d
+    let intervalDays;
+    if (!success) {
+      intervalDays = 1; // reset
+    } else {
+      // Double the previous interval, capped at 14
+      const prevInterval = current.nextRevisionAt
+        ? Math.round((new Date(current.nextRevisionAt) - new Date(current.lastRevisedAt || Date.now())) / 86400000)
+        : 1;
+      intervalDays = Math.min(prevInterval > 0 ? prevInterval * 2 : 2, 14);
+    }
     const nextRevisionAt = new Date();
     nextRevisionAt.setDate(nextRevisionAt.getDate() + intervalDays);
 
+    // ── Failure loop detection ─────────────────────────────────────────────
+    const failureLoopFlagged = newCount >= 3 && confidence === 1;
+
+    const updates = {
+      revisionCount: newCount,
+      lastRevisedAt: new Date(),
+      confidence,
+      nextRevisionAt: shouldRemove ? null : nextRevisionAt,
+      needsRevision: !shouldRemove,
+      lastRevisionSuccess: success,
+      lastRevisionTime: timeTaken,
+      consecutiveSuccess,
+      failureLoopFlagged,
+    };
+
     const problem = await Problem.findOneAndUpdate(
       { id: parseInt(req.params.id) },
-      { $set: { revisionCount: newCount, lastRevisedAt: new Date(), confidence, nextRevisionAt } },
+      { $set: updates },
       { new: true, runValidators: true }
     );
     res.json({
       success: true,
-      data: { id: problem.id, revisionCount: problem.revisionCount, lastRevisedAt: problem.lastRevisedAt, confidence: problem.confidence, nextRevisionAt: problem.nextRevisionAt },
+      removed: shouldRemove,
+      data: {
+        id: problem.id,
+        revisionCount: problem.revisionCount,
+        lastRevisedAt: problem.lastRevisedAt,
+        confidence: problem.confidence,
+        nextRevisionAt: problem.nextRevisionAt,
+        needsRevision: problem.needsRevision,
+        consecutiveSuccess: problem.consecutiveSuccess,
+        failureLoopFlagged: problem.failureLoopFlagged,
+      },
     });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to record revision', message: err.message });
