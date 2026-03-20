@@ -597,7 +597,8 @@ function computeStriverStats(problems) {
 // WEAKNESS RADAR — topic mastery via Recharts
 // ============================================
 function WeaknessRadar({ problems }) {
-  const { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Tooltip } = Recharts;
+  if (typeof window.Recharts === 'undefined') return null;
+  const { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Tooltip } = window.Recharts;
 
   const topicStats = React.useMemo(() => {
     const map = {};
