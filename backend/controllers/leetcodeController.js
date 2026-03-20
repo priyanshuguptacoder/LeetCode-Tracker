@@ -644,7 +644,7 @@ exports.getRecentAndToday = async (req, res) => {
     const now           = new Date();
     const startOfDayUTC = getUTCDayStart(now);
     const endOfDayUTC   = getUTCDayEnd(now);
-    const SELECT        = 'id title difficulty topics leetcodeLink lastSubmittedAt solvedDate';
+    const SELECT = 'id title difficulty topics leetcodeLink lastSubmittedAt solvedDate revisionCount lastRevisedAt isStriver targeted targetedAt needsRevision';
 
     const [recentSolved, todaySolved] = await Promise.all([
       // Sort DESC first, Problem collection is already 1-doc-per-problem so no dedup needed

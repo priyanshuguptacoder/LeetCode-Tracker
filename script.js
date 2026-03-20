@@ -2538,22 +2538,19 @@ function App() {
         </div>
       )}
 
-      {/* Header */}
+      {/* Header — Mobile-First */}
       <header className="header">
         <div className="header-content">
-          <div className="header-title">
-            <h1>Priyanshu Gupta</h1>
-            <p className="subtitle">
-              Your Personal DSA Growth Engine
-              <span className="live-indicator" title="All stats update in real-time">
-                <span className="live-dot"></span> 🟢 Real-time Sync
-              </span>
-            </p>
+          <div className="header-main">
+            <div className="header-title">
+              <h1>Priyanshu Gupta</h1>
+              <p className="subtitle">Your Personal DSA Growth Engine</p>
+            </div>
+            <span className={`sync-status ${syncStatus}`}>
+              {syncStatus === 'checking' ? '⏳ Checking' : syncStatus === 'ok' ? '🟢 Active' : '🔴 Expired'}
+            </span>
           </div>
           <div className="header-actions">
-            <span className={`sync-status ${syncStatus}`}>
-              {syncStatus === 'checking' ? '⏳ Checking...' : syncStatus === 'ok' ? '🟢 Sync Active' : '🔴 Session Expired'}
-            </span>
             <button
               className="btn-sync-lc"
               onClick={handleSyncLeetCode}
@@ -3044,13 +3041,6 @@ function App() {
 
         {/* Today's Progress + Recently Solved */}
         {(() => {
-          // Trend: last 7 days vs previous 7 days (from allProblems)
-          const now = Date.now();
-          const DAY = 86400000;
-          const last7  = allProblems.filter(p => p.submittedAt && (now - new Date(p.submittedAt).getTime()) < 7  * DAY).length;
-          const prev7  = allProblems.filter(p => p.submittedAt && (now - new Date(p.submittedAt).getTime()) >= 7 * DAY && (now - new Date(p.submittedAt).getTime()) < 14 * DAY).length;
-          const trendUp = last7 >= prev7;
-
           const relativeTime = (date) => {
             if (!date) return '';
             const diff = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
@@ -3060,39 +3050,99 @@ function App() {
             return `${Math.floor(diff / 86400)}d ago`;
           };
 
+          // Merge backend data with full problem data from allProblems for extra fields
+          const enrichProblem = (p) => {
+            const full = allProblems.find(ap => ap.number === (p.id || p.number)) || {};
+            return {
+              ...p,
+              number: p.id || p.number,
+              isStriver: full.isStriver ?? p.isStriver ?? false,
+              targeted: full.targeted ?? p.targeted ?? false,
+              revisionCount: full.revisionCount ?? p.revisionCount ?? 0,
+              lastRevisedAt: full.lastRevisedAt ?? p.lastRevisedAt ?? null,
+              link: p.leetcodeLink || full.link || `https://leetcode.com/problems/${p.id}/`,
+            };
+          };
+
+          const enrichedRecent = recentProblems.map(enrichProblem);
+          const enrichedToday  = todayProblems.map(enrichProblem);
+
+          // Status badge for recently solved cards
+          const solveStatus = (lastSubmittedAt) => {
+            if (!lastSubmittedAt) return null;
+            const hrs = (Date.now() - new Date(lastSubmittedAt).getTime()) / 3600000;
+            if (hrs < 24)  return { label: 'Fresh',          cls: 'rs-status-fresh' };
+            if (hrs > 72)  return { label: 'Needs Revision', cls: 'rs-status-stale' };
+            return null;
+          };
+
+          // Card click handler with navigation
+          const handleCardClick = (problemNumber) => {
+            handleClickSuggestion(problemNumber);
+          };
+
+          // Button click with propagation stop
+          const handleButtonClick = (e, action, problemNumber) => {
+            e.stopPropagation();
+            if (action === 'open') {
+              const p = enrichedRecent.find(pr => pr.number === problemNumber);
+              if (p?.link) window.open(p.link, '_blank');
+            } else if (action === 'revise') {
+              handleRevise(problemNumber);
+            } else if (action === 'striver') {
+              handleToggleStriver(problemNumber);
+            } else if (action === 'target') {
+              handleToggleTarget(problemNumber);
+            }
+          };
+
           return (
             <>
-              {/* Today's Progress */}
+              {/* ── Today's Progress ── */}
               <div className="suggestions-card fade-up" style={{ marginBottom: 16 }}>
-                <div className="sug-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                <div className="sug-header">
                   <div>
                     <h3 className="card-title" style={{ marginBottom: 2 }}>
                       ☀️ Today's Progress
                       <span style={{ marginLeft: 10, fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-secondary)' }}>
-                        {todayProblems.length} solved
+                        {enrichedToday.length} solved
                       </span>
                     </h3>
                     <span className="sug-subtitle">Problems you solved today</span>
                   </div>
-                  <span className={`trend ${trendUp ? 'up' : 'down'}`} title={`Last 7d: ${last7} vs prev 7d: ${prev7}`}>
-                    {trendUp ? '↑' : '↓'} {trendUp ? '+' : ''}{last7 - prev7} vs last week
-                  </span>
                 </div>
-                {todayProblems.length === 0 ? (
+
+                {enrichedToday.length === 0 ? (
                   <div className="pc-empty">
                     <div className="pc-empty-icon">🌅</div>
-                    <div>Nothing solved yet today</div>
-                    <small>Sync LeetCode to update</small>
+                    <div>No problems solved today</div>
+                    <small>Start solving to build your streak</small>
                   </div>
                 ) : (
-                  <div className="recent-list">
-                    {todayProblems.map(p => {
+                  <div className="tp-list">
+                    {enrichedToday.map(p => {
                       const diff = (p.difficulty || 'medium').toLowerCase();
+                      const isRevisited = (p.revisionCount || 0) > 0;
                       return (
-                        <div key={p._id || p.id} className="recent-item">
-                          <span className={`badge badge-${diff}`}>{p.difficulty}</span>
-                          <span className="recent-title">{p.title}</span>
-                          <span className="recent-time">{relativeTime(p.lastSubmittedAt)}</span>
+                        <div key={p._id || p.number} className="tp-item">
+                          <div className="tp-item-left">
+                            <span className={`badge badge-${diff}`}>{p.difficulty}</span>
+                            <span className="tp-title">#{p.number} {p.title}</span>
+                            {isRevisited
+                              ? <span className="tp-badge tp-badge-revisited">Revisited</span>
+                              : <span className="tp-badge tp-badge-new">New</span>
+                            }
+                          </div>
+                          <div className="tp-item-right">
+                            <span className="recent-time">{relativeTime(p.lastSubmittedAt)}</span>
+                            <button
+                              className="pc-btn pc-btn-revise"
+                              onClick={(e) => { e.stopPropagation(); handleRevise(p.number); }}
+                              disabled={revisingId === p.number}
+                            >
+                              {revisingId === p.number ? '⏳' : '🔁 Revise'}
+                            </button>
+                          </div>
                         </div>
                       );
                     })}
@@ -3100,29 +3150,89 @@ function App() {
                 )}
               </div>
 
-              {/* Recently Solved */}
+              {/* ── Recently Solved ── */}
               <div className="suggestions-card fade-up" style={{ marginBottom: 16 }}>
                 <div className="sug-header">
                   <h3 className="card-title" style={{ marginBottom: 2 }}>🆕 Recently Solved</h3>
                   <span className="sug-subtitle">Last 9 accepted · sorted by latest</span>
                 </div>
-                <div className="recent-grid">
-                  {recentProblems.map(p => {
-                    const diff = (p.difficulty || 'medium').toLowerCase();
-                    return (
-                      <div key={p._id || p.id} className="recent-card">
-                        <div className="recent-card-top">
-                          <span className={`badge badge-${diff}`}>{p.difficulty}</span>
-                          <span className="recent-time">{relativeTime(p.lastSubmittedAt || p.solvedDate)}</span>
+
+                {enrichedRecent.length === 0 ? (
+                  <div className="pc-empty">
+                    <div className="pc-empty-icon">📭</div>
+                    <div>No recent problems found</div>
+                    <small>Sync LeetCode to populate</small>
+                  </div>
+                ) : (
+                  <div className={getPcGridClass(enrichedRecent.length)}>
+                    {enrichedRecent.map(p => {
+                      const diff = (p.difficulty || 'medium').toLowerCase();
+                      const status = solveStatus(p.lastSubmittedAt);
+                      return (
+                        <div 
+                          key={p._id || p.number} 
+                          className="pc-card pc-card-clickable"
+                          onClick={() => handleCardClick(p.number)}
+                          title="Click to find in table"
+                        >
+                          {/* Top row */}
+                          <div className="pc-top-row">
+                            <span className="pc-id">#{p.number}</span>
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                              {status && <span className={`rs-status ${status.cls}`}>{status.label}</span>}
+                              <span className="recent-time">{relativeTime(p.lastSubmittedAt)}</span>
+                            </div>
+                          </div>
+
+                          {/* Title */}
+                          <div className="pc-title">{p.title}</div>
+
+                          {/* Meta */}
+                          <div className="pc-meta">
+                            <span className={`badge badge-${diff}`}>{p.difficulty}</span>
+                            {(p.revisionCount || 0) > 0 && (
+                              <span className="pc-rev-badge">🔁 {p.revisionCount}×</span>
+                            )}
+                            {p.lastRevisedAt && (
+                              <span className="pc-date">Last: {formatDate(p.lastRevisedAt)}</span>
+                            )}
+                          </div>
+
+                          {/* Actions */}
+                          <div className="pc-actions">
+                            <button
+                              className="pc-btn pc-btn-open"
+                              onClick={(e) => handleButtonClick(e, 'open', p.number)}
+                            >Open ↗</button>
+                            <button
+                              className="pc-btn pc-btn-revise"
+                              onClick={(e) => handleButtonClick(e, 'revise', p.number)}
+                              disabled={revisingId === p.number}
+                            >
+                              {revisingId === p.number ? '⏳' : '🔁 Revise'}
+                            </button>
+                            <button
+                              className={`pc-btn pc-btn-striver${p.isStriver ? ' active' : ''}`}
+                              onClick={(e) => handleButtonClick(e, 'striver', p.number)}
+                              disabled={striverId === p.number}
+                              title={p.isStriver ? 'Remove from Striver' : 'Add to Striver'}
+                            >
+                              {p.isStriver ? '📘' : '📖'}
+                            </button>
+                            <button
+                              className={`pc-btn pc-btn-target${p.targeted ? ' active' : ''}`}
+                              onClick={(e) => handleButtonClick(e, 'target', p.number)}
+                              disabled={targetingId === p.number}
+                              title={p.targeted ? 'Remove target' : 'Add to Targeted'}
+                            >
+                              {p.targeted ? '🎯' : '○'}
+                            </button>
+                          </div>
                         </div>
-                        <div className="recent-title">#{p.id} {p.title}</div>
-                      </div>
-                    );
-                  })}
-                  {Array.from({ length: Math.max(0, 9 - recentProblems.length) }).map((_, i) => (
-                    <div key={`empty-${i}`} className="recent-card recent-card-empty" />
-                  ))}
-                </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </>
           );

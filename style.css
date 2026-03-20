@@ -117,15 +117,40 @@ body.light-mode .header p {
 .header-content {
     max-width: 1400px;
     margin: 0 auto;
-    padding: 20px 24px;
+    padding: 16px 20px;
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 20px;
+    flex-direction: column;
+    gap: 12px;
+}
+
+@media (min-width: 769px) {
+    .header-content {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+        padding: 20px 24px;
+        gap: 20px;
+    }
+}
+
+.header-main {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+}
+
+@media (min-width: 769px) {
+    .header-main {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        width: auto;
+    }
 }
 
 .header-title h1 {
-    font-size: 24px;
+    font-size: 20px;
     font-weight: 800;
     background: linear-gradient(135deg, var(--primary), var(--accent));
     -webkit-background-clip: text;
@@ -133,69 +158,92 @@ body.light-mode .header p {
     margin-bottom: 2px;
 }
 
+@media (min-width: 769px) {
+    .header-title h1 {
+        font-size: 24px;
+    }
+}
+
 .subtitle {
-    font-size: 13px;
+    font-size: 12px;
     color: var(--text-secondary);
     font-weight: 500;
-    display: flex;
-    align-items: center;
-    gap: 12px;
 }
 
-.live-indicator {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
+@media (min-width: 769px) {
+    .subtitle {
+        font-size: 13px;
+    }
+}
+
+.sync-status {
     font-size: 11px;
     font-weight: 600;
-    color: var(--primary);
-    background: rgba(34, 197, 94, 0.1);
     padding: 4px 10px;
     border-radius: 12px;
-    border: 1px solid rgba(34, 197, 94, 0.2);
+    border: 1px solid;
+    white-space: nowrap;
+    align-self: flex-start;
 }
 
-.live-dot {
-    width: 6px;
-    height: 6px;
-    background: var(--primary);
-    border-radius: 50%;
-    animation: pulse 1.5s ease infinite;
+.sync-status.ok {
+    color: #22c55e;
+    background: rgba(34, 197, 94, 0.1);
+    border-color: rgba(34, 197, 94, 0.2);
 }
 
-@keyframes pulse {
-    0%, 100% { 
-        opacity: 1;
-        transform: scale(1);
-    }
-    50% { 
-        opacity: 0.5;
-        transform: scale(1.2);
-    }
+.sync-status.expired {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.2);
+}
+
+.sync-status.checking {
+    color: var(--text-secondary);
+    background: var(--bg-tertiary);
+    border-color: var(--border);
 }
 
 .header-actions {
-    display: flex;
-    gap: 12px;
-    align-items: center;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    width: 100%;
+}
+
+@media (min-width: 769px) {
+    .header-actions {
+        display: flex;
+        gap: 12px;
+        width: auto;
+    }
 }
 
 .btn-profile {
     display: flex;
     align-items: center;
-    gap: 8px;
+    justify-content: center;
+    gap: 6px;
     background: linear-gradient(135deg, var(--primary), var(--accent-blue, #3b82f6));
     color: white;
-    padding: 10px 18px;
+    padding: 10px 14px;
     border-radius: 8px;
     text-decoration: none;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
     transition: transform 0.25s ease, box-shadow 0.25s ease, filter 0.25s ease;
     border: none;
     cursor: pointer;
     position: relative;
     overflow: hidden;
+    min-height: 44px;
+}
+
+@media (min-width: 769px) {
+    .btn-profile {
+        padding: 10px 18px;
+        font-size: 13px;
+    }
 }
 
 /* Shine sweep on hover */
@@ -228,18 +276,28 @@ body.light-mode .header p {
 .btn-sync-lc {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 6px;
     background: var(--bg-tertiary);
     color: var(--text-primary);
-    padding: 9px 16px;
+    padding: 9px 14px;
     border-radius: 8px;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
     border: 1px solid var(--border);
     cursor: pointer;
     transition: background 0.2s, border-color 0.2s, transform 0.15s;
     white-space: nowrap;
+    min-height: 44px;
 }
+
+@media (min-width: 769px) {
+    .btn-sync-lc {
+        padding: 9px 16px;
+        font-size: 13px;
+    }
+}
+
 .btn-sync-lc:hover:not(:disabled) {
     background: var(--bg-secondary);
     border-color: var(--primary);
@@ -402,85 +460,130 @@ body.light-mode .header p {
    ============================================ */
 
 /* Stable 3-col grid — always 3 columns regardless of item count */
-.recent-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
+/* ── Today's Progress list ─────────────────────────────────────────────────── */
+.tp-list {
+    display: flex;
+    flex-direction: column;
     gap: 8px;
 }
 
-.recent-card {
-    padding: 10px 12px;
+.tp-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
     border-radius: 10px;
     background: var(--bg-tertiary);
     border: 1px solid var(--border);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-    min-height: 68px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    justify-content: space-between;
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+    flex-wrap: wrap;
 }
 
-.recent-card:hover {
+.tp-item:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
 }
 
-/* Placeholder slot — dashed border, no content */
-.recent-card-empty {
-    background: transparent;
-    border: 1px dashed var(--border);
-    opacity: 0.3;
-}
-
-.recent-card-top {
+.tp-item-left {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 6px;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+    flex-wrap: wrap;
 }
 
-/* Keep old .recent-list for Today's Progress section */
-.recent-list {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    max-height: 300px;
-    overflow-y: auto;
-    padding-right: 4px;
-    scrollbar-width: thin;
-    scrollbar-color: var(--border) transparent;
-}
-
-.recent-list::-webkit-scrollbar { width: 4px; }
-.recent-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-
-.recent-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 10px;
-    border-radius: 8px;
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.recent-item:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-}
-
-.recent-title {
-    font-size: 0.82rem;
+.tp-title {
+    font-size: 0.85rem;
     font-weight: 500;
     color: var(--text-primary);
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    line-height: 1.3;
+    max-width: 340px;
+}
+
+.tp-item-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.tp-badge {
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 20px;
+    white-space: nowrap;
+    letter-spacing: 0.02em;
+}
+
+.tp-badge-new {
+    background: rgba(99, 102, 241, 0.15);
+    color: var(--primary);
+    border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.tp-badge-revisited {
+    background: rgba(34, 197, 94, 0.12);
+    color: #22c55e;
+    border: 1px solid rgba(34, 197, 94, 0.25);
+}
+
+/* ── Recently Solved status badges ─────────────────────────────────────────── */
+.rs-status {
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 20px;
+    white-space: nowrap;
+    letter-spacing: 0.02em;
+}
+
+.rs-status-fresh {
+    background: rgba(34, 197, 94, 0.12);
+    color: #22c55e;
+    border: 1px solid rgba(34, 197, 94, 0.25);
+}
+
+.rs-status-stale {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+/* ── Striver / Target toggle buttons ───────────────────────────────────────── */
+.pc-btn-striver,
+.pc-btn-target {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    padding: 5px 9px;
+    border-radius: 7px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, transform 0.15s;
+}
+
+.pc-btn-striver:hover,
+.pc-btn-target:hover {
+    background: rgba(99, 102, 241, 0.1);
+    border-color: var(--primary);
+    transform: translateY(-1px);
+}
+
+.pc-btn-striver.active {
+    background: rgba(99, 102, 241, 0.15);
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.pc-btn-target.active {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: #ef4444;
+    color: #ef4444;
 }
 
 .recent-time {
@@ -5968,21 +6071,30 @@ body.light-mode .compact-sub-row span[style] { }
 /* ── Scroll Buttons (up + down) ── */
 .scroll-btns {
     position: fixed;
-    bottom: 28px;
-    right: 24px;
+    bottom: 20px;
+    right: 16px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    z-index: 999;
+    gap: 12px;
+    z-index: 50;
+}
+
+@media (max-width: 600px) {
+    .scroll-btns {
+        bottom: 16px;
+        right: 12px;
+        gap: 10px;
+    }
 }
 
 .scroll-btn {
-    width: 40px;
-    height: 40px;
+    width: 48px;
+    height: 48px;
+    min-height: 48px;
     border-radius: 50%;
     background: var(--primary);
     color: #ffffff;
-    font-size: 1.1rem;
+    font-size: 1.2rem;
     font-weight: 700;
     border: none;
     cursor: pointer;
@@ -5992,6 +6104,15 @@ body.light-mode .compact-sub-row span[style] { }
     box-shadow: 0 4px 16px rgba(0,200,150,0.4), 0 2px 6px rgba(0,0,0,0.25);
     transition: transform 0.2s ease, box-shadow 0.2s ease;
     animation: scrollBtnIn 0.2s cubic-bezier(0.34,1.56,0.64,1) both;
+}
+
+@media (max-width: 600px) {
+    .scroll-btn {
+        width: 44px;
+        height: 44px;
+        min-height: 44px;
+        font-size: 1.1rem;
+    }
 }
 
 @keyframes scrollBtnIn {
@@ -6644,4 +6765,102 @@ tr.highlight-row {
 .pm-card.highlight-row {
     animation: highlightRowPulse 2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
     border-radius: 12px;
+}
+
+/* ── Today's Progress + Recently Solved — mobile ───────────────────────────── */
+@media (max-width: 600px) {
+    .tp-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+
+    .tp-item-right {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .tp-title {
+        max-width: 100%;
+        white-space: normal;
+    }
+
+    .pc-actions {
+        flex-wrap: wrap;
+    }
+}
+
+/* ── Clickable card behavior ───────────────────────────────────────────────── */
+.pc-card-clickable {
+    cursor: pointer;
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.pc-card-clickable:hover {
+    transform: translateY(-3px) scale(1.02);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+
+.pc-card-clickable:active {
+    transform: translateY(-1px) scale(1.01);
+}
+
+/* ── Global overflow fix ───────────────────────────────────────────────────── */
+body {
+    overflow-x: hidden;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+/* ── Minimum touch target size (mobile accessibility) ──────────────────────── */
+.pc-btn,
+.btn-sync-lc,
+.btn-profile,
+.btn-admin-lock,
+.theme-toggle,
+button {
+    min-height: 44px;
+}
+
+/* ── Mobile button stacking ────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+    .pc-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .pc-btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .tp-item {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .tp-item-right {
+        flex-direction: column;
+        width: 100%;
+    }
+
+    .tp-item-right .pc-btn {
+        width: 100%;
+    }
+}
+
+/* ── Safe area support (iOS notch) ─────────────────────────────────────────── */
+.container {
+    padding-bottom: env(safe-area-inset-bottom, 20px);
+}
+
+/* ── Highlight animation for navigation ────────────────────────────────────── */
+tr.highlight-row,
+.pc-card.highlight-row {
+    animation: highlightRowPulse 2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    border: 1px solid #00ffcc !important;
+    background: rgba(0, 255, 204, 0.08) !important;
 }
