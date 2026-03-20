@@ -3208,23 +3208,6 @@ function App() {
           </div>
         </div>
 
-        {/* 🎯 What You Should Do Today */}
-        <div className="what-todo-card fade-up">
-          <h3 className="card-title">🎯 What You Should Do Today</h3>
-          <div className="wtd-list">
-            {whatToDoToday.length === 0 ? (
-              <div className="wtd-empty">🎉 No specific actions — just keep your streak going!</div>
-            ) : (
-              whatToDoToday.map((item, i) => (
-                <div key={i} className={`wtd-item wtd-${item.type}`}>
-                  <span className="wtd-icon">{item.icon}</span>
-                  <span className="wtd-text">{item.text}</span>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
         {/* Analytics Grid */}
         <div className="analytics-grid">
           {/* LeetCode Difficulty Distribution */}

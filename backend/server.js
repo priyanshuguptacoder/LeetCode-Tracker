@@ -85,8 +85,23 @@ app.use((err, req, res, next) => {
 // ─── Start ────────────────────────────────────────────────────────────────────
 mongoose
   .connect(process.env.MONGO_URI)
-  .then(() => {
+  .then(async () => {
     console.log('[INIT] MongoDB connected');
+
+    // One-time backfill: copy solvedDate → lastSubmittedAt for problems missing it
+    try {
+      const Problem = require('./models/Problem');
+      const result = await Problem.updateMany(
+        { solved: true, solvedDate: { $ne: null }, lastSubmittedAt: null },
+        [{ $set: { lastSubmittedAt: '$solvedDate' } }]
+      );
+      if (result.modifiedCount > 0) {
+        console.log(`[BACKFILL] Set lastSubmittedAt on ${result.modifiedCount} problems`);
+      }
+    } catch (e) {
+      console.warn('[BACKFILL] lastSubmittedAt backfill failed:', e.message);
+    }
+
     app.listen(PORT, () => {
       console.log(`[INIT] Server running on port ${PORT}`);
       console.log('[INIT] Key endpoints:');

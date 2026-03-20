@@ -160,6 +160,7 @@ exports.createProblem = async (req, res) => {
       solved: isSolved, notes: notes || '', leetcodeLink,
       solvedDate: resolvedSolvedDate,
       submittedAt: isSolved ? now : null,  // always use current time as submittedAt
+      lastSubmittedAt: isSolved ? resolvedSolvedDate : null, // used by recent/today queries
       nextRevisionAt,
       targeted: isTargeted,
       targetedAt: resolvedTargetedAt,
@@ -196,8 +197,11 @@ exports.updateProblem = async (req, res) => {
     delete updates.id;
     if (updates.solved !== undefined) updates.solved = updates.solved === true || updates.solved === 'true';
     if (updates.solved === true && !updates.solvedDate) updates.solvedDate = new Date();
-    if (updates.solved === true) updates.submittedAt = new Date(); // always refresh submittedAt on solve
-    if (updates.solved === false) { updates.solvedDate = null; updates.submittedAt = null; }
+    if (updates.solved === true) {
+      updates.submittedAt = new Date(); // always refresh submittedAt on solve
+      updates.lastSubmittedAt = updates.solvedDate || new Date(); // keep in sync for recent/today queries
+    }
+    if (updates.solved === false) { updates.solvedDate = null; updates.submittedAt = null; updates.lastSubmittedAt = null; }
 
     // Fetch BEFORE updating to check if it was previously unsolved
     const before = await Problem.findOne({ id: parseInt(req.params.id) });
