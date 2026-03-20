@@ -1493,6 +1493,16 @@ function App() {
           if (response.streak) setDbStreak(response.streak);
           const allProblemsResponse = await window.API.getAllProblems();
           setApiProblems(transformProblems(allProblemsResponse.data));
+          // Refresh recent/today if problem was solved
+          if (formData.type === 'Solved') {
+            try {
+              const recentTodayRes = await window.API.getRecentAndToday();
+              if (recentTodayRes.success) {
+                setRecentProblems(recentTodayRes.recentSolved || []);
+                setTodayProblems(recentTodayRes.todaySolved || []);
+              }
+            } catch (_) {}
+          }
           showNotification(`✅ Problem #${problemNumber} added!${formData.type === 'Solved' ? ' — Streak updated!' : ''}${autoRevision ? ' Added to Needs Revision.' : ''}`, 'success');
           setShowModal(false);
           setFormData({ number: '', title: '', difficulty: 'Medium', type: 'Solved', pattern: '', link: '', solveTime: '', hintsUsed: false, wrongAttempts: '' });
@@ -1547,6 +1557,16 @@ function App() {
           if (response.streak) setDbStreak(response.streak);
           const allProblemsResponse = await window.API.getAllProblems();
           setApiProblems(transformProblems(allProblemsResponse.data));
+          // Refresh recent/today if problem was marked as solved
+          if (newStatus === 'Done') {
+            try {
+              const recentTodayRes = await window.API.getRecentAndToday();
+              if (recentTodayRes.success) {
+                setRecentProblems(recentTodayRes.recentSolved || []);
+                setTodayProblems(recentTodayRes.todaySolved || []);
+              }
+            } catch (_) {}
+          }
           showNotification(newStatus === 'Done' ? '✓ Marked done — streak updated!' : `✓ Status → ${newStatus}`, 'success');
         }
       } catch (error) {
@@ -3084,10 +3104,7 @@ function App() {
           // Button click with propagation stop
           const handleButtonClick = (e, action, problemNumber) => {
             e.stopPropagation();
-            if (action === 'open') {
-              const p = enrichedRecent.find(pr => pr.number === problemNumber);
-              if (p?.link) window.open(p.link, '_blank');
-            } else if (action === 'revise') {
+            if (action === 'revise') {
               handleRevise(problemNumber);
             } else if (action === 'striver') {
               handleToggleStriver(problemNumber);
@@ -3120,30 +3137,37 @@ function App() {
                   </div>
                 ) : (
                   <div className="tp-list">
-                    {enrichedToday.map(p => {
+                    {enrichedToday.map((p, idx) => {
                       const diff = (p.difficulty || 'medium').toLowerCase();
                       const isRevisited = (p.revisionCount || 0) > 0;
                       return (
-                        <div key={p._id || p.number} className="tp-item">
-                          <div className="tp-item-left">
-                            <span className={`badge badge-${diff}`}>{p.difficulty}</span>
-                            <span className="tp-title">#{p.number} {p.title}</span>
-                            {isRevisited
-                              ? <span className="tp-badge tp-badge-revisited">Revisited</span>
-                              : <span className="tp-badge tp-badge-new">New</span>
-                            }
+                        <React.Fragment key={p._id || p.number}>
+                          {idx > 0 && <div className="tp-divider" />}
+                          <div className="tp-item">
+                            <div className="tp-item-left">
+                              <span className={`badge badge-${diff}`}>{p.difficulty}</span>
+                              <div className="tp-problem-info">
+                                <div className="tp-title">#{p.number} {p.title}</div>
+                                <div className="tp-meta">
+                                  {isRevisited
+                                    ? <span className="tp-badge tp-badge-revisited">Revisited</span>
+                                    : <span className="tp-badge tp-badge-new">New</span>
+                                  }
+                                  <span className="recent-time">{relativeTime(p.lastSubmittedAt)}</span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="tp-item-right">
+                              <button
+                                className="pc-btn pc-btn-revise"
+                                onClick={(e) => { e.stopPropagation(); handleRevise(p.number); }}
+                                disabled={revisingId === p.number}
+                              >
+                                {revisingId === p.number ? '⏳' : '🔁 Revise'}
+                              </button>
+                            </div>
                           </div>
-                          <div className="tp-item-right">
-                            <span className="recent-time">{relativeTime(p.lastSubmittedAt)}</span>
-                            <button
-                              className="pc-btn pc-btn-revise"
-                              onClick={(e) => { e.stopPropagation(); handleRevise(p.number); }}
-                              disabled={revisingId === p.number}
-                            >
-                              {revisingId === p.number ? '⏳' : '🔁 Revise'}
-                            </button>
-                          </div>
-                        </div>
+                        </React.Fragment>
                       );
                     })}
                   </div>
@@ -3154,7 +3178,7 @@ function App() {
               <div className="suggestions-card fade-up" style={{ marginBottom: 16 }}>
                 <div className="sug-header">
                   <h3 className="card-title" style={{ marginBottom: 2 }}>🆕 Recently Solved</h3>
-                  <span className="sug-subtitle">Last 9 accepted · sorted by latest</span>
+                  <span className="sug-subtitle">Click any card to find in table</span>
                 </div>
 
                 {enrichedRecent.length === 0 ? (
@@ -3173,7 +3197,6 @@ function App() {
                           key={p._id || p.number} 
                           className="pc-card pc-card-clickable"
                           onClick={() => handleCardClick(p.number)}
-                          title="Click to find in table"
                         >
                           {/* Top row */}
                           <div className="pc-top-row">
@@ -3193,17 +3216,10 @@ function App() {
                             {(p.revisionCount || 0) > 0 && (
                               <span className="pc-rev-badge">🔁 {p.revisionCount}×</span>
                             )}
-                            {p.lastRevisedAt && (
-                              <span className="pc-date">Last: {formatDate(p.lastRevisedAt)}</span>
-                            )}
                           </div>
 
                           {/* Actions */}
                           <div className="pc-actions">
-                            <button
-                              className="pc-btn pc-btn-open"
-                              onClick={(e) => handleButtonClick(e, 'open', p.number)}
-                            >Open ↗</button>
                             <button
                               className="pc-btn pc-btn-revise"
                               onClick={(e) => handleButtonClick(e, 'revise', p.number)}
@@ -3212,20 +3228,20 @@ function App() {
                               {revisingId === p.number ? '⏳' : '🔁 Revise'}
                             </button>
                             <button
-                              className={`pc-btn pc-btn-striver${p.isStriver ? ' active' : ''}`}
+                              className={`pc-btn-toggle ${p.isStriver ? 'active' : ''}`}
                               onClick={(e) => handleButtonClick(e, 'striver', p.number)}
                               disabled={striverId === p.number}
-                              title={p.isStriver ? 'Remove from Striver' : 'Add to Striver'}
+                              title={p.isStriver ? 'Striver Active' : 'Add to Striver'}
                             >
-                              {p.isStriver ? '📘' : '📖'}
+                              <span className="toggle-icon">📘</span>
                             </button>
                             <button
-                              className={`pc-btn pc-btn-target${p.targeted ? ' active' : ''}`}
+                              className={`pc-btn-toggle ${p.targeted ? 'active' : ''}`}
                               onClick={(e) => handleButtonClick(e, 'target', p.number)}
                               disabled={targetingId === p.number}
-                              title={p.targeted ? 'Remove target' : 'Add to Targeted'}
+                              title={p.targeted ? 'Target Active' : 'Add to Targeted'}
                             >
-                              {p.targeted ? '🎯' : '○'}
+                              <span className="toggle-icon">🎯</span>
                             </button>
                           </div>
                         </div>
@@ -3242,21 +3258,44 @@ function App() {
         {(() => {
           const list = targetedProblems.list;
           return (
-            <ProblemSection
-              title="🎯 Targeted Problems"
-              items={list}
-              variant="targeted"
-              emptyIcon="🎯"
-              emptyMsg="No targeted problems yet"
-              emptyHint="Click the 🎯 button on any problem in the table below to add it here"
-              onRevise={handleRevise}
-              revisingId={revisingId}
-              formatDate={formatDate}
-              onUserDiffChange={handleUserDifficultyChange}
-              onTarget={handleToggleTarget}
-              targetingId={targetingId}
-              onClickCard={handleClickSuggestion}
-            />
+            <div className="pc-section fade-up">
+              <h3 className="card-title">🎯 Targeted Problems ({list.length})</h3>
+              {list.length > 0 ? (
+                <div className={getPcGridClass(list.length)}>
+                  {list.map(p => (
+                    <ProblemCard
+                      key={p.number}
+                      p={p}
+                      variant="targeted"
+                      onRevise={handleRevise}
+                      revisingId={revisingId}
+                      formatDate={formatDate}
+                      onUserDiffChange={handleUserDifficultyChange}
+                      onTarget={handleToggleTarget}
+                      targetingId={targetingId}
+                      onClickCard={handleClickSuggestion}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="pc-empty pc-empty-cta">
+                  <div className="pc-empty-icon">🎯</div>
+                  <div>No targeted problems yet</div>
+                  <small>Click the 🎯 button on any problem in the table to add it here</small>
+                  <button 
+                    className="btn-cta"
+                    onClick={() => {
+                      const tableSection = document.querySelector('.table-card');
+                      if (tableSection) {
+                        tableSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      }
+                    }}
+                  >
+                    Browse Problems
+                  </button>
+                </div>
+              )}
+            </div>
           );
         })()}
 
