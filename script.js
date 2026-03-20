@@ -3158,13 +3158,15 @@ function App() {
                               </div>
                             </div>
                             <div className="tp-item-right">
-                              <button
-                                className="pc-btn pc-btn-revise"
-                                onClick={(e) => { e.stopPropagation(); handleRevise(p.number); }}
-                                disabled={revisingId === p.number}
+                              <a
+                                className="pc-btn pc-btn-open"
+                                href={p.link || p.leetcodeLink || `https://leetcode.com/problems/${p.number}/`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
                               >
-                                {revisingId === p.number ? '⏳' : '🔁 Revise'}
-                              </button>
+                                Open ↗
+                              </a>
                             </div>
                           </div>
                         </React.Fragment>
@@ -3220,13 +3222,15 @@ function App() {
 
                           {/* Actions */}
                           <div className="pc-actions">
-                            <button
-                              className="pc-btn pc-btn-revise"
-                              onClick={(e) => handleButtonClick(e, 'revise', p.number)}
-                              disabled={revisingId === p.number}
+                            <a
+                              className="pc-btn pc-btn-open"
+                              href={p.link || p.leetcodeLink || `https://leetcode.com/problems/${p.number}/`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
                             >
-                              {revisingId === p.number ? '⏳' : '🔁 Revise'}
-                            </button>
+                              Open ↗
+                            </a>
                             <button
                               className={`pc-btn-toggle ${p.isStriver ? 'active' : ''}`}
                               onClick={(e) => handleButtonClick(e, 'striver', p.number)}

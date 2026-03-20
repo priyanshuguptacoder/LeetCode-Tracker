@@ -522,6 +522,18 @@ body.light-mode .header p {
     flex-shrink: 0;
 }
 
+.tp-item-right .pc-btn-open {
+    min-width: 80px;
+    text-align: center;
+    padding: 8px 14px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
 .tp-badge {
     font-size: 0.68rem;
     font-weight: 700;
@@ -4975,13 +4987,26 @@ body.light-mode .rs-card-btn:hover {
     display: flex;
     gap: 6px;
     margin-top: auto;
+    align-items: center;
+}
+
+.pc-actions .pc-btn-open {
+    flex: 1;
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    padding: 6px 10px;
 }
 
 .pc-btn {
     flex: 1;
-    display: block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     text-align: center;
-    padding: 6px 0;
+    padding: 6px 10px;
     border-radius: 7px;
     font-size: 0.73rem;
     font-weight: 600;
@@ -4989,6 +5014,8 @@ body.light-mode .rs-card-btn:hover {
     cursor: pointer;
     transition: background 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
     border: 1px solid transparent;
+    min-height: 36px;
+    white-space: nowrap;
 }
 
 .pc-btn-open {
@@ -6791,12 +6818,23 @@ tr.highlight-row {
     .tp-item {
         flex-direction: column;
         align-items: flex-start;
-        gap: 8px;
+        gap: 10px;
+        padding: 12px 14px;
+    }
+
+    .tp-item-left {
+        flex-direction: row;
+        align-items: flex-start;
+        gap: 10px;
+        width: 100%;
     }
 
     .tp-item-right {
         width: 100%;
-        justify-content: space-between;
+    }
+
+    .tp-item-right .pc-btn-open {
+        width: 100%;
     }
 
     .tp-title {
@@ -6847,27 +6885,18 @@ button {
 @media (max-width: 600px) {
     .pc-actions {
         display: flex;
-        flex-direction: column;
+        flex-direction: row;
+        flex-wrap: wrap;
         gap: 6px;
+    }
+
+    .pc-actions .pc-btn-open {
+        flex: 1 1 100%;
     }
 
     .pc-btn {
         width: 100%;
         justify-content: center;
-    }
-
-    .tp-item {
-        flex-direction: column;
-        align-items: stretch;
-    }
-
-    .tp-item-right {
-        flex-direction: column;
-        width: 100%;
-    }
-
-    .tp-item-right .pc-btn {
-        width: 100%;
     }
 }
 
@@ -6922,7 +6951,7 @@ tr.highlight-row,
     }
 
     .tp-item-left {
-        flex-direction: column;
+        flex-direction: row;
         align-items: flex-start;
         gap: 10px;
     }
@@ -6937,10 +6966,10 @@ tr.highlight-row,
 
     .tp-item-right {
         width: 100%;
-        justify-content: space-between;
     }
 
-    .tp-item-right .pc-btn {
+    .tp-item-right .pc-btn-open {
+        width: 100%;
         flex: 1;
     }
 }
