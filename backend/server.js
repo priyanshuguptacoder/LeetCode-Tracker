@@ -19,6 +19,8 @@ validateEnv();
 const problemRoutes  = require('./routes/problems');
 const leetcodeRoutes = require('./routes/leetcode');
 const debugRoutes    = require('./routes/debug');
+const analyticsRoutes = require('./routes/analytics');
+const revisionRoutes  = require('./routes/revision');
 
 const app  = express();
 const PORT = process.env.PORT || 5001;
@@ -38,9 +40,11 @@ app.use((req, res, next) => {
 });
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
-app.use('/api/problems', problemRoutes);   // existing problem tracker routes
-app.use('/api/problem',  leetcodeRoutes);  // LeetCode API + manual entry
-app.use('/api',          debugRoutes);     // health, debug, test
+app.use('/api/problems',  problemRoutes);
+app.use('/api/problem',   leetcodeRoutes);
+app.use('/api',           debugRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/revision',  revisionRoutes);
 
 app.get('/', (req, res) => {
   res.json({
@@ -58,7 +62,10 @@ app.get('/', (req, res) => {
       'GET  /api/problem/:slug':        'Fetch problem from LeetCode API',
       'POST /api/problem/manual':       'Manual problem entry',
       'POST /api/problem/sync':         'Auto-sync recent accepted submissions from LeetCode',
+      'GET  /api/problem/sync/status':  'LeetCode session health check',
       'GET  /api/problem/list':         'List all tracked problems',
+      'GET  /api/problem/recent':       'Last 20 solved problems by lastSubmittedAt',
+      'GET  /api/problem/today':        'Problems solved today',
       'GET  /api/problem/revision':     'Revision queue',
       'GET  /api/problem/streaks':      'Streak stats',
       'GET  /api/problems':             'All problems (tracker)',

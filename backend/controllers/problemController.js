@@ -1,33 +1,25 @@
 const Problem = require('../models/Problem');
 const Settings = require('../models/Settings');
 
-// ─── Timezone helper ─────────────────────────────────────────────────────────
-const TZ = 'Asia/Kolkata';
-
-function todayStr(tz) {
-  return new Date().toLocaleDateString('en-CA', { timeZone: tz || TZ });
+// ─── UTC date helpers ─────────────────────────────────────────────────────────
+function todayStr() {
+  return new Date().toISOString().split('T')[0]; // YYYY-MM-DD UTC
 }
 
-function dateStr(date, tz) {
+function dateStr(date) {
   if (!date) return null;
-  return new Date(date).toLocaleDateString('en-CA', { timeZone: tz || TZ });
+  return new Date(date).toISOString().split('T')[0]; // YYYY-MM-DD UTC
 }
 
-// Calendar-day difference between two YYYY-MM-DD strings (b minus a)
+// Calendar-day difference between two YYYY-MM-DD strings (b minus a), UTC-safe
 function dayDiff(a, b) {
-  // Parse as local midnight to avoid UTC offset issues
-  const [ay, am, ad] = a.split('-').map(Number);
-  const [by, bm, bd] = b.split('-').map(Number);
-  const dateA = new Date(ay, am - 1, ad);
-  const dateB = new Date(by, bm - 1, bd);
-  return Math.round((dateB.getTime() - dateA.getTime()) / 86400000);
+  return Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000);
 }
 
 // ─── Streak update — 3-case logic ────────────────────────────────────────────
 async function applyStreakUpdate(settings) {
-  const today = todayStr(); // YYYY-MM-DD in IST
-  // Always convert lastSolvedDate to IST date string for comparison
-  const last = settings.lastSolvedDate ? dateStr(settings.lastSolvedDate) : null;
+  const today = todayStr(); // YYYY-MM-DD UTC
+  const last  = settings.lastSolvedDate ? dateStr(settings.lastSolvedDate) : null;
   let { currentStreak, maxStreak, activeDays } = settings;
 
   console.log(`[streak] today=${today} last=${last} currentStreak=${currentStreak} maxStreak=${maxStreak} activeDays=${activeDays}`);
@@ -50,9 +42,8 @@ async function applyStreakUpdate(settings) {
   if (currentStreak > maxStreak) maxStreak = currentStreak;
   if (activeDays < currentStreak) activeDays = currentStreak;
 
-  // Store lastSolvedDate as start-of-day in IST to avoid timezone drift on next read
-  const [ty, tm, td] = today.split('-').map(Number);
-  const lastSolvedDate = new Date(Date.UTC(ty, tm - 1, td, 0, 0, 0));
+  // Store as UTC midnight
+  const lastSolvedDate = new Date(`${today}T00:00:00.000Z`);
 
   return Settings.findOneAndUpdate(
     { key: 'global' },
@@ -103,11 +94,9 @@ exports.updateStreak = async (req, res) => {
 
     const updateFields = { currentStreak: cs, maxStreak: ms, activeDays: ad, isSetup: true };
     if (lastSolvedDate) updateFields.lastSolvedDate = new Date(lastSolvedDate);
-    // If no lastSolvedDate provided, set to UTC midnight of today in IST to avoid timezone drift
+    // If no lastSolvedDate provided, set to UTC midnight of today
     if (!lastSolvedDate) {
-      const todayIST = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-      const [ty, tm, td] = todayIST.split('-').map(Number);
-      updateFields.lastSolvedDate = new Date(Date.UTC(ty, tm - 1, td, 0, 0, 0));
+      updateFields.lastSolvedDate = new Date(`${todayStr()}T00:00:00.000Z`);
     }
 
     s = await Settings.findOneAndUpdate(
@@ -162,7 +151,7 @@ exports.createProblem = async (req, res) => {
     let nextRevisionAt = null;
     if (isSolved) {
       nextRevisionAt = new Date(resolvedSolvedDate);
-      nextRevisionAt.setDate(nextRevisionAt.getDate() + 1);
+      nextRevisionAt.setUTCDate(nextRevisionAt.getUTCDate() + 1);
     }
 
     const problem = await Problem.create({
@@ -275,7 +264,7 @@ exports.reviseProblem = async (req, res) => {
       intervalDays = intervals[Math.min(newCount - 1, intervals.length - 1)];
     }
     const nextRevisionAt = new Date();
-    nextRevisionAt.setDate(nextRevisionAt.getDate() + intervalDays);
+    nextRevisionAt.setUTCDate(nextRevisionAt.getUTCDate() + intervalDays);
 
     // ── Failure loop detection ─────────────────────────────────────────────
     const failureLoopFlagged = newCount >= 3 && confidence === 1;
@@ -380,10 +369,7 @@ exports.deleteProblem = async (req, res) => {
     if (problem.solved) {
       const remaining = await Problem.find({ solved: true }).sort({ solvedDate: 1 });
       const dates = [...new Set(
-        remaining.map(p => p.solvedDate
-          ? new Date(p.solvedDate).toLocaleDateString('en-CA', { timeZone: TZ })
-          : null
-        ).filter(Boolean)
+        remaining.map(p => p.solvedDate ? dateStr(p.solvedDate) : null).filter(Boolean)
       )].sort();
 
       const activeDays = dates.length;

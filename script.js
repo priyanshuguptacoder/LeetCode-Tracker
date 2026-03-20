@@ -549,7 +549,8 @@ function PwModal({ modal, adminPassword, onClose }) {
 // Recompute streak/activeDays from an array of YYYY-MM-DD date strings.
 // Used after delete to keep dbStreak display in sync without a DB round-trip.
 function computeStreakFromDates(dateStrings) {
-  const parseLocal = (s) => { const [y,m,d] = s.split('-'); return new Date(y, m-1, d); };
+  // Parse YYYY-MM-DD as UTC midnight
+  const parseUTC = (s) => new Date(`${s}T00:00:00.000Z`);
   const unique = [...new Set(dateStrings.filter(Boolean))].sort();
   const activeDays = unique.length;
   if (activeDays === 0) return { activeDays: 0, currentStreak: 0, maxStreak: 0 };
@@ -557,25 +558,23 @@ function computeStreakFromDates(dateStrings) {
   // Max streak
   let maxStreak = 1, tempStreak = 1;
   for (let i = 1; i < unique.length; i++) {
-    const diff = Math.round((parseLocal(unique[i]) - parseLocal(unique[i-1])) / 86400000);
+    const diff = Math.round((parseUTC(unique[i]) - parseUTC(unique[i-1])) / 86400000);
     if (diff === 1) { tempStreak++; } else { maxStreak = Math.max(maxStreak, tempStreak); tempStreak = 1; }
   }
   maxStreak = Math.max(maxStreak, tempStreak);
 
-  // Current streak — consecutive days ending today or yesterday
-  const now = new Date();
-  const pad = (n) => String(n).padStart(2,'0');
-  const fmt = (d) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-  const todayStr = fmt(now);
-  const yest = new Date(now); yest.setDate(yest.getDate()-1);
-  const yesterdayStr = fmt(yest);
+  // Current streak — consecutive days ending today or yesterday (UTC)
+  const now      = new Date();
+  const todayUTC = now.toISOString().split('T')[0];
+  const yestDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1));
+  const yesterdayUTC = yestDate.toISOString().split('T')[0];
   const lastDate = unique[unique.length - 1];
   let currentStreak = 0;
-  if (lastDate === todayStr || lastDate === yesterdayStr) {
+  if (lastDate === todayUTC || lastDate === yesterdayUTC) {
     let i = unique.length - 1;
     currentStreak = 1;
     while (i > 0) {
-      const diff = Math.round((parseLocal(unique[i]) - parseLocal(unique[i-1])) / 86400000);
+      const diff = Math.round((parseUTC(unique[i]) - parseUTC(unique[i-1])) / 86400000);
       if (diff === 1) { currentStreak++; i--; } else break;
     }
   }
@@ -594,6 +593,124 @@ function computeStriverStats(problems) {
   };
 }
 
+// ============================================
+// WEAKNESS RADAR — topic mastery via Recharts
+// ============================================
+function WeaknessRadar({ problems }) {
+  const { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Tooltip } = Recharts;
+
+  const topicStats = React.useMemo(() => {
+    const map = {};
+    problems.forEach(p => {
+      (p.topics || []).forEach(tag => {
+        if (!map[tag]) map[tag] = { total: 0, solved: 0 };
+        map[tag].total++;
+        if (p.status === 'Done') map[tag].solved++;
+      });
+    });
+    return Object.entries(map)
+      .filter(([, v]) => v.total >= 3)
+      .sort((a, b) => (b[1].solved / b[1].total) - (a[1].solved / a[1].total))
+      .slice(0, 8)
+      .map(([subject, v]) => ({
+        subject,
+        A: Math.round((v.solved / v.total) * 100),
+      }));
+  }, [problems]);
+
+  if (topicStats.length === 0) return null;
+
+  return (
+    <div className="analytics-card" style={{ minHeight: 280 }}>
+      <h3 className="card-title">🕸 Topic Mastery</h3>
+      <ResponsiveContainer width="100%" height={240}>
+        <RadarChart data={topicStats}>
+          <PolarGrid stroke="rgba(255,255,255,0.1)" />
+          <PolarAngleAxis dataKey="subject" tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} />
+          <Radar name="Mastery %" dataKey="A" stroke="var(--primary)" fill="var(--primary)" fillOpacity={0.25} />
+          <Tooltip
+            contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8 }}
+            formatter={(v) => [`${v}%`, 'Mastery']}
+          />
+        </RadarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// ============================================
+// ACTIVITY HEATMAP — simple div grid, no D3
+// ============================================
+function ActivityHeatmap({ problems }) {
+  const weeks = 18;
+  // UTC today
+  const nowUTC   = new Date();
+  const todayUTC = new Date(Date.UTC(nowUTC.getUTCFullYear(), nowUTC.getUTCMonth(), nowUTC.getUTCDate()));
+
+  // Build date → count map using UTC keys from _solvedDateISO (already YYYY-MM-DD UTC)
+  const countMap = React.useMemo(() => {
+    const m = {};
+    problems.forEach(p => {
+      const d = p._solvedDateISO;
+      if (d) m[d] = (m[d] || 0) + 1;
+    });
+    return m;
+  }, [problems]);
+
+  // Build grid: weeks × 7 days, starting from Sunday (UTC)
+  const startUTC = new Date(todayUTC);
+  startUTC.setUTCDate(todayUTC.getUTCDate() - (weeks * 7 - 1));
+  // Align to Sunday
+  startUTC.setUTCDate(startUTC.getUTCDate() - startUTC.getUTCDay());
+
+  const cells = [];
+  for (let w = 0; w < weeks; w++) {
+    for (let d = 0; d < 7; d++) {
+      const date = new Date(startUTC);
+      date.setUTCDate(startUTC.getUTCDate() + w * 7 + d);
+      const key   = date.toISOString().split('T')[0];
+      const count = countMap[key] || 0;
+      const intensity = count === 0 ? 0 : count === 1 ? 1 : count <= 3 ? 2 : 3;
+      cells.push({ key, count, intensity, isFuture: date > todayUTC });
+    }
+  }
+
+  const intensityColor = ['rgba(255,255,255,0.05)', 'rgba(34,197,94,0.3)', 'rgba(34,197,94,0.6)', 'rgba(34,197,94,0.9)'];
+
+  return (
+    <div className="analytics-card analytics-card-full">
+      <h3 className="card-title">📅 Activity Heatmap</h3>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${weeks}, 1fr)`, gap: 3, overflowX: 'auto' }}>
+        {Array.from({ length: weeks }, (_, w) => (
+          <div key={w} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {cells.slice(w * 7, w * 7 + 7).map(cell => (
+              <div
+                key={cell.key}
+                title={cell.count > 0 ? `${cell.key}: ${cell.count} solved` : cell.key}
+                style={{
+                  width: '100%',
+                  paddingBottom: '100%',
+                  borderRadius: 3,
+                  background: cell.isFuture ? 'transparent' : intensityColor[cell.intensity],
+                  border: '1px solid rgba(255,255,255,0.04)',
+                  cursor: cell.count > 0 ? 'default' : undefined,
+                }}
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 10, fontSize: 11, color: 'var(--text-secondary)' }}>
+        <span>Less</span>
+        {intensityColor.map((c, i) => (
+          <div key={i} style={{ width: 12, height: 12, borderRadius: 2, background: c, border: '1px solid rgba(255,255,255,0.08)' }} />
+        ))}
+        <span>More</span>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   // ============================================
   // API DATA FETCHING
@@ -606,6 +723,14 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState(null);
   const [striverId, setStriverId] = useState(null);
+  const [recentProblems, setRecentProblems] = useState([]);
+  const [todayProblems, setTodayProblems] = useState([]);
+  const [syncStatus, setSyncStatus] = useState('checking');
+
+  // ── Difficulty navbar + suggestion state — declared early to avoid hook-order issues
+  const [selectedFilter, setSelectedFilter] = useState(null); // 'easy'|'medium'|'hard'|null
+  const [selectedProblemId, setSelectedProblemId] = useState(null);
+  const [suggestions, setSuggestions] = useState([]);
 
   // Ref to always access latest apiProblems without stale closure issues
   const apiProblemsRef = useRef([]);
@@ -622,38 +747,32 @@ function App() {
     isSetup: false,
   });
 
+  // UTC date helpers — all date math uses UTC to match LeetCode and MongoDB
   const toLocalDateStr = (date) => {
-    return new Intl.DateTimeFormat('en-CA', {
-      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    }).format(new Date(date));
+    // Returns YYYY-MM-DD in UTC — used as the canonical date key throughout the app
+    return new Date(date).toISOString().split('T')[0];
+  };
+
+  const parseLocalDate = (dateStr) => {
+    // Parse YYYY-MM-DD as UTC midnight
+    if (!dateStr) return new Date(NaN);
+    return new Date(`${dateStr}T00:00:00.000Z`);
   };
 
   const formatDate = (date) => {
     if (!date) return '—';
-    // For YYYY-MM-DD strings, parse as local date to avoid UTC shift
-    let d;
-    if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      d = parseLocalDate(date);
-    } else {
-      d = new Date(date);
-    }
+    const d = typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)
+      ? parseLocalDate(date)
+      : new Date(date);
     if (isNaN(d.getTime())) return '—';
-    const todayLocal = parseLocalDate(toLocalDateStr(new Date()));
-    const days = Math.floor((todayLocal - d) / (1000 * 60 * 60 * 24));
+    const todayUTC = new Date(new Date().toISOString().split('T')[0] + 'T00:00:00.000Z');
+    const days = Math.floor((todayUTC - d) / 86400000);
     if (days === 0) return 'Today';
     if (days <= 7) return `${days}d ago`;
-    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' });
+    return d.toLocaleString('en-US', { timeZone: 'UTC', day: '2-digit', month: 'short', year: '2-digit' });
   };
-  const todayLocalStr = toLocalDateStr(new Date());
 
-  const parseLocalDate = (dateStr) => {
-    if (!dateStr) return new Date(NaN);
-    const [y, m, d] = dateStr.split('-');
-    return new Date(y, m - 1, d);
-  };
+  const todayLocalStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD UTC
 
   // Parse "DD-MMM" → local date string "YYYY-MM-DD"
   const MONTH_MAP = {
@@ -782,10 +901,16 @@ function App() {
         if (probRes.success) setApiProblems(transformProblems(probRes.data));
         if (streakRes.success) setDbStreak(streakRes.data);
         setLoading(false);
-        // Fetch suggestions after main data loads (non-blocking)
+        // Non-blocking secondary fetches
         try {
-          const sugRes = await window.API.getSuggestions();
-          if (sugRes.success) setSuggestions(sugRes.data || []);
+          const [sugRes, recentRes, todayRes] = await Promise.allSettled([
+            window.API.getSuggestions(),
+            window.API.getRecentProblems(),
+            window.API.getTodayProblems(),
+          ]);
+          if (sugRes.status === 'fulfilled' && sugRes.value.success) setSuggestions(sugRes.value.data || []);
+          if (recentRes.status === 'fulfilled' && recentRes.value.success) setRecentProblems(recentRes.value.data || []);
+          if (todayRes.status === 'fulfilled' && todayRes.value.success) setTodayProblems(todayRes.value.data || []);
         } catch (_) {}
       } catch (error) {
         console.error('Failed to fetch data:', error);
@@ -794,6 +919,13 @@ function App() {
       }
     };
     fetchData();
+  }, []);
+
+  // Check LeetCode session health on mount
+  useEffect(() => {
+    window.API.getSyncStatus()
+      .then(d => setSyncStatus(d.status === 'ok' ? 'ok' : 'expired'))
+      .catch(() => setSyncStatus('expired'));
   }, []);
 
   // ============================================
@@ -826,11 +958,6 @@ function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const debounceRef = useRef(null);
-
-  // ── Difficulty navbar + suggestion state ─────────────────────────────────
-  const [selectedFilter, setSelectedFilter] = useState(null); // 'easy'|'medium'|'hard'|null
-  const [selectedProblemId, setSelectedProblemId] = useState(null);
-  const [suggestions, setSuggestions] = useState([]);
 
   const handleSearchChange = (val) => {
     setSearchTerm(val);
@@ -1091,16 +1218,16 @@ function App() {
       const activeDays = uniqueDates.length;
 
       // ── Current Streak ──────────────────────────────────────────────────────
-      // Strict: streak = consecutive days ending TODAY (local). 0 if no solve today.
-      const today = toLocalDateStr(new Date());
+      // Strict: streak = consecutive days ending TODAY (UTC). 0 if no solve today.
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD UTC
       let currentStreak = 0;
       if (dateCounts[today]) {
-        let checkDate = new Date();
+        let checkDate = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
         while (true) {
-          const ds = toLocalDateStr(checkDate);
+          const ds = checkDate.toISOString().split('T')[0];
           if (dateCounts[ds]) {
             currentStreak++;
-            checkDate.setDate(checkDate.getDate() - 1);
+            checkDate.setUTCDate(checkDate.getUTCDate() - 1);
           } else {
             break;
           }
@@ -1144,17 +1271,16 @@ function App() {
 
     // Week = Monday → Sunday (ISO week). No mutation bug.
     const getMondayOf = (date) => {
-      const d = new Date(date);
-      d.setHours(0, 0, 0, 0);
-      const day = d.getDay(); // 0=Sun
+      const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+      const day = d.getUTCDay(); // 0=Sun
       const diff = day === 0 ? -6 : 1 - day; // shift to Monday
-      d.setDate(d.getDate() + diff);
+      d.setUTCDate(d.getUTCDate() + diff);
       return d;
     };
 
     const thisMonday = getMondayOf(new Date());
     const lastMonday = new Date(thisMonday);
-    lastMonday.setDate(lastMonday.getDate() - 7);
+    lastMonday.setUTCDate(lastMonday.getUTCDate() - 7);
     const lastSunday = new Date(thisMonday); // exclusive end of last week
 
     let thisWeekCount = 0;
@@ -1164,7 +1290,6 @@ function App() {
     problems.forEach(problem => {
       if (problem && problem.status === 'Done' && problem.number && solvedDates[problem.number]) {
         const solvedDate = parseLocalDate(solvedDates[problem.number]);
-        solvedDate.setHours(0, 0, 0, 0);
         if (solvedDate >= thisMonday) {
           thisWeekCount++;
           thisWeekDays.add(solvedDates[problem.number]);
@@ -1209,10 +1334,8 @@ function App() {
     
     // Last 7 days
     const today = new Date();
-    const last7Start = new Date(today);
-    last7Start.setDate(last7Start.getDate() - 7);
-    const prev7Start = new Date(last7Start);
-    prev7Start.setDate(prev7Start.getDate() - 7);
+    const last7Start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - 7));
+    const prev7Start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - 14));
     
     let last7Count = 0;
     let prev7Count = 0;
@@ -1237,8 +1360,7 @@ function App() {
     const prev7Avg = prev7Days.size > 0 ? (prev7Count / prev7Days.size).toFixed(2) : 0;
 
     // Last 30 days avg
-    const last30Start = new Date(today);
-    last30Start.setDate(last30Start.getDate() - 30);
+    const last30Start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - 30));
     let last30Count = 0;
     const last30Days = new Set();
     problems.forEach(problem => {
@@ -1280,13 +1402,13 @@ function App() {
 
     const topDays = sorted.map(([date, count]) => ({
       count,
-      label: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      label: new Date(date).toLocaleString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric' }),
     }));
 
     return {
       count: topDays[0]?.count || 0,
       date: topDays[0]
-        ? new Date(sorted[0][0]).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+        ? new Date(sorted[0][0]).toLocaleString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })
         : 'N/A',
       topDays,
     };
@@ -1299,8 +1421,7 @@ function App() {
     
     const sortedDates = dates.sort();
     const firstDate = parseLocalDate(sortedDates[0]);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
     const totalDaysTracked = Math.max(1, Math.ceil((today - firstDate) / 86400000) + 1);
     
     // Hide section entirely if less than 7 days of data
@@ -1308,11 +1429,9 @@ function App() {
       return { hasData: false };
     }
 
-    const last30Start = new Date(today);
-    last30Start.setDate(last30Start.getDate() - 30);
-
-    const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-    const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const last30Start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - 30));
+    const currentMonthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
+    const lastMonthStart    = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1));
 
     let last30Count = 0;
     let currentMonthCount = 0;
@@ -1321,20 +1440,19 @@ function App() {
     problems.forEach(p => {
       if (p.status === 'Done' && solvedDates[p.number]) {
         const d = parseLocalDate(solvedDates[p.number]);
-        d.setHours(0, 0, 0, 0);
         if (d >= last30Start) last30Count++;
         if (d >= currentMonthStart) currentMonthCount++;
         if (d >= lastMonthStart && d < currentMonthStart) lastMonthCount++;
       }
     });
 
-    const avgLast30 = last30Count / 30; // problems per day over last 30 days
+    const avgLast30 = last30Count / 30;
     const moderate   = (avgLast30 * 1.2).toFixed(1);
     const aggressive = (avgLast30 * 1.5).toFixed(1);
 
     // Phase 8: daily required to hit moderate monthly target
-    const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-    const dayOfMonth = today.getDate();
+    const daysInMonth = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 0)).getUTCDate();
+    const dayOfMonth  = today.getUTCDate();
     const remainingDays = Math.max(1, daysInMonth - dayOfMonth);
     const moderateMonthlyTarget = Math.round(parseFloat(moderate) * daysInMonth);
     const dailyRequired = Math.max(0, ((moderateMonthlyTarget - currentMonthCount) / remainingDays)).toFixed(1);
@@ -1414,15 +1532,34 @@ function App() {
     setSyncing(true);
     try {
       const result = await window.API.syncLeetCode();
-      // Refresh problems from DB after sync
-      const probRes = await window.API.getAllProblems();
-      if (probRes.success) setApiProblems(transformProblems(probRes.data));
+      if (!result.success) {
+        if (result.error === 'LEETCODE_SESSION_EXPIRED') {
+          setSyncStatus('expired');
+          showNotification('⚠️ LeetCode session expired — update cookies on Render', 'error');
+          return;
+        }
+        showNotification('❌ Sync failed', 'error');
+        return;
+      }
+      setSyncStatus('ok');
+      // Refresh problems + recent/today from DB after sync
+      const [probRes, recentRes, todayRes] = await Promise.allSettled([
+        window.API.getAllProblems(),
+        window.API.getRecentProblems(),
+        window.API.getTodayProblems(),
+      ]);
+      if (probRes.status === 'fulfilled' && probRes.value.success)
+        setApiProblems(transformProblems(probRes.value.data));
+      if (recentRes.status === 'fulfilled' && recentRes.value.success)
+        setRecentProblems(recentRes.value.data || []);
+      if (todayRes.status === 'fulfilled' && todayRes.value.success)
+        setTodayProblems(todayRes.value.data || []);
       showNotification(
-        `✅ ${result.message || `Synced — ${result.newAdded} added, ${result.skipped} skipped`}`,
+        `✅ ${result.message || `Synced — ${result.inserted} added, ${result.skipped} skipped`}`,
         'success'
       );
     } catch (err) {
-      showNotification(`❌ Sync failed: ${err.message}`, 'error');
+      showNotification(`❌ Network error: ${err.message}`, 'error');
     } finally {
       setSyncing(false);
     }
@@ -1624,14 +1761,14 @@ function App() {
   const [dailyRevisionCount, setDailyRevisionCount] = React.useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('dailyRevision') || '{}');
-      const today = new Date().toLocaleDateString('en-CA');
+      const today = new Date().toISOString().split('T')[0];
       return saved.date === today ? (saved.count || 0) : 0;
     } catch { return 0; }
   });
   const DAILY_REVISION_LIMIT = 5;
 
   const incrementDailyRevision = () => {
-    const today = new Date().toLocaleDateString('en-CA');
+    const today = new Date().toISOString().split('T')[0];
     const newCount = dailyRevisionCount + 1;
     setDailyRevisionCount(newCount);
     localStorage.setItem('dailyRevision', JSON.stringify({ date: today, count: newCount }));
@@ -1911,7 +2048,7 @@ function App() {
   // COACHING INTELLIGENCE — derived metrics
   // ============================================
   const coachingMetrics = React.useMemo(() => {
-    const today = new Date(); today.setHours(0,0,0,0);
+    const today = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
     const solved = allProblems.filter(p => p.status === 'Done');
     const revised = allProblems.filter(p => (p.revisionCount || 0) > 0);
 
@@ -1923,7 +2060,7 @@ function App() {
       .filter(p => p._solvedDateISO && p.lastRevisedAt)
       .map(p => {
         const s = parseLocalDate(p._solvedDateISO);
-        const r = new Date(p.lastRevisedAt); r.setHours(0,0,0,0);
+        const r = parseLocalDate(new Date(p.lastRevisedAt).toISOString().split('T')[0]);
         return Math.max(0, Math.round((r - s) / 86400000));
       });
     const avgGap = gaps.length > 0 ? gaps.reduce((a,b) => a+b, 0) / gaps.length : 0;
@@ -1932,7 +2069,7 @@ function App() {
     const forgottenCount = solved.filter(p => {
       if ((p.revisionCount || 0) === 0) return true;
       if (!p.lastRevisedAt) return true;
-      const r = new Date(p.lastRevisedAt); r.setHours(0,0,0,0);
+      const r = parseLocalDate(new Date(p.lastRevisedAt).toISOString().split('T')[0]);
       return Math.round((today - r) / 86400000) > 7;
     }).length;
 
@@ -1969,7 +2106,7 @@ function App() {
     const hardPct20 = last20.length > 0 ? last20.filter(p => p.difficulty === 'Hard').length / last20.length : 0;
 
     // weeklySolveFrequency
-    const weekAgo = new Date(today); weekAgo.setDate(weekAgo.getDate() - 7);
+    const weekAgo = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - 7));
     const thisWeekCount = solved.filter(p => p._solvedDateISO && parseLocalDate(p._solvedDateISO) >= weekAgo).length;
 
     return {
@@ -2047,10 +2184,9 @@ function App() {
     
     const sortedDates = [...dates].sort();
     const firstDate = sortedDates.length > 0 ? parseLocalDate(sortedDates[0]) : new Date();
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    firstDate.setHours(0, 0, 0, 0);
-    const totalDaysTracked = Math.max(1, Math.ceil((today - firstDate) / 86400000) + 1);
+    const today = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
+    const firstDateUTC = new Date(Date.UTC(firstDate.getUTCFullYear(), firstDate.getUTCMonth(), firstDate.getUTCDate()));
+    const totalDaysTracked = Math.max(1, Math.ceil((today - firstDateUTC) / 86400000) + 1);
     
     const activeDays = heatmapData.activeDays;
     const averageProblemsPerActiveDay = activeDays > 0 ? totalSolved / activeDays : 0;
@@ -2163,8 +2299,7 @@ function App() {
   // weaknessScore = (1/solvedCount)*0.6 + (daysSinceLastSolved/maxDays)*0.4
   // ============================================
   const weaknessAnalysis = React.useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
     const entries = Object.entries(topicStats);
     if (entries.length === 0) return [];
 
@@ -2547,6 +2682,9 @@ function App() {
             </p>
           </div>
           <div className="header-actions">
+            <span className={`sync-status ${syncStatus}`}>
+              {syncStatus === 'checking' ? '⏳ Checking...' : syncStatus === 'ok' ? '🟢 Sync Active' : '🔴 Session Expired'}
+            </span>
             <button
               className="btn-sync-lc"
               onClick={handleSyncLeetCode}
@@ -2663,13 +2801,13 @@ function App() {
               <div className="recent-activity-grid">
                 {(() => {
                   const days = [];
-                  const today = new Date();
+                  const todayUTC = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
                   
                   for (let i = 6; i >= 0; i--) {
-                    const date = new Date(today);
-                    date.setDate(date.getDate() - i);
+                    const date = new Date(todayUTC);
+                    date.setUTCDate(date.getUTCDate() - i);
                     const dateStr = toLocalDateStr(date);
-                    const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+                    const dayName = date.toLocaleString('en-US', { timeZone: 'UTC', weekday: 'short' });
                     
                     // Count problems solved on this date
                     const problemCount = Object.values(solvedDates).filter(
@@ -2722,7 +2860,7 @@ function App() {
             {/* ── Progress Overview ── */}
             <div className="mp-section">
               <div className="mp-month-row">
-                <span className="mp-month-name">{new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
+                <span className="mp-month-name">{new Date().toLocaleString('en-US', { timeZone: 'UTC', month: 'long', year: 'numeric' })}</span>
                 {(() => {
                   const pace = targetSuggestion.hasData
                     ? parseFloat(targetSuggestion.avgLast30) >= parseFloat(targetSuggestion.dailyRequired)
@@ -2741,8 +2879,8 @@ function App() {
                     <div className="mp-progress-bar-fill" style={{ width: `${Math.min(100, Math.round((currentMonthStats.count / targetSuggestion.moderateMonthlyTarget) * 100))}%` }} />
                     {/* Expected progress marker */}
                     {(() => {
-                      const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth()+1, 0).getDate();
-                      const dayOfMonth = new Date().getDate();
+                      const daysInMonth = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 1, 0)).getUTCDate();
+                      const dayOfMonth = new Date().getUTCDate();
                       const expectedPct = Math.round((dayOfMonth / daysInMonth) * 100);
                       return <div className="mp-expected-marker" style={{ left: `${expectedPct}%` }} title={`Expected: ${expectedPct}%`} />;
                     })()}
@@ -3035,29 +3173,92 @@ function App() {
           );
         })()}
 
-        {/* Recently Solved — sorted by submittedAt DESC (full timestamp) */}
+        {/* Today's Progress + Recently Solved */}
         {(() => {
-          const recentProblems = [...allProblems]
-            .filter(p => p.status === 'Done')
-            .sort((a, b) => {
-              const aT = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
-              const bT = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
-              return bT - aT;
-            })
-            .slice(0, 9);
+          // Trend: last 7 days vs previous 7 days (from allProblems)
+          const now = Date.now();
+          const DAY = 86400000;
+          const last7  = allProblems.filter(p => p.submittedAt && (now - new Date(p.submittedAt).getTime()) < 7  * DAY).length;
+          const prev7  = allProblems.filter(p => p.submittedAt && (now - new Date(p.submittedAt).getTime()) >= 7 * DAY && (now - new Date(p.submittedAt).getTime()) < 14 * DAY).length;
+          const trendUp = last7 >= prev7;
+
+          const relativeTime = (date) => {
+            if (!date) return '';
+            const diff = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
+            if (diff < 60)   return `${diff}s ago`;
+            if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+            if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+            return `${Math.floor(diff / 86400)}d ago`;
+          };
+
           return (
-            <ProblemSection
-              title="🆕 Recently Solved"
-              items={recentProblems}
-              variant="solved"
-              emptyIcon="📚"
-              emptyMsg="No solved problems yet"
-              emptyHint="Start solving to see activity here"
-              onRevise={handleRevise}
-              revisingId={revisingId}
-              formatDate={formatDate}
-              onUserDiffChange={handleUserDifficultyChange}
-            />
+            <>
+              {/* Today's Progress */}
+              <div className="suggestions-card fade-up" style={{ marginBottom: 16 }}>
+                <div className="sug-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                  <div>
+                    <h3 className="card-title" style={{ marginBottom: 2 }}>
+                      ☀️ Today's Progress
+                      <span style={{ marginLeft: 10, fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                        {todayProblems.length} solved
+                      </span>
+                    </h3>
+                    <span className="sug-subtitle">Problems you solved today</span>
+                  </div>
+                  <span className={`trend ${trendUp ? 'up' : 'down'}`} title={`Last 7d: ${last7} vs prev 7d: ${prev7}`}>
+                    {trendUp ? '↑' : '↓'} {trendUp ? '+' : ''}{last7 - prev7} vs last week
+                  </span>
+                </div>
+                {todayProblems.length === 0 ? (
+                  <div className="pc-empty">
+                    <div className="pc-empty-icon">🌅</div>
+                    <div>Nothing solved yet today</div>
+                    <small>Sync LeetCode to update</small>
+                  </div>
+                ) : (
+                  <div className="recent-list">
+                    {todayProblems.map(p => {
+                      const diff = (p.difficulty || 'medium').toLowerCase();
+                      return (
+                        <div key={p._id || p.id} className="recent-item">
+                          <span className={`badge badge-${diff}`}>{p.difficulty}</span>
+                          <span className="recent-title">{p.title}</span>
+                          <span className="recent-time">{relativeTime(p.lastSubmittedAt)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Recently Solved */}
+              <div className="suggestions-card fade-up" style={{ marginBottom: 16 }}>
+                <div className="sug-header">
+                  <h3 className="card-title" style={{ marginBottom: 2 }}>🆕 Recently Solved</h3>
+                  <span className="sug-subtitle">Last 20 accepted submissions</span>
+                </div>
+                {recentProblems.length === 0 ? (
+                  <div className="pc-empty">
+                    <div className="pc-empty-icon">📚</div>
+                    <div>No recent activity</div>
+                    <small>Sync LeetCode to populate</small>
+                  </div>
+                ) : (
+                  <div className="recent-list">
+                    {recentProblems.slice(0, 20).map(p => {
+                      const diff = (p.difficulty || 'medium').toLowerCase();
+                      return (
+                        <div key={p._id || p.id} className="recent-item">
+                          <span className={`badge badge-${diff}`}>{p.difficulty}</span>
+                          <span className="recent-title">{p.title}</span>
+                          <span className="recent-time">{relativeTime(p.lastSubmittedAt || p.solvedDate)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </>
           );
         })()}
 
@@ -3238,6 +3439,12 @@ function App() {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Visualizations */}
+        <div className="analytics-grid" style={{ marginTop: 16 }}>
+          <WeaknessRadar problems={allProblems} />
+          <ActivityHeatmap problems={allProblems} />
         </div>
 
         {/* Filters */}

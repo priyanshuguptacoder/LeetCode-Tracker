@@ -12,6 +12,7 @@ const problemSchema = new mongoose.Schema(
     leetcodeLink: { type: String, required: true },
     solvedDate: { type: Date, default: null },
     submittedAt: { type: Date, default: null }, // latest solve timestamp — source of truth for Recently Solved
+    lastSubmittedAt: { type: Date, default: null, index: true }, // always updated on every sync
     date: { type: String, default: '' },
     userDifficulty: { type: String, enum: ['Easy', 'Medium', 'Hard'], default: null },
     revisionCount: { type: Number, default: 0, min: 0 },
@@ -33,8 +34,18 @@ const problemSchema = new mongoose.Schema(
     lastRevisionTime: { type: Number, default: null },     // minutes in last revision
     consecutiveSuccess: { type: Number, default: 0 },      // streak of successful revisions
     failureLoopFlagged: { type: Boolean, default: false }, // revision_count>=3 AND LOW
+    // ── SM-2 spaced repetition (analytics engine) ─────────────────────────
+    easeFactor:       { type: Number, default: 2.5 },
+    interval:         { type: Number, default: 1 },
+    nextRevisionDate: { type: Date,   default: null }, // SM-2 computed next date
+    revisionPriority: { type: Number, default: 0 },    // higher = more urgent
   },
   { timestamps: true }
 );
+
+problemSchema.index({ solvedDate: -1 });
+problemSchema.index({ nextRevisionAt: 1 });
+problemSchema.index({ solved: 1 });
+problemSchema.index({ topics: 1 });
 
 module.exports = mongoose.model('Problem', problemSchema);

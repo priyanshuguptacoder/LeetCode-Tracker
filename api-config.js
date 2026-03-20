@@ -114,6 +114,21 @@ const api = {
     if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Sync failed'); }
     return r.json();
   },
+  getSyncStatus: async () => {
+    const r = await fetch(`${API_BASE_URL}/problem/sync/status`);
+    if (!r.ok) return { status: 'expired' };
+    return r.json();
+  },
+  getRecentProblems: async () => {
+    const r = await fetch(`${API_BASE_URL}/problem/recent`);
+    if (!r.ok) throw new Error('Failed to fetch recent problems');
+    return r.json();
+  },
+  getTodayProblems: async () => {
+    const r = await fetch(`${API_BASE_URL}/problem/today`);
+    if (!r.ok) throw new Error('Failed to fetch today\'s problems');
+    return r.json();
+  },
 };
 
 window.API = api;

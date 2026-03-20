@@ -49,7 +49,7 @@ async function fetchFromLeetCode(slug) {
     difficulty: q.difficulty,
     slug:       q.titleSlug,
     link:       `https://leetcode.com/problems/${q.titleSlug}/`,
-    tags:       (q.topicTags || []).map(t => t.name),
+    tags:       normalizeTags((q.topicTags || []).map(t => t.name)),
     source:     'api',
   };
 }
@@ -210,44 +210,67 @@ function sm2Update(current = {}) {
   else                        interval = Math.round(interval * easeFactor);
   reviewCount += 1;
   const nextReviewAt = new Date();
-  nextReviewAt.setDate(nextReviewAt.getDate() + interval);
+  nextReviewAt.setUTCDate(nextReviewAt.getUTCDate() + interval);
   return { easeFactor, interval, reviewCount, nextReviewAt };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // SYNC TO PROBLEM COLLECTION
-// STRICT RULE: never overwrite solved/solvedDate on existing records.
-// $set  → only safe metadata (title, difficulty, topics, link)
-// $setOnInsert → solved fields only applied on brand-new inserts
+// Metadata ($set) always updated.
+// Solved fields applied when: new doc OR existing doc not yet solved (e.g. Targeted).
 // ═══════════════════════════════════════════════════════════════════════════════
+function calculateNextRevision(fromDate, revisionCount) {
+  const intervals = [1, 3, 7, 14, 30]; // days
+  const days = intervals[Math.min(revisionCount, intervals.length - 1)];
+  const d = new Date(fromDate);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d;
+}
+
 async function syncToProblemCollection(sub) {
-  const nextRevisionAt = new Date(sub.dateSolved);
-  nextRevisionAt.setDate(nextRevisionAt.getDate() + 1);
+  const existing = await Problem.findOne({ id: sub.problemId });
+
+  const update = {
+    $set: {
+      title:           sub.title,
+      difficulty:      sub.difficulty,
+      topics:          sub.tags,
+      submittedAt:     sub.last_updated_at,
+      lastSubmittedAt: sub.dateSolved,   // always updated — tracks most recent sync timestamp
+      leetcodeLink:    sub.link || `https://leetcode.com/problems/${sub.slug}/`,
+      ...(sub.notes && { notes: sub.notes }),
+    },
+  };
+
+  // Apply solved fields if new doc OR previously unsolved (e.g. Targeted problems)
+  if (!existing || !existing.solved) {
+    update.$set.solved        = true;
+    update.$set.solvedDate    = sub.dateSolved;
+    update.$set.nextRevisionAt = calculateNextRevision(sub.dateSolved, 0);
+    update.$set.revisionCount = 0;
+    update.$set.confidence    = 3;
+  }
 
   await Problem.findOneAndUpdate(
     { id: sub.problemId },
-    {
-      $set: {
-        // Safe to always update — pure metadata, never affects solved count
-        title:        sub.title,
-        difficulty:   sub.difficulty,
-        topics:       sub.tags,
-        submittedAt:  sub.last_updated_at,
-        leetcodeLink: sub.link || `https://leetcode.com/problems/${sub.slug}/`,
-        ...(sub.notes && { notes: sub.notes }),
-      },
-      // Only applied when the document is NEWLY CREATED (upsert insert path)
-      // Never runs on existing documents — solved count stays untouched
-      $setOnInsert: {
-        solved:        true,
-        solvedDate:    sub.dateSolved,
-        nextRevisionAt,
-        revisionCount: 0,
-        confidence:    3,
-      },
-    },
+    update,
     { upsert: true, new: true }
   );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// UTC DATE HELPERS
+// ═══════════════════════════════════════════════════════════════════════════════
+function getUTCDayStart(date = new Date()) {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0));
+}
+
+function getUTCDayEnd(date = new Date()) {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 23, 59, 59, 999));
+}
+
+function getUTCKey(date) {
+  return new Date(date).toISOString().split('T')[0]; // YYYY-MM-DD
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -255,9 +278,7 @@ async function syncToProblemCollection(sub) {
 // ═══════════════════════════════════════════════════════════════════════════════
 function computeStreaks(submissions) {
   if (!submissions.length) return { currentStreak: 0, longestStreak: 0, totalDays: 0 };
-  const days = [...new Set(
-    submissions.map(s => s.dateSolved.toISOString().split('T')[0])
-  )].sort();
+  const days = [...new Set(submissions.map(s => getUTCKey(s.dateSolved)))].sort();
 
   let streak = 1, longestStreak = 1;
   for (let i = 1; i < days.length; i++) {
@@ -266,9 +287,29 @@ function computeStreaks(submissions) {
     else streak = 1;
   }
   const lastDay  = new Date(days[days.length - 1]);
-  const today    = new Date(); today.setHours(0, 0, 0, 0);
-  const diffDays = Math.floor((today - lastDay) / 86400000);
+  const todayUTC = getUTCDayStart();
+  const diffDays = Math.floor((todayUTC - lastDay) / 86400000);
   return { currentStreak: diffDays <= 1 ? streak : 0, longestStreak, totalDays: days.length };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// RETRY HELPER
+// ═══════════════════════════════════════════════════════════════════════════════
+async function fetchWithRetry(fn, retries = 3) {
+  try {
+    return await fn();
+  } catch (err) {
+    if (retries === 0) throw err;
+    await new Promise(res => setTimeout(res, 500));
+    return fetchWithRetry(fn, retries - 1);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TAG NORMALIZATION
+// ═══════════════════════════════════════════════════════════════════════════════
+function normalizeTags(tags) {
+  return (tags || []).map(tag => tag.toLowerCase().trim());
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -305,7 +346,9 @@ async function fetchRecentAcceptedSubmissions() {
   );
 
   const list = data?.data?.recentAcSubmissionList;
-  if (!Array.isArray(list)) throw new Error('Unexpected response from LeetCode — check session cookies');
+  if (!data || !data.data || !Array.isArray(list)) {
+    throw new Error('LEETCODE_AUTH_FAILED');
+  }
 
   // Deduplicate by slug — LeetCode returns one row per submission, not per problem
   const seen = new Set();
@@ -333,8 +376,8 @@ async function fetchRecentAcceptedSubmissions() {
 async function syncRecentSubmissions() {
   console.log('[SYNC START] Fetching recent accepted submissions from LeetCode');
 
-  // Step 1: Fetch from LeetCode — if this fails, abort before touching DB
-  const submissions = await fetchRecentAcceptedSubmissions();
+  // Step 1: Fetch from LeetCode with retry — if this fails, abort before touching DB
+  const submissions = await fetchWithRetry(() => fetchRecentAcceptedSubmissions());
   console.log(`[SYNC FETCHED ${submissions.length}] unique accepted slugs from LeetCode`);
 
   let inserted = 0, skipped = 0;
@@ -509,9 +552,10 @@ exports.syncSubmissions = async (req, res) => {
     });
   } catch (err) {
     console.error(`[ERROR] syncSubmissions: ${err.message}`);
-    const isAuthError = err.message.includes('session') || err.message.includes('cookie')
-                     || err.message.includes('Unexpected response');
-    return res.status(isAuthError ? 401 : 500).json({ success: false, error: err.message });
+    if (err.message === 'LEETCODE_AUTH_FAILED') {
+      return res.status(401).json({ success: false, error: 'LEETCODE_SESSION_EXPIRED' });
+    }
+    return res.status(500).json({ success: false, error: 'SYNC_FAILED', detail: err.message });
   }
 };
 
@@ -519,3 +563,74 @@ exports.syncSubmissions = async (req, res) => {
 exports.upsertProblem         = upsertProblem;
 exports.upsertManual          = upsertManual;
 exports.syncRecentSubmissions = syncRecentSubmissions;
+
+// GET /api/sync/status — validates LeetCode session cookie is still active
+exports.syncStatus = async (req, res) => {
+  const session = process.env.LEETCODE_SESSION;
+  const csrf    = process.env.LEETCODE_CSRF;
+
+  if (!session || !csrf) {
+    return res.json({ status: 'expired', reason: 'env_vars_missing' });
+  }
+
+  try {
+    const { data } = await axios.post(
+      LC_GRAPHQL,
+      {
+        query: `query recentAcSubmissions($username: String!, $limit: Int!) {
+          recentAcSubmissionList(username: $username, limit: $limit) { titleSlug }
+        }`,
+        variables: { username: process.env.LEETCODE_USERNAME || '', limit: 1 },
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Referer':      'https://leetcode.com',
+          'Cookie':       `LEETCODE_SESSION=${session}; csrftoken=${csrf}`,
+          'x-csrftoken':  csrf,
+        },
+        timeout: 8000,
+      }
+    );
+
+    if (!data?.data?.recentAcSubmissionList) {
+      return res.json({ status: 'expired' });
+    }
+    return res.json({ status: 'ok' });
+  } catch (err) {
+    console.warn(`[SYNC STATUS] check failed: ${err.message}`);
+    return res.json({ status: 'expired', reason: err.message });
+  }
+};
+
+// GET /api/problem/recent — last 20 solved, sorted by lastSubmittedAt DESC
+exports.getRecentProblems = async (req, res) => {
+  try {
+    const problems = await Problem.find({ solved: true })
+      .sort({ lastSubmittedAt: -1 })
+      .limit(20)
+      .select('id title difficulty topics leetcodeLink lastSubmittedAt solvedDate')
+      .lean();
+    res.json({ success: true, data: problems });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+// GET /api/problem/today — problems solved today (UTC day)
+exports.getTodayProblems = async (req, res) => {
+  try {
+    const start = getUTCDayStart();
+    const end   = getUTCDayEnd();
+    const problems = await Problem.find({
+      solved: true,
+      lastSubmittedAt: { $gte: start, $lte: end },
+    })
+      .sort({ lastSubmittedAt: -1 })
+      .select('id title difficulty topics leetcodeLink lastSubmittedAt solvedDate')
+      .lean();
+    res.json({ success: true, data: problems });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
