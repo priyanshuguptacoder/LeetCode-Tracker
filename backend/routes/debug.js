@@ -2,29 +2,20 @@ const express = require('express');
 const router  = express.Router();
 const {
   health,
-  healthCheck,
-  testGitHub,
+  testLeetCode,
   dbCheck,
-  debugProblems,
   frontendCheck,
   manualTest,
   runAll,
+  validate,
 } = require('../controllers/debugController');
 
-// ── Health ────────────────────────────────────────────────────────────────────
-router.get('/health',              health);       // unified: DB + GitHub + env + lastSync
-router.get('/health/github-sync',  healthCheck);  // backwards compat alias
-
-// ── GitHub test ───────────────────────────────────────────────────────────────
-router.get('/test/github',         testGitHub);   // live GitHub API + repo + tree
-
-// ── DB checks ─────────────────────────────────────────────────────────────────
-router.get('/debug/db-check',      dbCheck);         // counts, dupes, missing fields, lastInserted
-router.get('/debug/problems',      debugProblems);   // backwards compat alias
-router.get('/debug/frontend-check', frontendCheck);  // total + latest 5 for frontend
-
-// ── Test sequences ────────────────────────────────────────────────────────────
-router.post('/debug/manual-test',  manualTest);   // insert + merge + assert
-router.post('/debug/run-all',      runAll);        // full system validation sequence
+router.get('/health',               health);        // DB + LeetCode API + env
+router.get('/test/leetcode',        testLeetCode);  // live LeetCode GraphQL test
+router.get('/debug/db-check',       dbCheck);       // counts, dupes, missing fields
+router.get('/debug/frontend-check', frontendCheck); // total + latest 5
+router.post('/debug/manual-test',   manualTest);    // insert + merge + assert
+router.post('/debug/run-all',       runAll);        // full system validation
+router.post('/debug/validate',      validate);      // 10-case validation suite
 
 module.exports = router;

@@ -5,26 +5,17 @@ const mongoose = require('mongoose');
 
 // ─── Environment validation ───────────────────────────────────────────────────
 function validateEnv() {
-  const missing = [];
-  if (!process.env.MONGO_URI) missing.push('MONGO_URI');
-
-  if (!process.env.GITHUB_TOKEN)
-    console.warn('[INIT] ⚠️  GITHUB_TOKEN not set — GitHub API calls will be rate-limited');
-  if (!process.env.GITHUB_WEBHOOK_SECRET)
-    console.warn('[INIT] ⚠️  GITHUB_WEBHOOK_SECRET not set — webhook signature verification disabled');
-
-  if (missing.length > 0) {
-    console.error(`[ERROR] Missing required env vars: ${missing.join(', ')} — server cannot start`);
+  if (!process.env.MONGO_URI) {
+    console.error('[ERROR] Missing required env var: MONGO_URI — server cannot start');
     process.exit(1);
   }
   console.log('[INIT] Environment OK');
 }
 validateEnv();
 
-const problemRoutes    = require('./routes/problems');
-const githubSyncRoutes = require('./routes/githubSync');
-const debugRoutes      = require('./routes/debug');
-const { manualProblemEntry } = require('./controllers/githubSyncController');
+const problemRoutes  = require('./routes/problems');
+const leetcodeRoutes = require('./routes/leetcode');
+const debugRoutes    = require('./routes/debug');
 
 const app  = express();
 const PORT = process.env.PORT || 5001;
@@ -44,34 +35,28 @@ app.use((req, res, next) => {
 });
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
-app.use('/api/problems',        problemRoutes);
-app.use('/api/github-sync',     githubSyncRoutes);
-app.post('/api/manual-problem', manualProblemEntry);
-app.use('/api',                 debugRoutes);
+app.use('/api/problems', problemRoutes);   // existing problem tracker routes
+app.use('/api/problem',  leetcodeRoutes);  // LeetCode API + manual entry
+app.use('/api',          debugRoutes);     // health, debug, test
 
-// Root — lists all available endpoints
 app.get('/', (req, res) => {
   res.json({
-    status:  'running',
-    db:      mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    status: 'running',
+    db:     mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
     endpoints: {
-      // Health & status
-      'GET  /api/health':                   'Unified health — DB + GitHub + env + lastSync',
-      'GET  /api/health/github-sync':       'Webhook health (alias)',
-      // GitHub
-      'GET  /api/test/github':              'Live GitHub API + repo + tree test',
-      // DB debug
-      'GET  /api/debug/db-check':           'DB integrity — counts, dupes, missing fields',
-      'GET  /api/debug/frontend-check':     'Total + latest 5 problems for frontend',
-      // Test sequences
-      'POST /api/debug/manual-test':        'End-to-end: insert + GitHub merge + assert',
-      'POST /api/debug/run-all':            'Full system validation — all checks in sequence',
-      // Core
-      'POST /api/manual-problem':           'Manual problem entry',
-      'POST /api/github-sync':              'GitHub webhook handler',
-      'POST /api/github-sync/manual':       'Full repo sync trigger',
-      'GET  /api/github-sync/problems':     'List synced problems',
-      'GET  /api/github-sync/streaks':      'Streak stats',
+      'GET  /api/health':               'Health — DB + LeetCode API',
+      'GET  /api/test/leetcode':        'Live LeetCode GraphQL test',
+      'GET  /api/debug/db-check':       'DB integrity report',
+      'GET  /api/debug/frontend-check': 'Latest 5 problems for frontend',
+      'POST /api/debug/manual-test':    'End-to-end insert + merge test',
+      'POST /api/debug/run-all':        'Full system validation',
+      'POST /api/debug/validate':       '10-case validation suite',
+      'GET  /api/problem/:slug':        'Fetch problem from LeetCode API',
+      'POST /api/problem/manual':       'Manual problem entry',
+      'GET  /api/problem/list':         'List all tracked problems',
+      'GET  /api/problem/revision':     'Revision queue',
+      'GET  /api/problem/streaks':      'Streak stats',
+      'GET  /api/problems':             'All problems (tracker)',
     },
   });
 });
@@ -85,19 +70,17 @@ app.use((err, req, res, next) => {
   res.status(500).json({ success: false, error: 'Internal server error', message: err.message });
 });
 
-// ─── Connect DB → start server ────────────────────────────────────────────────
+// ─── Start ────────────────────────────────────────────────────────────────────
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => {
     console.log('[INIT] MongoDB connected');
     app.listen(PORT, () => {
       console.log(`[INIT] Server running on port ${PORT}`);
-      console.log('[INIT] Debug endpoints ready:');
+      console.log('[INIT] Key endpoints:');
       console.log('[INIT]   GET  /api/health');
-      console.log('[INIT]   GET  /api/test/github');
-      console.log('[INIT]   GET  /api/debug/db-check');
-      console.log('[INIT]   GET  /api/debug/frontend-check');
-      console.log('[INIT]   POST /api/debug/manual-test');
+      console.log('[INIT]   GET  /api/problem/:slug');
+      console.log('[INIT]   POST /api/problem/manual');
       console.log('[INIT]   POST /api/debug/run-all');
     });
   })
