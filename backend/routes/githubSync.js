@@ -3,20 +3,17 @@ const router  = express.Router();
 const {
   handleWebhook,
   manualSync,
+  manualProblemEntry,
   getProblems,
   getRevision,
+  getStreaks,
 } = require('../controllers/githubSyncController');
 
-// Webhook — GitHub calls this on every push
-router.post('/', handleWebhook);
-
-// Manual full-repo sync (call from dashboard or CLI)
-router.post('/manual', manualSync);
-
-// List synced problems (with optional filters)
-router.get('/problems', getProblems);
-
-// Revision queue — due now + upcoming
-router.get('/revision', getRevision);
+router.post('/',              handleWebhook);       // GitHub webhook (push events)
+router.post('/manual',        manualSync);          // Full repo sync trigger
+router.post('/manual-problem', manualProblemEntry); // Manual problem entry
+router.get('/problems',       getProblems);         // List synced problems
+router.get('/revision',       getRevision);         // Revision queue
+router.get('/streaks',        getStreaks);           // Streak stats
 
 module.exports = router;
