@@ -639,79 +639,6 @@ function WeaknessRadar({ problems }) {
   );
 }
 
-// ============================================
-// ACTIVITY HEATMAP — simple div grid, no D3
-// ============================================
-function ActivityHeatmap({ problems }) {
-  const weeks = 18;
-  // UTC today
-  const nowUTC   = new Date();
-  const todayUTC = new Date(Date.UTC(nowUTC.getUTCFullYear(), nowUTC.getUTCMonth(), nowUTC.getUTCDate()));
-
-  // Build date → count map using UTC keys from _solvedDateISO (already YYYY-MM-DD UTC)
-  const countMap = React.useMemo(() => {
-    const m = {};
-    problems.forEach(p => {
-      const d = p._solvedDateISO;
-      if (d) m[d] = (m[d] || 0) + 1;
-    });
-    return m;
-  }, [problems]);
-
-  // Build grid: weeks × 7 days, starting from Sunday (UTC)
-  const startUTC = new Date(todayUTC);
-  startUTC.setUTCDate(todayUTC.getUTCDate() - (weeks * 7 - 1));
-  // Align to Sunday
-  startUTC.setUTCDate(startUTC.getUTCDate() - startUTC.getUTCDay());
-
-  const cells = [];
-  for (let w = 0; w < weeks; w++) {
-    for (let d = 0; d < 7; d++) {
-      const date = new Date(startUTC);
-      date.setUTCDate(startUTC.getUTCDate() + w * 7 + d);
-      const key   = date.toISOString().split('T')[0];
-      const count = countMap[key] || 0;
-      const intensity = count === 0 ? 0 : count === 1 ? 1 : count <= 3 ? 2 : 3;
-      cells.push({ key, count, intensity, isFuture: date > todayUTC });
-    }
-  }
-
-  const intensityColor = ['rgba(255,255,255,0.05)', 'rgba(34,197,94,0.3)', 'rgba(34,197,94,0.6)', 'rgba(34,197,94,0.9)'];
-
-  return (
-    <div className="analytics-card analytics-card-full">
-      <h3 className="card-title">📅 Activity Heatmap</h3>
-      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${weeks}, 1fr)`, gap: 3, overflowX: 'auto' }}>
-        {Array.from({ length: weeks }, (_, w) => (
-          <div key={w} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {cells.slice(w * 7, w * 7 + 7).map(cell => (
-              <div
-                key={cell.key}
-                title={cell.count > 0 ? `${cell.key}: ${cell.count} solved` : cell.key}
-                style={{
-                  width: '100%',
-                  paddingBottom: '100%',
-                  borderRadius: 3,
-                  background: cell.isFuture ? 'transparent' : intensityColor[cell.intensity],
-                  border: '1px solid rgba(255,255,255,0.04)',
-                  cursor: cell.count > 0 ? 'default' : undefined,
-                }}
-              />
-            ))}
-          </div>
-        ))}
-      </div>
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 10, fontSize: 11, color: 'var(--text-secondary)' }}>
-        <span>Less</span>
-        {intensityColor.map((c, i) => (
-          <div key={i} style={{ width: 12, height: 12, borderRadius: 2, background: c, border: '1px solid rgba(255,255,255,0.08)' }} />
-        ))}
-        <span>More</span>
-      </div>
-    </div>
-  );
-}
-
 function App() {
   // ============================================
   // API DATA FETCHING
@@ -904,14 +831,15 @@ function App() {
         setLoading(false);
         // Non-blocking secondary fetches
         try {
-          const [sugRes, recentRes, todayRes] = await Promise.allSettled([
+          const [sugRes, recentTodayRes] = await Promise.allSettled([
             window.API.getSuggestions(),
-            window.API.getRecentProblems(),
-            window.API.getTodayProblems(),
+            window.API.getRecentAndToday(),
           ]);
           if (sugRes.status === 'fulfilled' && sugRes.value.success) setSuggestions(sugRes.value.data || []);
-          if (recentRes.status === 'fulfilled' && recentRes.value.success) setRecentProblems(recentRes.value.data || []);
-          if (todayRes.status === 'fulfilled' && todayRes.value.success) setTodayProblems(todayRes.value.data || []);
+          if (recentTodayRes.status === 'fulfilled' && recentTodayRes.value.success) {
+            setRecentProblems(recentTodayRes.value.recentSolved || []);
+            setTodayProblems(recentTodayRes.value.todaySolved || []);
+          }
         } catch (_) {}
       } catch (error) {
         console.error('Failed to fetch data:', error);
@@ -1200,65 +1128,6 @@ function App() {
   };
 
   // ============================================
-  // HEATMAP & STREAK CALCULATION
-  // ============================================
-  
-  const calculateHeatmapAndStreak = (solvedDates) => {
-    try {
-      if (!solvedDates || typeof solvedDates !== 'object' || Object.keys(solvedDates).length === 0) {
-        return { dateCounts: {}, activeDays: 0, currentStreak: 0, maxStreak: 0 };
-      }
-
-      // Count problems per date (heatmap intensity)
-      const dateCounts = {};
-      Object.values(solvedDates).forEach(dateStr => {
-        if (dateStr) dateCounts[dateStr] = (dateCounts[dateStr] || 0) + 1;
-      });
-
-      const uniqueDates = Object.keys(dateCounts).sort(); // ascending YYYY-MM-DD
-      const activeDays = uniqueDates.length;
-
-      // ── Current Streak ──────────────────────────────────────────────────────
-      // Strict: streak = consecutive days ending TODAY (UTC). 0 if no solve today.
-      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD UTC
-      let currentStreak = 0;
-      if (dateCounts[today]) {
-        let checkDate = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
-        while (true) {
-          const ds = checkDate.toISOString().split('T')[0];
-          if (dateCounts[ds]) {
-            currentStreak++;
-            checkDate.setUTCDate(checkDate.getUTCDate() - 1);
-          } else {
-            break;
-          }
-        }
-      }
-
-      // ── Max Streak ───────────────────────────────────────────────────────────
-      let maxStreak = uniqueDates.length > 0 ? 1 : 0;
-      let tempStreak = 1;
-      for (let i = 1; i < uniqueDates.length; i++) {
-        const prev = parseLocalDate(uniqueDates[i - 1]);
-        const curr = parseLocalDate(uniqueDates[i]);
-        const diffDays = Math.round((curr - prev) / 86400000);
-        if (diffDays === 1) {
-          tempStreak++;
-        } else {
-          maxStreak = Math.max(maxStreak, tempStreak);
-          tempStreak = 1;
-        }
-      }
-      maxStreak = Math.max(maxStreak, tempStreak);
-
-      return { dateCounts, activeDays, currentStreak, maxStreak };
-    } catch (error) {
-      console.error('Error in calculateHeatmapAndStreak:', error);
-      return { dateCounts: {}, activeDays: 0, currentStreak: 0, maxStreak: 0 };
-    }
-  };
-
-  // ============================================
   // ADVANCED ANALYTICS
   // ============================================
   
@@ -1489,11 +1358,6 @@ function App() {
   // ============================================
   // CALCULATE ANALYTICS
   // ============================================
-  
-  const heatmapData = React.useMemo(
-    () => calculateHeatmapAndStreak(solvedDates),
-    [solvedDates]
-  );
 
   // ── Debug: log computed vs manual stats ──
   // (removed — was referencing displayActiveDays before declaration)
@@ -1544,19 +1408,20 @@ function App() {
       }
       setSyncStatus('ok');
       // Refresh problems + recent/today from DB after sync
-      const [probRes, recentRes, todayRes] = await Promise.allSettled([
+      const [probRes, recentTodayRes] = await Promise.allSettled([
         window.API.getAllProblems(),
-        window.API.getRecentProblems(),
-        window.API.getTodayProblems(),
+        window.API.getRecentAndToday(),
       ]);
       if (probRes.status === 'fulfilled' && probRes.value.success)
         setApiProblems(transformProblems(probRes.value.data));
-      if (recentRes.status === 'fulfilled' && recentRes.value.success)
-        setRecentProblems(recentRes.value.data || []);
-      if (todayRes.status === 'fulfilled' && todayRes.value.success)
-        setTodayProblems(todayRes.value.data || []);
+      if (recentTodayRes.status === 'fulfilled' && recentTodayRes.value.success) {
+        setRecentProblems(recentTodayRes.value.recentSolved || []);
+        setTodayProblems(recentTodayRes.value.todaySolved || []);
+      }
       showNotification(
-        `✅ ${result.message || `Synced — ${result.inserted} added, ${result.skipped} skipped`}`,
+        result.added > 0
+          ? `✅ Sync complete — ${result.added} new problem${result.added === 1 ? '' : 's'} added`
+          : '✅ Sync complete — already up to date',
         'success'
       );
     } catch (err) {
@@ -2170,14 +2035,17 @@ function App() {
   }, [coachingMetrics, easyCount, mediumCount, hardCount]);
 
   // Resolved display values:
-  // Priority: dbStreak (from MongoDB) > manualStats (localStorage override) > heatmapData (auto-computed)
+  // Priority: dbStreak (from MongoDB) > manualStats (localStorage override) > computed from solvedDates
   // Once isSetup=true, dbStreak is always authoritative.
+  const computedActiveDays = Object.values(solvedDates).filter(Boolean).length
+    ? new Set(Object.values(solvedDates).filter(Boolean)).size
+    : 0;
   const displayCurrentStreak = dbStreak.isSetup ? dbStreak.currentStreak
-    : (state.manualStats?.currentStreak != null ? state.manualStats.currentStreak : heatmapData.currentStreak);
+    : (state.manualStats?.currentStreak != null ? state.manualStats.currentStreak : 0);
   const displayMaxStreak = dbStreak.isSetup ? dbStreak.maxStreak
-    : (state.manualStats?.maxStreak != null ? state.manualStats.maxStreak : heatmapData.maxStreak);
+    : (state.manualStats?.maxStreak != null ? state.manualStats.maxStreak : 0);
   const displayActiveDays = dbStreak.isSetup ? dbStreak.activeDays
-    : (state.manualStats?.activeDays != null ? state.manualStats.activeDays : heatmapData.activeDays);
+    : (state.manualStats?.activeDays != null ? state.manualStats.activeDays : computedActiveDays);
 
   // Advanced Analytics
   const consistencyScore = React.useMemo(() => {
@@ -2188,8 +2056,8 @@ function App() {
     const today = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
     const firstDateUTC = new Date(Date.UTC(firstDate.getUTCFullYear(), firstDate.getUTCMonth(), firstDate.getUTCDate()));
     const totalDaysTracked = Math.max(1, Math.ceil((today - firstDateUTC) / 86400000) + 1);
-    
-    const activeDays = heatmapData.activeDays;
+
+    const activeDays = new Set(dates).size;
     const averageProblemsPerActiveDay = activeDays > 0 ? totalSolved / activeDays : 0;
     
     const safeActiveDays = Math.min(activeDays, totalDaysTracked);
@@ -2208,7 +2076,7 @@ function App() {
       averageProblemsPerActiveDay: averageProblemsPerActiveDay.toFixed(1),
       firstDate: sortedDates.length > 0 ? sortedDates[0] : 'N/A'
     };
-  }, [heatmapData.activeDays, totalSolved, solvedDates]);
+  }, [totalSolved, solvedDates]);
 
   const weeklyPerformance = calculateWeeklyPerformance(allProblems, solvedDates);
   const dailyAverage = calculateDailyAverage(allProblems, solvedDates);
@@ -3236,28 +3104,25 @@ function App() {
               <div className="suggestions-card fade-up" style={{ marginBottom: 16 }}>
                 <div className="sug-header">
                   <h3 className="card-title" style={{ marginBottom: 2 }}>🆕 Recently Solved</h3>
-                  <span className="sug-subtitle">Last 20 accepted submissions</span>
+                  <span className="sug-subtitle">Last 9 accepted · sorted by latest</span>
                 </div>
-                {recentProblems.length === 0 ? (
-                  <div className="pc-empty">
-                    <div className="pc-empty-icon">📚</div>
-                    <div>No recent activity</div>
-                    <small>Sync LeetCode to populate</small>
-                  </div>
-                ) : (
-                  <div className="recent-list">
-                    {recentProblems.slice(0, 20).map(p => {
-                      const diff = (p.difficulty || 'medium').toLowerCase();
-                      return (
-                        <div key={p._id || p.id} className="recent-item">
+                <div className="recent-grid">
+                  {recentProblems.map(p => {
+                    const diff = (p.difficulty || 'medium').toLowerCase();
+                    return (
+                      <div key={p._id || p.id} className="recent-card">
+                        <div className="recent-card-top">
                           <span className={`badge badge-${diff}`}>{p.difficulty}</span>
-                          <span className="recent-title">{p.title}</span>
                           <span className="recent-time">{relativeTime(p.lastSubmittedAt || p.solvedDate)}</span>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
+                        <div className="recent-title">#{p.id} {p.title}</div>
+                      </div>
+                    );
+                  })}
+                  {Array.from({ length: Math.max(0, 9 - recentProblems.length) }).map((_, i) => (
+                    <div key={`empty-${i}`} className="recent-card recent-card-empty" />
+                  ))}
+                </div>
               </div>
             </>
           );
@@ -3445,7 +3310,6 @@ function App() {
         {/* Visualizations */}
         <div className="analytics-grid" style={{ marginTop: 16 }}>
           <WeaknessRadar problems={allProblems} />
-          <ActivityHeatmap problems={allProblems} />
         </div>
 
         {/* Filters */}

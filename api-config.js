@@ -119,6 +119,14 @@ const api = {
     if (!r.ok) return { status: 'expired' };
     return r.json();
   },
+  getRecentAndToday: async (debug = false) => {
+    const url = debug
+      ? `${API_BASE_URL}/problem/recent-and-today?debug=true`
+      : `${API_BASE_URL}/problem/recent-and-today`;
+    const r = await fetch(url);
+    if (!r.ok) throw new Error('Failed to fetch recent/today problems');
+    return r.json();
+  },
   getRecentProblems: async () => {
     const r = await fetch(`${API_BASE_URL}/problem/recent`);
     if (!r.ok) throw new Error('Failed to fetch recent problems');

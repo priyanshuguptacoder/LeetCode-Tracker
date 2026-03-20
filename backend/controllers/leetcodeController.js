@@ -540,12 +540,11 @@ exports.syncSubmissions = async (req, res) => {
       }
     }
 
+    const status = result.inserted > 0 ? 'updated' : 'up_to_date';
     return res.json({
       success: true,
-      message: `Sync complete — ${result.inserted} added, ${result.skipped} skipped`,
-      fetched:      result.fetched,
-      inserted:     result.inserted,
-      skipped:      result.skipped,
+      added:        result.inserted,
+      status,
       dbTotal:      result.dbTotal,
       problemTotal: result.problemTotal,
       errors:       result.errors,
@@ -603,12 +602,15 @@ exports.syncStatus = async (req, res) => {
   }
 };
 
-// GET /api/problem/recent — last 20 solved, sorted by lastSubmittedAt DESC
+// GET /api/problem/recent — last 9 solved, sorted by lastSubmittedAt DESC
 exports.getRecentProblems = async (req, res) => {
   try {
-    const problems = await Problem.find({ solved: true })
+    const problems = await Problem.find({
+      solved: true,
+      lastSubmittedAt: { $ne: null },   // exclude docs with no timestamp
+    })
       .sort({ lastSubmittedAt: -1 })
-      .limit(20)
+      .limit(9)
       .select('id title difficulty topics leetcodeLink lastSubmittedAt solvedDate')
       .lean();
     res.json({ success: true, data: problems });
@@ -630,6 +632,39 @@ exports.getTodayProblems = async (req, res) => {
       .select('id title difficulty topics leetcodeLink lastSubmittedAt solvedDate')
       .lean();
     res.json({ success: true, data: problems });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+// GET /api/problem/recent-and-today — combined single-request endpoint
+// Returns: { recentSolved: [...max 9], todaySolved: [...], debug? }
+exports.getRecentAndToday = async (req, res) => {
+  try {
+    const now           = new Date();
+    const startOfDayUTC = getUTCDayStart(now);
+    const endOfDayUTC   = getUTCDayEnd(now);
+    const SELECT        = 'id title difficulty topics leetcodeLink lastSubmittedAt solvedDate';
+
+    const [recentSolved, todaySolved] = await Promise.all([
+      // Sort DESC first, Problem collection is already 1-doc-per-problem so no dedup needed
+      Problem.find({ solved: true, lastSubmittedAt: { $ne: null } })
+        .sort({ lastSubmittedAt: -1 })
+        .limit(9)
+        .select(SELECT)
+        .lean(),
+
+      Problem.find({ solved: true, lastSubmittedAt: { $gte: startOfDayUTC, $lte: endOfDayUTC } })
+        .sort({ lastSubmittedAt: -1 })
+        .select(SELECT)
+        .lean(),
+    ]);
+
+    const debug = req.query.debug === 'true'
+      ? { startOfDayUTC, endOfDayUTC, totalTodaySolved: todaySolved.length }
+      : undefined;
+
+    res.json({ success: true, recentSolved, todaySolved, debug });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
