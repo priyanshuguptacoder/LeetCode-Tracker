@@ -3,7 +3,8 @@ const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 
-const problemRoutes = require('./routes/problems');
+const problemRoutes    = require('./routes/problems');
+const githubSyncRoutes = require('./routes/githubSync');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -27,7 +28,8 @@ app.use((req, res, next) => {
 });
 
 // Routes
-app.use('/api/problems', problemRoutes);
+app.use('/api/problems',     problemRoutes);
+app.use('/api/github-sync',  githubSyncRoutes);
 
 // Health check
 app.get('/', (req, res) => {
