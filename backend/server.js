@@ -9,6 +9,9 @@ function validateEnv() {
     console.error('[ERROR] Missing required env var: MONGO_URI — server cannot start');
     process.exit(1);
   }
+  if (!process.env.LEETCODE_SESSION || !process.env.LEETCODE_CSRF || !process.env.LEETCODE_USERNAME) {
+    console.warn('[WARN] LEETCODE_SESSION / LEETCODE_CSRF / LEETCODE_USERNAME not set — POST /api/problem/sync will be unavailable');
+  }
   console.log('[INIT] Environment OK');
 }
 validateEnv();
@@ -53,6 +56,7 @@ app.get('/', (req, res) => {
       'POST /api/debug/validate':       '10-case validation suite',
       'GET  /api/problem/:slug':        'Fetch problem from LeetCode API',
       'POST /api/problem/manual':       'Manual problem entry',
+      'POST /api/problem/sync':         'Auto-sync recent accepted submissions from LeetCode',
       'GET  /api/problem/list':         'List all tracked problems',
       'GET  /api/problem/revision':     'Revision queue',
       'GET  /api/problem/streaks':      'Streak stats',

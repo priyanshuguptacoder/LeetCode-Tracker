@@ -6,13 +6,15 @@ const {
   listProblems,
   getRevision,
   getStreaks,
+  syncSubmissions,
 } = require('../controllers/leetcodeController');
 
-// NOTE: order matters — specific paths before :slug param
-router.get('/list',      listProblems);  // GET  /api/problem/list
-router.get('/revision',  getRevision);   // GET  /api/problem/revision
-router.get('/streaks',   getStreaks);    // GET  /api/problem/streaks
-router.post('/manual',   manualEntry);   // POST /api/problem/manual
-router.get('/:slug',     getProblem);    // GET  /api/problem/:slug
+// NOTE: specific paths must come before :slug param
+router.get('/list',      listProblems);    // GET  /api/problem/list
+router.get('/revision',  getRevision);     // GET  /api/problem/revision
+router.get('/streaks',   getStreaks);      // GET  /api/problem/streaks
+router.post('/manual',   manualEntry);     // POST /api/problem/manual
+router.post('/sync',     syncSubmissions); // POST /api/problem/sync
+router.get('/:slug',     getProblem);      // GET  /api/problem/:slug
 
 module.exports = router;

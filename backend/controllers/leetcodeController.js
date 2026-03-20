@@ -269,15 +269,110 @@ function computeStreaks(submissions) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// PLACEHOLDER: syncRecentSubmissions()
-// Will later fetch accepted submissions from LeetCode and call upsertProblem()
-// for each. Not implemented — hook is ready for future use.
+// FETCH RECENT ACCEPTED SUBMISSIONS FROM LEETCODE
+// Requires LEETCODE_SESSION + LEETCODE_CSRF env vars (from browser cookies)
+// ═══════════════════════════════════════════════════════════════════════════════
+const RECENT_AC_QUERY = `
+  query recentAcSubmissions($username: String!, $limit: Int!) {
+    recentAcSubmissionList(username: $username, limit: $limit) {
+      title
+      titleSlug
+      timestamp
+    }
+  }
+`;
+
+async function fetchRecentAcceptedSubmissions() {
+  const session = process.env.LEETCODE_SESSION;
+  const csrf    = process.env.LEETCODE_CSRF;
+  const username = process.env.LEETCODE_USERNAME;
+
+  if (!session || !csrf) {
+    throw new Error('LEETCODE_SESSION and LEETCODE_CSRF env vars are required');
+  }
+  if (!username) {
+    throw new Error('LEETCODE_USERNAME env var is required');
+  }
+
+  const { data } = await axios.post(
+    LC_GRAPHQL,
+    {
+      query:     RECENT_AC_QUERY,
+      variables: { username, limit: 20 },
+    },
+    {
+      headers: {
+        'Content-Type':  'application/json',
+        'Referer':       'https://leetcode.com',
+        'Cookie':        `LEETCODE_SESSION=${session}; csrftoken=${csrf}`,
+        'x-csrftoken':   csrf,
+      },
+      timeout: 10000,
+    }
+  );
+
+  const list = data?.data?.recentAcSubmissionList;
+  if (!Array.isArray(list)) {
+    throw new Error('Unexpected response from LeetCode — check session cookies');
+  }
+
+  // Deduplicate by titleSlug (LeetCode returns one entry per submission, not per problem)
+  const seen = new Set();
+  return list
+    .filter(s => { if (seen.has(s.titleSlug)) return false; seen.add(s.titleSlug); return true; })
+    .map(s => ({
+      titleSlug: s.titleSlug,
+      title:     s.title,
+      timestamp: new Date(parseInt(s.timestamp, 10) * 1000),
+    }));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CORE SYNC: syncRecentSubmissions()
+// Fetches accepted submissions → upserts each via existing upsertProblem()
+// Returns { totalFetched, newAdded, skipped, errors }
 // ═══════════════════════════════════════════════════════════════════════════════
 async function syncRecentSubmissions() {
-  // TODO: fetch recent accepted submissions from LeetCode API
-  // for each submission: await upsertProblem(slug)
-  console.log('[SYNC] syncRecentSubmissions() — not yet implemented');
-  return { synced: 0, message: 'Not yet implemented' };
+  console.log('[SYNC START] Fetching recent accepted submissions from LeetCode');
+
+  const submissions = await fetchRecentAcceptedSubmissions();
+  console.log(`[SYNC FETCHED ${submissions.length}] slugs to process`);
+
+  let newAdded = 0, skipped = 0;
+  const errors = [];
+
+  for (const sub of submissions) {
+    const slug = sub.titleSlug.toLowerCase().trim();
+    try {
+      // Check DB first — if already exists, skip (upsertProblem handles cache/DB hit)
+      const existing = await Submission.findOne({ slug });
+      if (existing) {
+        console.log(`[SYNC SKIPPED] ${slug} — already in DB`);
+        skipped++;
+        continue;
+      }
+
+      // New problem — upsert with the solve date from LeetCode
+      await upsertProblem(slug, { dateSolved: sub.timestamp });
+      console.log(`[SYNC ADDED] ${slug}`);
+      newAdded++;
+
+      // Small delay to avoid hammering LeetCode API back-to-back
+      await new Promise(r => setTimeout(r, 300));
+
+    } catch (err) {
+      console.error(`[SYNC ERROR] ${slug}: ${err.message}`);
+      errors.push({ slug, error: err.message });
+    }
+  }
+
+  console.log(`[SYNC COMPLETE] totalFetched=${submissions.length} newAdded=${newAdded} skipped=${skipped} errors=${errors.length}`);
+  return {
+    totalFetched: submissions.length,
+    newAdded,
+    skipped,
+    errors,
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -378,7 +473,43 @@ exports.getStreaks = async (req, res) => {
   }
 };
 
+// POST /api/problem/sync
+// Manually trigger sync of recent accepted submissions from LeetCode profile
+exports.syncSubmissions = async (req, res) => {
+  // Quick env check before doing any work
+  if (!process.env.LEETCODE_SESSION || !process.env.LEETCODE_CSRF) {
+    return res.status(500).json({
+      success: false,
+      error:   'LEETCODE_SESSION and LEETCODE_CSRF env vars are not set. Add them on Render.',
+    });
+  }
+  if (!process.env.LEETCODE_USERNAME) {
+    return res.status(500).json({
+      success: false,
+      error:   'LEETCODE_USERNAME env var is not set.',
+    });
+  }
+
+  try {
+    const result = await syncRecentSubmissions();
+    return res.json({
+      success: true,
+      message: `Sync complete — ${result.newAdded} added, ${result.skipped} skipped`,
+      ...result,
+    });
+  } catch (err) {
+    console.error(`[ERROR] syncSubmissions: ${err.message}`);
+    // Distinguish cookie/auth errors from other failures
+    const isAuthError = err.message.includes('session') || err.message.includes('cookie')
+                     || err.message.includes('Unexpected response');
+    return res.status(isAuthError ? 401 : 500).json({
+      success: false,
+      error:   err.message,
+    });
+  }
+};
+
 // ─── Exports ──────────────────────────────────────────────────────────────────
-exports.upsertProblem       = upsertProblem;
-exports.upsertManual        = upsertManual;
+exports.upsertProblem         = upsertProblem;
+exports.upsertManual          = upsertManual;
 exports.syncRecentSubmissions = syncRecentSubmissions;
