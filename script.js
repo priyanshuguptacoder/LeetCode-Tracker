@@ -843,6 +843,7 @@ function App() {
   const [showModal, setShowModal] = useState(false);
   const [showAlignmentModal, setShowAlignmentModal] = useState(false);
   const [notification, setNotification] = useState(null);
+  const [syncing, setSyncing] = useState(false);
 
   // ── Password-confirm modal state (used for delete confirmation) ───────────
   const [pwModal, setPwModal] = useState(null);
@@ -1407,6 +1408,24 @@ function App() {
   const showNotification = (message, type = 'success') => {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 3000);
+  };
+
+  const handleSyncLeetCode = async () => {
+    setSyncing(true);
+    try {
+      const result = await window.API.syncLeetCode();
+      // Refresh problems from DB after sync
+      const probRes = await window.API.getAllProblems();
+      if (probRes.success) setApiProblems(transformProblems(probRes.data));
+      showNotification(
+        `✅ ${result.message || `Synced — ${result.newAdded} added, ${result.skipped} skipped`}`,
+        'success'
+      );
+    } catch (err) {
+      showNotification(`❌ Sync failed: ${err.message}`, 'error');
+    } finally {
+      setSyncing(false);
+    }
   };
 
   // ============================================
@@ -2528,6 +2547,18 @@ function App() {
             </p>
           </div>
           <div className="header-actions">
+            <button
+              className="btn-sync-lc"
+              onClick={handleSyncLeetCode}
+              disabled={syncing}
+              title="Sync recent accepted submissions from LeetCode"
+            >
+              {syncing ? (
+                <><span className="sync-spinner">⟳</span> Syncing...</>
+              ) : (
+                <>🔄 Sync LeetCode</>
+              )}
+            </button>
             <a 
               href="https://leetcode.com/u/priyanshuguptacoder/" 
               target="_blank" 

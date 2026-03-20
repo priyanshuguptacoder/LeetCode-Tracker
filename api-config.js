@@ -109,6 +109,11 @@ const api = {
     if (!r.ok) throw new Error('Failed to fetch suggestions');
     return r.json();
   },
+  syncLeetCode: async () => {
+    const r = await fetch(`${API_BASE_URL}/problem/sync`, { method: 'POST' });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Sync failed'); }
+    return r.json();
+  },
 };
 
 window.API = api;

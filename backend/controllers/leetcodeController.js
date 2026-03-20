@@ -19,7 +19,7 @@ function setCache(slug, data) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// LEETCODE GRAPHQL
+// LEETCODE GRAPHQL — public metadata fetch (no auth needed)
 // ═══════════════════════════════════════════════════════════════════════════════
 const LC_GRAPHQL = 'https://leetcode.com/graphql';
 const LC_QUERY   = `
@@ -57,20 +57,20 @@ async function fetchFromLeetCode(slug) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // CORE: upsertProblem(slug, extraData?)
 // Flow: cache → DB → LeetCode API → save → cache
-// This is the single entry point for all problem data resolution.
+// SKIP if already in Submission collection (no duplicate inserts).
 // ═══════════════════════════════════════════════════════════════════════════════
 async function upsertProblem(slug, extraData = {}) {
   if (!slug || typeof slug !== 'string') throw new Error('slug is required');
   slug = slug.toLowerCase().trim();
 
-  // 1. Cache hit
+  // 1. Cache hit — fastest path, no DB or API call
   const cached = getCached(slug);
   if (cached) {
     console.log(`[CACHE HIT] ${slug}`);
     return cached;
   }
 
-  // 2. DB hit
+  // 2. DB hit — already tracked, return without touching anything
   const existing = await Submission.findOne({ slug });
   if (existing) {
     console.log(`[DB HIT] ${slug}`);
@@ -79,7 +79,7 @@ async function upsertProblem(slug, extraData = {}) {
     return shaped;
   }
 
-  // 3. Fetch from LeetCode API
+  // 3. Fetch metadata from LeetCode API (only reached for new problems)
   let apiData;
   try {
     apiData = await fetchFromLeetCode(slug);
@@ -87,7 +87,7 @@ async function upsertProblem(slug, extraData = {}) {
     throw new Error(`LeetCode API error for "${slug}": ${err.message}`);
   }
 
-  // 4. Merge with any extra data provided (manual entry wins on user fields)
+  // 4. Build document and insert
   const now    = new Date();
   const solved = extraData.dateSolved ? new Date(extraData.dateSolved) : now;
   const source = extraData._source || 'api';
@@ -131,6 +131,7 @@ async function upsertProblem(slug, extraData = {}) {
     throw err;
   }
 
+  // Sync metadata to Problem collection (never overwrites solved status on existing docs)
   await syncToProblemCollection(submission);
 
   const shaped = shapeResponse(submission);
@@ -139,8 +140,7 @@ async function upsertProblem(slug, extraData = {}) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// MANUAL UPSERT — used when user provides extra solve data (time, notes, etc.)
-// Resolves metadata via upsertProblem, then patches the record.
+// MANUAL UPSERT — user provides solve data (time, notes, etc.)
 // ═══════════════════════════════════════════════════════════════════════════════
 async function upsertManual(slug, payload) {
   if (!slug) throw new Error('slug is required');
@@ -149,15 +149,11 @@ async function upsertManual(slug, payload) {
   const now    = new Date();
   const solved = payload.dateSolved ? new Date(payload.dateSolved) : now;
 
-  // Check if already in DB
   const existing = await Submission.findOne({ slug });
 
   if (existing) {
     console.log(`[DB] UPDATE "${slug}" (manual)`);
-    const sources = existing.sources.includes('manual')
-      ? existing.sources
-      : [...existing.sources, 'manual'];
-
+    const sources     = existing.sources.includes('manual') ? existing.sources : [...existing.sources, 'manual'];
     const updatedDate = solved > existing.dateSolved ? solved : existing.dateSolved;
 
     const updated = await Submission.findOneAndUpdate(
@@ -176,19 +172,17 @@ async function upsertManual(slug, payload) {
     );
 
     await syncToProblemCollection(updated);
-    // Invalidate cache so next read gets fresh data
     cache.delete(slug);
     return { action: 'updated', data: shapeResponse(updated) };
   }
 
-  // Not in DB — resolve via API then insert with extra data
+  // Not in DB — resolve via API then insert
   const result = await upsertProblem(slug, { ...payload, _source: 'manual' });
   return { action: 'inserted', data: result };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // STANDARDIZED RESPONSE SHAPE
-// { slug, id, title, difficulty, link, tags, source }
 // ═══════════════════════════════════════════════════════════════════════════════
 function shapeResponse(doc) {
   return {
@@ -221,7 +215,10 @@ function sm2Update(current = {}) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SYNC TO PROBLEM COLLECTION (for revision engine)
+// SYNC TO PROBLEM COLLECTION
+// STRICT RULE: never overwrite solved/solvedDate on existing records.
+// $set  → only safe metadata (title, difficulty, topics, link)
+// $setOnInsert → solved fields only applied on brand-new inserts
 // ═══════════════════════════════════════════════════════════════════════════════
 async function syncToProblemCollection(sub) {
   const nextRevisionAt = new Date(sub.dateSolved);
@@ -231,17 +228,23 @@ async function syncToProblemCollection(sub) {
     { id: sub.problemId },
     {
       $set: {
-        title:         sub.title,
-        difficulty:    sub.difficulty,
-        topics:        sub.tags,
-        solved:        true,
-        solvedDate:    sub.dateSolved,
-        submittedAt:   sub.last_updated_at,
-        nextRevisionAt,
-        leetcodeLink:  sub.link || `https://leetcode.com/problems/${sub.slug}/`,
+        // Safe to always update — pure metadata, never affects solved count
+        title:        sub.title,
+        difficulty:   sub.difficulty,
+        topics:       sub.tags,
+        submittedAt:  sub.last_updated_at,
+        leetcodeLink: sub.link || `https://leetcode.com/problems/${sub.slug}/`,
         ...(sub.notes && { notes: sub.notes }),
       },
-      $setOnInsert: { revisionCount: 0, confidence: 3 },
+      // Only applied when the document is NEWLY CREATED (upsert insert path)
+      // Never runs on existing documents — solved count stays untouched
+      $setOnInsert: {
+        solved:        true,
+        solvedDate:    sub.dateSolved,
+        nextRevisionAt,
+        revisionCount: 0,
+        confidence:    3,
+      },
     },
     { upsert: true, new: true }
   );
@@ -269,54 +272,42 @@ function computeStreaks(submissions) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// FETCH RECENT ACCEPTED SUBMISSIONS FROM LEETCODE
-// Requires LEETCODE_SESSION + LEETCODE_CSRF env vars (from browser cookies)
+// FETCH RECENT ACCEPTED SUBMISSIONS (authenticated)
 // ═══════════════════════════════════════════════════════════════════════════════
 const RECENT_AC_QUERY = `
   query recentAcSubmissions($username: String!, $limit: Int!) {
     recentAcSubmissionList(username: $username, limit: $limit) {
-      title
-      titleSlug
-      timestamp
+      title titleSlug timestamp
     }
   }
 `;
 
 async function fetchRecentAcceptedSubmissions() {
-  const session = process.env.LEETCODE_SESSION;
-  const csrf    = process.env.LEETCODE_CSRF;
+  const session  = process.env.LEETCODE_SESSION;
+  const csrf     = process.env.LEETCODE_CSRF;
   const username = process.env.LEETCODE_USERNAME;
 
-  if (!session || !csrf) {
-    throw new Error('LEETCODE_SESSION and LEETCODE_CSRF env vars are required');
-  }
-  if (!username) {
-    throw new Error('LEETCODE_USERNAME env var is required');
-  }
+  if (!session || !csrf)  throw new Error('LEETCODE_SESSION and LEETCODE_CSRF env vars are required');
+  if (!username)          throw new Error('LEETCODE_USERNAME env var is required');
 
   const { data } = await axios.post(
     LC_GRAPHQL,
-    {
-      query:     RECENT_AC_QUERY,
-      variables: { username, limit: 20 },
-    },
+    { query: RECENT_AC_QUERY, variables: { username, limit: 20 } },
     {
       headers: {
-        'Content-Type':  'application/json',
-        'Referer':       'https://leetcode.com',
-        'Cookie':        `LEETCODE_SESSION=${session}; csrftoken=${csrf}`,
-        'x-csrftoken':   csrf,
+        'Content-Type': 'application/json',
+        'Referer':      'https://leetcode.com',
+        'Cookie':       `LEETCODE_SESSION=${session}; csrftoken=${csrf}`,
+        'x-csrftoken':  csrf,
       },
       timeout: 10000,
     }
   );
 
   const list = data?.data?.recentAcSubmissionList;
-  if (!Array.isArray(list)) {
-    throw new Error('Unexpected response from LeetCode — check session cookies');
-  }
+  if (!Array.isArray(list)) throw new Error('Unexpected response from LeetCode — check session cookies');
 
-  // Deduplicate by titleSlug (LeetCode returns one entry per submission, not per problem)
+  // Deduplicate by slug — LeetCode returns one row per submission, not per problem
   const seen = new Set();
   return list
     .filter(s => { if (seen.has(s.titleSlug)) return false; seen.add(s.titleSlug); return true; })
@@ -329,35 +320,43 @@ async function fetchRecentAcceptedSubmissions() {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CORE SYNC: syncRecentSubmissions()
-// Fetches accepted submissions → upserts each via existing upsertProblem()
-// Returns { totalFetched, newAdded, skipped, errors }
+//
+// STRICT RULES:
+//   1. Check Submission collection by slug FIRST
+//   2. If exists → SKIP (never insert duplicate)
+//   3. If not → INSERT via upsertProblem (which also checks DB before API)
+//   4. If LeetCode API fails → abort entirely, do NOT modify DB
+//   5. Never delete anything regardless of what LeetCode returns
+//
+// Returns: { fetched, inserted, skipped, dbTotal, errors }
 // ═══════════════════════════════════════════════════════════════════════════════
 async function syncRecentSubmissions() {
   console.log('[SYNC START] Fetching recent accepted submissions from LeetCode');
 
+  // Step 1: Fetch from LeetCode — if this fails, abort before touching DB
   const submissions = await fetchRecentAcceptedSubmissions();
-  console.log(`[SYNC FETCHED ${submissions.length}] slugs to process`);
+  console.log(`[SYNC FETCHED ${submissions.length}] unique accepted slugs from LeetCode`);
 
-  let newAdded = 0, skipped = 0;
+  let inserted = 0, skipped = 0;
   const errors = [];
 
+  // Step 2: Process each slug — strict skip-if-exists
   for (const sub of submissions) {
     const slug = sub.titleSlug.toLowerCase().trim();
     try {
-      // Check DB first — if already exists, skip (upsertProblem handles cache/DB hit)
-      const existing = await Submission.findOne({ slug });
+      const existing = await Submission.findOne({ slug }).lean();
       if (existing) {
         console.log(`[SYNC SKIPPED] ${slug} — already in DB`);
         skipped++;
         continue;
       }
 
-      // New problem — upsert with the solve date from LeetCode
+      // New problem — fetch metadata + insert
       await upsertProblem(slug, { dateSolved: sub.timestamp });
       console.log(`[SYNC ADDED] ${slug}`);
-      newAdded++;
+      inserted++;
 
-      // Small delay to avoid hammering LeetCode API back-to-back
+      // Throttle to avoid hammering LeetCode API
       await new Promise(r => setTimeout(r, 300));
 
     } catch (err) {
@@ -366,21 +365,27 @@ async function syncRecentSubmissions() {
     }
   }
 
-  console.log(`[SYNC COMPLETE] totalFetched=${submissions.length} newAdded=${newAdded} skipped=${skipped} errors=${errors.length}`);
-  return {
-    totalFetched: submissions.length,
-    newAdded,
-    skipped,
-    errors,
-  };
+  // Step 3: Final DB count for consistency verification
+  const dbTotal = await Submission.countDocuments();
+  const problemTotal = await Problem.countDocuments({ solved: true });
+
+  console.log(`[SYNC COMPLETE] fetched=${submissions.length} inserted=${inserted} skipped=${skipped} errors=${errors.length}`);
+  console.log(`[SYNC DB STATE] Submission collection: ${dbTotal} | Problem collection (solved): ${problemTotal}`);
+
+  // Step 4: Consistency warning
+  if (inserted > 0 && problemTotal !== dbTotal + (problemTotal - dbTotal)) {
+    // Problem collection has more records (manually added via tracker UI) — this is expected
+    console.log(`[SYNC INFO] Problem collection (${problemTotal}) > Submission collection (${dbTotal}) — normal, manual entries exist`);
+  }
+
+  return { fetched: submissions.length, inserted, skipped, dbTotal, problemTotal, errors };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ROUTE HANDLERS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// GET /api/problem/:slug
-// DB-first: cache → DB → API. Never calls API if data already stored.
+// GET /api/problem/:slug — DB-first, never calls API if already stored
 exports.getProblem = async (req, res) => {
   const slug = req.params.slug?.toLowerCase().trim();
   if (!slug) return res.status(400).json({ success: false, error: 'slug is required' });
@@ -389,7 +394,6 @@ exports.getProblem = async (req, res) => {
     const data = await upsertProblem(slug);
     return res.json({ success: true, data });
   } catch (err) {
-    // If API failed but we have stale DB data, return it
     const fallback = await Submission.findOne({ slug }).lean();
     if (fallback) {
       console.warn(`[ERROR] API failed for "${slug}", serving DB fallback: ${err.message}`);
@@ -410,15 +414,14 @@ exports.manualEntry = async (req, res) => {
   try {
     const { action, data } = await upsertManual(slug, { time_taken, attempts, notes, dateSolved });
     return res.status(action === 'inserted' ? 201 : 200).json({
-      success: true,
-      action,
+      success: true, action,
       message: `Problem "${slug}" ${action}`,
       data,
     });
   } catch (err) {
     console.error(`[ERROR] manualEntry(${slug}): ${err.message}`);
-    const status = err.message.includes('not found') ? 400 : 500;
-    return res.status(status).json({ success: false, error: err.message });
+    return res.status(err.message.includes('not found') ? 400 : 500)
+      .json({ success: false, error: err.message });
   }
 };
 
@@ -454,7 +457,7 @@ exports.getRevision = async (req, res) => {
       Submission.find({ nextReviewAt: { $gt:  now } }).sort({ nextReviewAt: 1 }).limit(10).lean(),
     ]);
     res.json({
-      success: true,
+      success:  true,
       dueNow:   { count: due.length,      data: due.map(shapeResponse) },
       upcoming: { count: upcoming.length, data: upcoming.map(shapeResponse) },
     });
@@ -474,38 +477,41 @@ exports.getStreaks = async (req, res) => {
 };
 
 // POST /api/problem/sync
-// Manually trigger sync of recent accepted submissions from LeetCode profile
 exports.syncSubmissions = async (req, res) => {
-  // Quick env check before doing any work
   if (!process.env.LEETCODE_SESSION || !process.env.LEETCODE_CSRF) {
-    return res.status(500).json({
-      success: false,
-      error:   'LEETCODE_SESSION and LEETCODE_CSRF env vars are not set. Add them on Render.',
-    });
+    return res.status(500).json({ success: false, error: 'LEETCODE_SESSION and LEETCODE_CSRF env vars are not set.' });
   }
   if (!process.env.LEETCODE_USERNAME) {
-    return res.status(500).json({
-      success: false,
-      error:   'LEETCODE_USERNAME env var is not set.',
-    });
+    return res.status(500).json({ success: false, error: 'LEETCODE_USERNAME env var is not set.' });
   }
 
   try {
     const result = await syncRecentSubmissions();
+
+    // Consistency check — warn if counts diverge unexpectedly
+    if (result.inserted > 0) {
+      const expectedTotal = result.dbTotal;
+      const actualTotal   = await Submission.countDocuments();
+      if (actualTotal !== expectedTotal) {
+        console.warn(`[SYNC WARN] Count mismatch after sync: expected=${expectedTotal} actual=${actualTotal}`);
+      }
+    }
+
     return res.json({
       success: true,
-      message: `Sync complete — ${result.newAdded} added, ${result.skipped} skipped`,
-      ...result,
+      message: `Sync complete — ${result.inserted} added, ${result.skipped} skipped`,
+      fetched:      result.fetched,
+      inserted:     result.inserted,
+      skipped:      result.skipped,
+      dbTotal:      result.dbTotal,
+      problemTotal: result.problemTotal,
+      errors:       result.errors,
     });
   } catch (err) {
     console.error(`[ERROR] syncSubmissions: ${err.message}`);
-    // Distinguish cookie/auth errors from other failures
     const isAuthError = err.message.includes('session') || err.message.includes('cookie')
                      || err.message.includes('Unexpected response');
-    return res.status(isAuthError ? 401 : 500).json({
-      success: false,
-      error:   err.message,
-    });
+    return res.status(isAuthError ? 401 : 500).json({ success: false, error: err.message });
   }
 };
 

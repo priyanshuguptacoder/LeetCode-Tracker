@@ -179,6 +179,61 @@ exports.dbCheck = async (req, res) => {
   }
 };
 
+// ─── GET /api/debug/count-check ──────────────────────────────────────────────
+// Compares Problem collection (frontend source of truth) vs Submission collection
+// Logs a warning if counts diverge unexpectedly.
+exports.countCheck = async (req, res) => {
+  try {
+    const [problemTotal, problemSolved, submissionTotal] = await Promise.all([
+      Problem.countDocuments(),
+      Problem.countDocuments({ solved: true }),
+      Submission.countDocuments(),
+    ]);
+
+    // Duplicates in Submission collection
+    const dupes = await Submission.aggregate([
+      { $group: { _id: '$slug', count: { $sum: 1 } } },
+      { $match: { count: { $gt: 1 } } },
+    ]);
+
+    // Duplicates in Problem collection
+    const probDupes = await Problem.aggregate([
+      { $group: { _id: '$id', count: { $sum: 1 } } },
+      { $match: { count: { $gt: 1 } } },
+    ]);
+
+    const consistent = dupes.length === 0 && probDupes.length === 0;
+
+    if (!consistent) {
+      console.warn(`[COUNT CHECK] ⚠️  Duplicates found — Submission: ${dupes.length}, Problem: ${probDupes.length}`);
+    } else {
+      console.log(`[COUNT CHECK] ✅ No duplicates. Problem(solved)=${problemSolved} Submission=${submissionTotal}`);
+    }
+
+    // Note: Problem collection is the frontend source of truth (manual + synced)
+    // Submission collection only tracks synced/manual-entry problems (subset)
+    const note = submissionTotal < problemSolved
+      ? `Normal — ${problemSolved - submissionTotal} problems were added manually via tracker UI (not via sync)`
+      : submissionTotal === problemSolved
+      ? 'Counts match exactly'
+      : `⚠️ Submission count exceeds Problem solved count — investigate`;
+
+    res.json({
+      success:          consistent,
+      problem_total:    problemTotal,
+      problem_solved:   problemSolved,
+      submission_total: submissionTotal,
+      duplicate_slugs:  dupes.length  > 0 ? dupes  : [],
+      duplicate_ids:    probDupes.length > 0 ? probDupes : [],
+      consistent,
+      note,
+    });
+  } catch (err) {
+    console.error(`[ERROR] count-check: ${err.message}`);
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
 // ─── GET /api/debug/frontend-check ───────────────────────────────────────────
 exports.frontendCheck = async (req, res) => {
   try {

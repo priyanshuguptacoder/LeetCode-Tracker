@@ -50,6 +50,7 @@ app.get('/', (req, res) => {
       'GET  /api/health':               'Health — DB + LeetCode API',
       'GET  /api/test/leetcode':        'Live LeetCode GraphQL test',
       'GET  /api/debug/db-check':       'DB integrity report',
+      'GET  /api/debug/count-check':    'Problem vs Submission count consistency',
       'GET  /api/debug/frontend-check': 'Latest 5 problems for frontend',
       'POST /api/debug/manual-test':    'End-to-end insert + merge test',
       'POST /api/debug/run-all':        'Full system validation',
