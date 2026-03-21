@@ -1,3 +1,4 @@
+// updated: streak reads from Settings document (isManualOverride support)
 const Settings = require('../models/Settings');
 
 // GET /api/analytics/streak — returns trusted streak values from Settings document

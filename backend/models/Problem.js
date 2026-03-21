@@ -1,3 +1,4 @@
+// updated: added providerTitle field with default 'LeetCode'
 const mongoose = require('mongoose');
 
 const problemSchema = new mongoose.Schema(
@@ -39,6 +40,7 @@ const problemSchema = new mongoose.Schema(
     interval:         { type: Number, default: 1 },
     nextRevisionDate: { type: Date,   default: null }, // SM-2 computed next date
     revisionPriority: { type: Number, default: 0 },    // higher = more urgent
+    providerTitle: { type: String, default: 'LeetCode' },
     // ── Soft delete / User Intent Lock ────────────────────────────────────
     isDeleted:  { type: Boolean, default: false, index: true },
     deletedAt:  { type: Date,    default: null },

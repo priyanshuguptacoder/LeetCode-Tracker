@@ -1,3 +1,4 @@
+// updated: providerTitle hardening, isManualOverride streak lock, resetStreakAuto
 const Problem = require('../models/Problem');
 const Submission = require('../models/Submission');
 const Settings = require('../models/Settings');
@@ -20,7 +21,17 @@ function dayDiff(a, b) {
 // ─── STREAK REBUILD — backend single source of truth ─────────────────────────
 // Called after: delete, sync, manual add/update.
 // Reads all non-deleted solved problems, computes streak, writes to Settings.
+// SKIPPED if isManualOverride is true — manual values are preserved.
 async function rebuildStreak() {
+  let s = await Settings.findOne({ key: 'global' });
+  if (!s) {
+    s = await Settings.create({ key: 'global', currentStreak: 0, activeDays: 0, maxStreak: 0, isManualOverride: false });
+  }
+  if (s.isManualOverride) {
+    console.log('[STREAK LOCKED] Skipping rebuild — manual override active');
+    return { currentStreak: s.currentStreak, activeDays: s.activeDays, maxStreak: s.maxStreak };
+  }
+
   const problems = await Problem.find(
     { solved: true, isDeleted: { $ne: true }, solvedDate: { $ne: null } },
     { solvedDate: 1 }
@@ -126,26 +137,28 @@ exports.updateStreak = async (req, res) => {
   try {
     const { currentStreak, maxStreak, activeDays, lastSolvedDate, force } = req.body;
     let s = await Settings.findOne({ key: 'global' });
-    if (!s) s = await Settings.create({ key: 'global' });
+    if (!s) s = await Settings.create({ key: 'global', currentStreak: 0, activeDays: 0, maxStreak: 0, isManualOverride: false });
 
     if (s.isSetup && !force) {
       return res.status(403).json({ success: false, error: 'Already set up. Pass force:true to override.' });
     }
 
     const cs = parseInt(currentStreak);
-    const ms = parseInt(maxStreak);
+    let ms   = parseInt(maxStreak);
     const ad = parseInt(activeDays);
 
     if (isNaN(cs) || cs < 0) return res.status(400).json({ success: false, error: 'currentStreak must be >= 0' });
-    if (isNaN(ms) || ms < cs) return res.status(400).json({ success: false, error: 'maxStreak must be >= currentStreak' });
-    if (isNaN(ad) || ad < cs) return res.status(400).json({ success: false, error: 'activeDays must be >= currentStreak' });
+    if (isNaN(ad) || ad < 0) return res.status(400).json({ success: false, error: 'activeDays must be >= 0' });
+    if (isNaN(ms) || ms < 0) return res.status(400).json({ success: false, error: 'maxStreak must be >= 0' });
 
-    const updateFields = { currentStreak: cs, maxStreak: ms, activeDays: ad, isSetup: true };
-    if (lastSolvedDate) updateFields.lastSolvedDate = new Date(lastSolvedDate);
-    // If no lastSolvedDate provided, set to UTC midnight of today
-    if (!lastSolvedDate) {
-      updateFields.lastSolvedDate = new Date(`${todayStr()}T00:00:00.000Z`);
+    if (cs > ad) {
+      return res.status(400).json({ success: false, error: 'currentStreak cannot be greater than activeDays' });
     }
+    if (ms < cs) ms = cs;
+
+    const updateFields = { currentStreak: cs, maxStreak: ms, activeDays: ad, isSetup: true, isManualOverride: true };
+    if (lastSolvedDate) updateFields.lastSolvedDate = new Date(lastSolvedDate);
+    if (!lastSolvedDate) updateFields.lastSolvedDate = new Date(`${todayStr()}T00:00:00.000Z`);
 
     s = await Settings.findOneAndUpdate(
       { key: 'global' },
@@ -162,7 +175,12 @@ exports.updateStreak = async (req, res) => {
 exports.getAllProblems = async (req, res) => {
   try {
     const problems = await Problem.find({ isDeleted: { $ne: true } }).sort({ id: 1 });
-    res.json({ success: true, count: problems.length, data: problems });
+    const data = problems.map(p => {
+      const obj = p.toObject();
+      if (!obj.providerTitle) obj.providerTitle = 'LeetCode';
+      return obj;
+    });
+    res.json({ success: true, count: data.length, data });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to fetch problems', message: err.message });
   }
@@ -173,7 +191,9 @@ exports.getProblem = async (req, res) => {
   try {
     const problem = await Problem.findOne({ id: parseInt(req.params.id), isDeleted: { $ne: true } });
     if (!problem) return res.status(404).json({ success: false, error: 'Problem not found' });
-    res.json({ success: true, data: problem });
+    const data = problem.toObject();
+    if (!data.providerTitle) data.providerTitle = 'LeetCode';
+    res.json({ success: true, data });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to fetch problem', message: err.message });
   }
@@ -216,6 +236,7 @@ exports.createProblem = async (req, res) => {
       nextRevisionAt,
       targeted: isTargeted,
       targetedAt: resolvedTargetedAt,
+      providerTitle: req.body.providerTitle || 'LeetCode',
       // Revision Intelligence Engine — auto-detection
       solveTime: req.body.solveTime != null ? parseInt(req.body.solveTime) : null,
       hintsUsed: req.body.hintsUsed === true || req.body.hintsUsed === 'true',
@@ -445,7 +466,12 @@ exports.deleteProblem = async (req, res) => {
     // Rebuild streak from remaining non-deleted solved problems (backend = single source of truth)
     let streakData = null;
     if (problem.solved) {
-      streakData = await rebuildStreak();
+      const settings = await Settings.findOne({ key: 'global' });
+      if (!settings || !settings.isManualOverride) {
+        streakData = await rebuildStreak();
+      } else {
+        streakData = { currentStreak: settings.currentStreak, activeDays: settings.activeDays, maxStreak: settings.maxStreak };
+      }
     }
 
     res.json({ success: true, data: { id: problem.id, title: problem.title }, streak: streakData });
@@ -713,6 +739,21 @@ exports.getStriverStats = async (req, res) => {
     res.json({ success: true, data: { easy, medium, hard, total: problems.length } });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to fetch striver stats', message: err.message });
+  }
+};
+
+// ─── POST /api/problems/streak/reset ─────────────────────────────────────────
+// Clears isManualOverride and rebuilds streak from DB
+exports.resetStreakAuto = async (req, res) => {
+  try {
+    let s = await Settings.findOne({ key: 'global' });
+    if (!s) s = await Settings.create({ key: 'global', currentStreak: 0, activeDays: 0, maxStreak: 0, isManualOverride: false });
+    s.isManualOverride = false;
+    await s.save();
+    const rebuilt = await rebuildStreak();
+    res.json({ success: true, data: rebuilt });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 };
 

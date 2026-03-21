@@ -1,3 +1,4 @@
+// updated: added isManualOverride field for manual streak lock support
 const mongoose = require('mongoose');
 
 const settingsSchema = new mongoose.Schema(

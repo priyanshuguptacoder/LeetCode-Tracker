@@ -1,3 +1,4 @@
+// updated: providerTitle always set on sync, isManualOverride streak guard
 const axios      = require('axios');
 const Problem    = require('../models/Problem');
 const Submission = require('../models/Submission');
@@ -239,6 +240,7 @@ async function syncToProblemCollection(sub) {
       submittedAt:     sub.last_updated_at,
       lastSubmittedAt: sub.dateSolved,   // always updated — tracks most recent sync timestamp
       leetcodeLink:    sub.link || `https://leetcode.com/problems/${sub.slug}/`,
+      providerTitle:   'LeetCode',
       ...(sub.notes && { notes: sub.notes }),
     },
   };
@@ -432,10 +434,16 @@ async function syncRecentSubmissions() {
     }
   }
 
-  // Step 3: Rebuild streak from DB after any insertions (backend = single source of truth)
+  // Step 3: Rebuild streak from DB after any insertions — skip if manual override is active
   if (inserted > 0) {
     try {
-      await rebuildStreak();
+      const Settings = require('../models/Settings');
+      const s = await Settings.findOne({ key: 'global' });
+      if (!s || !s.isManualOverride) {
+        await rebuildStreak();
+      } else {
+        console.log('[SKIPPED] Manual override active — streak rebuild skipped after sync');
+      }
     } catch (e) {
       console.warn('[SYNC] Streak rebuild failed:', e.message);
     }
