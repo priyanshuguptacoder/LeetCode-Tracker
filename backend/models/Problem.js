@@ -39,6 +39,9 @@ const problemSchema = new mongoose.Schema(
     interval:         { type: Number, default: 1 },
     nextRevisionDate: { type: Date,   default: null }, // SM-2 computed next date
     revisionPriority: { type: Number, default: 0 },    // higher = more urgent
+    // ── Soft delete / User Intent Lock ────────────────────────────────────
+    isDeleted:  { type: Boolean, default: false, index: true },
+    deletedAt:  { type: Date,    default: null },
   },
   { timestamps: true }
 );

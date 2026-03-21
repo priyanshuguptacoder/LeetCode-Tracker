@@ -1,6 +1,7 @@
 const axios      = require('axios');
 const Problem    = require('../models/Problem');
 const Submission = require('../models/Submission');
+const { rebuildStreak } = require('./problemController');
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // IN-MEMORY CACHE  (slug → full problem object)
@@ -364,12 +365,13 @@ async function fetchRecentAcceptedSubmissions() {
 // ═══════════════════════════════════════════════════════════════════════════════
 // CORE SYNC: syncRecentSubmissions()
 //
-// STRICT RULES:
-//   1. Check Submission collection by slug FIRST
-//   2. If exists → SKIP (never insert duplicate)
-//   3. If not → INSERT via upsertProblem (which also checks DB before API)
-//   4. If LeetCode API fails → abort entirely, do NOT modify DB
-//   5. Never delete anything regardless of what LeetCode returns
+// USER INTENT LAYER — strict rules:
+//   1. Check Problem collection by id/slug FIRST (including soft-deleted)
+//   2. If isDeleted === true → SKIP (user intent lock — never resurrect)
+//   3. If exists and not deleted → SKIP (already synced)
+//   4. If not exists → INSERT via upsertProblem
+//   5. If LeetCode API fails → abort entirely, do NOT modify DB
+//   6. After any insertions → rebuild streak from DB (backend = single source of truth)
 //
 // Returns: { fetched, inserted, skipped, dbTotal, errors }
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -383,13 +385,35 @@ async function syncRecentSubmissions() {
   let inserted = 0, skipped = 0;
   const errors = [];
 
-  // Step 2: Process each slug — strict skip-if-exists
+  // Step 2: Process each slug — strict intent-lock check
   for (const sub of submissions) {
     const slug = sub.titleSlug.toLowerCase().trim();
     try {
-      const existing = await Submission.findOne({ slug }).lean();
-      if (existing) {
+      // Check Problem collection first (includes soft-deleted) — this is the intent lock
+      const existingProblem = await Problem.findOne({
+        leetcodeLink: { $regex: slug, $options: 'i' }
+      }).lean();
+
+      if (existingProblem) {
+        if (existingProblem.isDeleted) {
+          console.log(`[SYNC SKIP — INTENT LOCK] ${slug} — user deleted this problem`);
+          skipped++;
+          continue;
+        }
         console.log(`[SYNC SKIPPED] ${slug} — already in DB`);
+        skipped++;
+        continue;
+      }
+
+      // Also check Submission collection
+      const existingSubmission = await Submission.findOne({ slug }).lean();
+      if (existingSubmission) {
+        if (existingSubmission.isDeleted) {
+          console.log(`[SYNC SKIP — INTENT LOCK] ${slug} — submission deleted`);
+          skipped++;
+          continue;
+        }
+        console.log(`[SYNC SKIPPED] ${slug} — already in Submission DB`);
         skipped++;
         continue;
       }
@@ -408,18 +432,21 @@ async function syncRecentSubmissions() {
     }
   }
 
-  // Step 3: Final DB count for consistency verification
-  const dbTotal = await Submission.countDocuments();
-  const problemTotal = await Problem.countDocuments({ solved: true });
+  // Step 3: Rebuild streak from DB after any insertions (backend = single source of truth)
+  if (inserted > 0) {
+    try {
+      await rebuildStreak();
+    } catch (e) {
+      console.warn('[SYNC] Streak rebuild failed:', e.message);
+    }
+  }
+
+  // Step 4: Final DB count
+  const dbTotal = await Submission.countDocuments({ isDeleted: { $ne: true } });
+  const problemTotal = await Problem.countDocuments({ solved: true, isDeleted: { $ne: true } });
 
   console.log(`[SYNC COMPLETE] fetched=${submissions.length} inserted=${inserted} skipped=${skipped} errors=${errors.length}`);
-  console.log(`[SYNC DB STATE] Submission collection: ${dbTotal} | Problem collection (solved): ${problemTotal}`);
-
-  // Step 4: Consistency warning
-  if (inserted > 0 && problemTotal !== dbTotal + (problemTotal - dbTotal)) {
-    // Problem collection has more records (manually added via tracker UI) — this is expected
-    console.log(`[SYNC INFO] Problem collection (${problemTotal}) > Submission collection (${dbTotal}) — normal, manual entries exist`);
-  }
+  console.log(`[SYNC DB STATE] Submission: ${dbTotal} | Problem (solved): ${problemTotal}`);
 
   return { fetched: submissions.length, inserted, skipped, dbTotal, problemTotal, errors };
 }
@@ -607,7 +634,8 @@ exports.getRecentProblems = async (req, res) => {
   try {
     const problems = await Problem.find({
       solved: true,
-      lastSubmittedAt: { $ne: null },   // exclude docs with no timestamp
+      isDeleted: { $ne: true },
+      lastSubmittedAt: { $ne: null },
     })
       .sort({ lastSubmittedAt: -1 })
       .limit(9)
@@ -626,6 +654,7 @@ exports.getTodayProblems = async (req, res) => {
     const end   = getUTCDayEnd();
     const problems = await Problem.find({
       solved: true,
+      isDeleted: { $ne: true },
       lastSubmittedAt: { $gte: start, $lte: end },
     })
       .sort({ lastSubmittedAt: -1 })
@@ -647,14 +676,13 @@ exports.getRecentAndToday = async (req, res) => {
     const SELECT = 'id title difficulty topics leetcodeLink lastSubmittedAt solvedDate revisionCount lastRevisedAt isStriver targeted targetedAt needsRevision';
 
     const [recentSolved, todaySolved] = await Promise.all([
-      // Sort DESC first, Problem collection is already 1-doc-per-problem so no dedup needed
-      Problem.find({ solved: true, lastSubmittedAt: { $ne: null } })
+      Problem.find({ solved: true, isDeleted: { $ne: true }, lastSubmittedAt: { $ne: null } })
         .sort({ lastSubmittedAt: -1 })
         .limit(9)
         .select(SELECT)
         .lean(),
 
-      Problem.find({ solved: true, lastSubmittedAt: { $gte: startOfDayUTC, $lte: endOfDayUTC } })
+      Problem.find({ solved: true, isDeleted: { $ne: true }, lastSubmittedAt: { $gte: startOfDayUTC, $lte: endOfDayUTC } })
         .sort({ lastSubmittedAt: -1 })
         .select(SELECT)
         .lean(),

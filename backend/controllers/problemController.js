@@ -1,4 +1,5 @@
 const Problem = require('../models/Problem');
+const Submission = require('../models/Submission');
 const Settings = require('../models/Settings');
 
 // ─── UTC date helpers ─────────────────────────────────────────────────────────
@@ -16,35 +17,82 @@ function dayDiff(a, b) {
   return Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000);
 }
 
-// ─── Streak update — 3-case logic ────────────────────────────────────────────
+// ─── STREAK REBUILD — backend single source of truth ─────────────────────────
+// Called after: delete, sync, manual add/update.
+// Reads all non-deleted solved problems, computes streak, writes to Settings.
+async function rebuildStreak() {
+  const problems = await Problem.find(
+    { solved: true, isDeleted: { $ne: true }, solvedDate: { $ne: null } },
+    { solvedDate: 1 }
+  ).lean();
+
+  const dates = [...new Set(
+    problems.map(p => dateStr(p.solvedDate)).filter(Boolean)
+  )].sort();
+
+  const activeDays = dates.length;
+  if (activeDays === 0) {
+    const s = await Settings.findOneAndUpdate(
+      { key: 'global' },
+      { $set: { currentStreak: 0, maxStreak: 0, activeDays: 0, lastSolvedDate: null } },
+      { new: true, upsert: true }
+    );
+    return streakPayload(s);
+  }
+
+  // Max streak
+  let maxStreak = 1, tempStreak = 1;
+  for (let i = 1; i < dates.length; i++) {
+    if (dayDiff(dates[i - 1], dates[i]) === 1) { tempStreak++; maxStreak = Math.max(maxStreak, tempStreak); }
+    else tempStreak = 1;
+  }
+  maxStreak = Math.max(maxStreak, tempStreak);
+
+  // Current streak — consecutive days ending today or yesterday (UTC)
+  const todayUTC = todayStr();
+  const yesterdayUTC = dateStr(new Date(Date.now() - 86400000));
+  let currentStreak = 0;
+  const lastDate = dates[dates.length - 1];
+  if (lastDate === todayUTC || lastDate === yesterdayUTC) {
+    currentStreak = 1;
+    let i = dates.length - 1;
+    while (i > 0 && dayDiff(dates[i - 1], dates[i]) === 1) { currentStreak++; i--; }
+  }
+
+  const [ty, tm, td] = lastDate.split('-').map(Number);
+  const lastSolvedDate = new Date(Date.UTC(ty, tm - 1, td, 0, 0, 0));
+
+  const s = await Settings.findOneAndUpdate(
+    { key: 'global' },
+    { $set: { currentStreak, maxStreak, activeDays, lastSolvedDate } },
+    { new: true, upsert: true }
+  );
+  console.log(`[STREAK REBUILD] current=${currentStreak} max=${maxStreak} activeDays=${activeDays}`);
+  return streakPayload(s);
+}
+
+// ─── Streak update — 3-case incremental logic (used on add/solve) ─────────────
 async function applyStreakUpdate(settings) {
-  const today = todayStr(); // YYYY-MM-DD UTC
+  const today = todayStr();
   const last  = settings.lastSolvedDate ? dateStr(settings.lastSolvedDate) : null;
   let { currentStreak, maxStreak, activeDays } = settings;
 
-  console.log(`[streak] today=${today} last=${last} currentStreak=${currentStreak} maxStreak=${maxStreak} activeDays=${activeDays}`);
-
   if (last === today) {
     // CASE 1: already solved today — no change
-    console.log('[streak] Case 1: same day, no change');
   } else if (last && dayDiff(last, today) === 1) {
     // CASE 2: consecutive day — extend streak
     currentStreak += 1;
     activeDays    += 1;
-    console.log(`[streak] Case 2: consecutive day → streak=${currentStreak} activeDays=${activeDays}`);
   } else {
     // CASE 3: first solve ever OR gap > 1 day — reset streak to 1
     currentStreak = 1;
     activeDays   += 1;
-    console.log(`[streak] Case 3: gap/new → streak=1 activeDays=${activeDays}`);
   }
 
   if (currentStreak > maxStreak) maxStreak = currentStreak;
   if (activeDays < currentStreak) activeDays = currentStreak;
 
-  // Store as UTC midnight
   const lastSolvedDate = new Date(`${today}T00:00:00.000Z`);
-
   return Settings.findOneAndUpdate(
     { key: 'global' },
     { $set: { currentStreak, maxStreak, activeDays, lastSolvedDate } },
@@ -113,7 +161,7 @@ exports.updateStreak = async (req, res) => {
 // ─── GET /api/problems ────────────────────────────────────────────────────────
 exports.getAllProblems = async (req, res) => {
   try {
-    const problems = await Problem.find().sort({ id: 1 });
+    const problems = await Problem.find({ isDeleted: { $ne: true } }).sort({ id: 1 });
     res.json({ success: true, count: problems.length, data: problems });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to fetch problems', message: err.message });
@@ -123,7 +171,7 @@ exports.getAllProblems = async (req, res) => {
 // ─── GET /api/problems/:id ────────────────────────────────────────────────────
 exports.getProblem = async (req, res) => {
   try {
-    const problem = await Problem.findOne({ id: parseInt(req.params.id) });
+    const problem = await Problem.findOne({ id: parseInt(req.params.id), isDeleted: { $ne: true } });
     if (!problem) return res.status(404).json({ success: false, error: 'Problem not found' });
     res.json({ success: true, data: problem });
   } catch (err) {
@@ -138,7 +186,11 @@ exports.createProblem = async (req, res) => {
     if (!id || !title || !difficulty || !leetcodeLink) {
       return res.status(400).json({ success: false, error: 'id, title, difficulty, and leetcodeLink are required' });
     }
+    // Check including soft-deleted — if deleted, block re-creation (user intent lock)
     const exists = await Problem.findOne({ id: parseInt(id) });
+    if (exists && exists.isDeleted) {
+      return res.status(409).json({ success: false, error: `Problem #${id} was previously deleted. Deletion is permanent.` });
+    }
     if (exists) return res.status(400).json({ success: false, error: 'Problem #' + id + ' already exists' });
 
     const isSolved = solved === true || solved === 'true';
@@ -198,21 +250,21 @@ exports.updateProblem = async (req, res) => {
     if (updates.solved !== undefined) updates.solved = updates.solved === true || updates.solved === 'true';
     if (updates.solved === true && !updates.solvedDate) updates.solvedDate = new Date();
     if (updates.solved === true) {
-      updates.submittedAt = new Date(); // always refresh submittedAt on solve
-      updates.lastSubmittedAt = updates.solvedDate || new Date(); // keep in sync for recent/today queries
+      updates.submittedAt = new Date();
+      updates.lastSubmittedAt = updates.solvedDate || new Date();
     }
     if (updates.solved === false) { updates.solvedDate = null; updates.submittedAt = null; updates.lastSubmittedAt = null; }
 
-    // Fetch BEFORE updating to check if it was previously unsolved
+    // Fetch BEFORE updating — block if soft-deleted
     const before = await Problem.findOne({ id: parseInt(req.params.id) });
     if (!before) return res.status(404).json({ success: false, error: 'Problem not found' });
+    if (before.isDeleted) return res.status(410).json({ success: false, error: 'Problem was deleted and cannot be modified' });
 
     const problem = await Problem.findOneAndUpdate(
       { id: parseInt(req.params.id) }, updates, { returnDocument: 'after', runValidators: true }
     );
 
     let streakData = null;
-    // Only update streak if problem is being NEWLY marked as solved (was not solved before)
     const isNewlySolved = updates.solved === true && before.solved === false;
     if (isNewlySolved) {
       let s = await Settings.findOne({ key: 'global' });
@@ -363,54 +415,40 @@ exports.untargetProblem = async (req, res) => {
 };
 
 // ─── DELETE /api/problems/:id ─────────────────────────────────────────────────
+// SOFT DELETE — marks isDeleted=true, never removes document.
+// Also soft-deletes related Submission by slug match.
+// Rebuilds streak from remaining non-deleted solved problems.
 exports.deleteProblem = async (req, res) => {
   try {
-    const problem = await Problem.findOneAndDelete({ id: parseInt(req.params.id) });
+    const problem = await Problem.findOne({ id: parseInt(req.params.id) });
     if (!problem) return res.status(404).json({ success: false, error: 'Problem not found' });
+    if (problem.isDeleted) return res.status(410).json({ success: false, error: 'Problem already deleted' });
 
-    // If deleted problem was solved, recompute streak from remaining problems
-    let streakData = null;
-    if (problem.solved) {
-      const remaining = await Problem.find({ solved: true }).sort({ solvedDate: 1 });
-      const dates = [...new Set(
-        remaining.map(p => p.solvedDate ? dateStr(p.solvedDate) : null).filter(Boolean)
-      )].sort();
+    const now = new Date();
 
-      const activeDays = dates.length;
-      let maxStreak = dates.length > 0 ? 1 : 0;
-      let tempStreak = 1;
-      for (let i = 1; i < dates.length; i++) {
-        const diff = dayDiff(dates[i - 1], dates[i]);
-        if (diff === 1) { tempStreak++; } else { maxStreak = Math.max(maxStreak, tempStreak); tempStreak = 1; }
-      }
-      maxStreak = Math.max(maxStreak, tempStreak);
+    // Soft-delete the Problem document
+    await Problem.findOneAndUpdate(
+      { id: parseInt(req.params.id) },
+      { $set: { isDeleted: true, deletedAt: now } }
+    );
 
-      // Current streak: consecutive days ending on the last solve date
-      let currentStreak = 0;
-      if (dates.length > 0) {
-        let i = dates.length - 1;
-        currentStreak = 1;
-        while (i > 0) {
-          if (dayDiff(dates[i - 1], dates[i]) === 1) { currentStreak++; i--; } else break;
-        }
-      }
-
-      const lastDate = dates.length > 0 ? dates[dates.length - 1] : null;
-      let lastSolvedDate = null;
-      if (lastDate) {
-        const [ty, tm, td] = lastDate.split('-').map(Number);
-        lastSolvedDate = new Date(Date.UTC(ty, tm - 1, td, 0, 0, 0));
-      }
-
-      const updated = await Settings.findOneAndUpdate(
-        { key: 'global' },
-        { $set: { activeDays, currentStreak, maxStreak, lastSolvedDate } },
-        { returnDocument: 'after', upsert: true }
+    // Soft-delete any matching Submission (by leetcodeLink slug or title match)
+    // Extract slug from leetcodeLink if available
+    const slugMatch = problem.leetcodeLink?.match(/problems\/([^/]+)/);
+    if (slugMatch) {
+      await Submission.updateMany(
+        { slug: slugMatch[1].toLowerCase() },
+        { $set: { isDeleted: true } }
       );
-      streakData = streakPayload(updated);
     }
 
-    res.json({ success: true, data: problem, streak: streakData });
+    // Rebuild streak from remaining non-deleted solved problems (backend = single source of truth)
+    let streakData = null;
+    if (problem.solved) {
+      streakData = await rebuildStreak();
+    }
+
+    res.json({ success: true, data: { id: problem.id, title: problem.title }, streak: streakData });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to delete problem', message: err.message });
   }
@@ -421,9 +459,9 @@ exports.deleteProblem = async (req, res) => {
 exports.getRevisionList = async (req, res) => {
   try {
     const now = new Date();
-    const problems = await Problem.find({ solved: true });
+    const problems = await Problem.find({ solved: true, isDeleted: { $ne: true } });
     const list = problems.filter(p => {
-      if (!p.nextRevisionAt) return false; // not yet scheduled
+      if (!p.nextRevisionAt) return false;
       return now >= new Date(p.nextRevisionAt);
     });
     res.json({ success: true, count: list.length, data: list });
@@ -437,7 +475,7 @@ exports.getRevisionList = async (req, res) => {
 exports.getSuggestions = async (req, res) => {
   try {
     const now = new Date();
-    const problems = await Problem.find({ solved: true });
+    const problems = await Problem.find({ solved: true, isDeleted: { $ne: true } });
 
     // Compute topic weakness scores
     const topicStats = {};
@@ -520,7 +558,7 @@ exports.getSuggestions = async (req, res) => {
 // ─── GET /api/problems/stats ──────────────────────────────────────────────────
 exports.getStats = async (req, res) => {
   try {
-    const problems = await Problem.find();
+    const problems = await Problem.find({ isDeleted: { $ne: true } });
     const total = problems.length;
     const solved = problems.filter(p => p.solved).length;
 
@@ -608,7 +646,7 @@ exports.alignProblems = async (req, res) => {
 // ─── PATCH /api/problems/:id/striver ─────────────────────────────────────────
 exports.toggleStriver = async (req, res) => {
   try {
-    const problem = await Problem.findOne({ id: parseInt(req.params.id) });
+    const problem = await Problem.findOne({ id: parseInt(req.params.id), isDeleted: { $ne: true } });
     if (!problem) return res.status(404).json({ success: false, error: 'Problem not found' });
 
     problem.isStriver = !problem.isStriver;
@@ -668,7 +706,7 @@ exports.markStriverProblems = async (req, res) => {
 // ─── GET /api/problems/striver-stats ─────────────────────────────────────────
 exports.getStriverStats = async (req, res) => {
   try {
-    const problems = await Problem.find({ isStriver: true, solved: true });
+    const problems = await Problem.find({ isStriver: true, solved: true, isDeleted: { $ne: true } });
     const easy   = problems.filter(p => p.difficulty === 'Easy').length;
     const medium = problems.filter(p => p.difficulty === 'Medium').length;
     const hard   = problems.filter(p => p.difficulty === 'Hard').length;
@@ -677,3 +715,6 @@ exports.getStriverStats = async (req, res) => {
     res.status(500).json({ success: false, error: 'Failed to fetch striver stats', message: err.message });
   }
 };
+
+// ─── Export rebuildStreak for use by other controllers ────────────────────────
+exports.rebuildStreak = rebuildStreak;

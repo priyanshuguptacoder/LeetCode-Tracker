@@ -102,6 +102,20 @@ mongoose
       console.warn('[BACKFILL] lastSubmittedAt backfill failed:', e.message);
     }
 
+    // Backfill: set isDeleted=false on all existing docs that predate the soft-delete field
+    try {
+      const Problem    = require('./models/Problem');
+      const Submission = require('./models/Submission');
+      const [pr, sr] = await Promise.all([
+        Problem.updateMany({ isDeleted: { $exists: false } }, { $set: { isDeleted: false } }),
+        Submission.updateMany({ isDeleted: { $exists: false } }, { $set: { isDeleted: false } }),
+      ]);
+      if (pr.modifiedCount > 0) console.log(`[BACKFILL] isDeleted=false on ${pr.modifiedCount} Problems`);
+      if (sr.modifiedCount > 0) console.log(`[BACKFILL] isDeleted=false on ${sr.modifiedCount} Submissions`);
+    } catch (e) {
+      console.warn('[BACKFILL] isDeleted backfill failed:', e.message);
+    }
+
     app.listen(PORT, () => {
       console.log(`[INIT] Server running on port ${PORT}`);
       console.log('[INIT] Key endpoints:');

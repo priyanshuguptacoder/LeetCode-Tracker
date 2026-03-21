@@ -26,6 +26,9 @@ const submissionSchema = new mongoose.Schema(
       default: [],
     },
 
+    // ── Soft delete / User Intent Lock ────────────────────────────────────────
+    isDeleted: { type: Boolean, default: false, index: true },
+
     // ── Spaced Repetition (SM-2) ──────────────────────────────────────────────
     easeFactor:   { type: Number, default: 2.5 },
     interval:     { type: Number, default: 1 },

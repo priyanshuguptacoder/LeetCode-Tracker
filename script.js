@@ -1602,21 +1602,14 @@ function App() {
       try {
         const response = await window.API.deleteProblem(number);
         if (response.success) {
-          // Remove from local state — all useMemo stats (striverStats, etc.) recompute automatically
+          // Remove from local state — all useMemo stats recompute automatically
           setApiProblems(prev => prev.filter(p => p.number !== number));
-          // If deleted problem was solved, recompute streak from the post-delete dataset
+          // Refetch streak from backend (single source of truth after soft-delete + rebuild)
           if (problem && problem.status === 'Done') {
-            // Use ref to get fresh state even after admin modal delay
-            const remainingDates = apiProblemsRef.current
-              .filter(p => p.number !== number && p.status === 'Done' && p._solvedDateISO)
-              .map(p => p._solvedDateISO);
-            const computed = computeStreakFromDates(remainingDates);
-            setDbStreak(s => ({
-              ...s,
-              activeDays:    computed.activeDays,
-              currentStreak: computed.currentStreak,
-              maxStreak:     computed.maxStreak,
-            }));
+            try {
+              const streakRes = await window.API.getStreak();
+              if (streakRes.success) setDbStreak(streakRes.data);
+            } catch (_) {}
           }
           showNotification(`✅ Problem #${number} deleted`, 'success');
         }
