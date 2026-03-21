@@ -18,6 +18,7 @@ const {
   alignProblems,
   getStreak,
   updateStreak,
+  resetStreakAuto,
   getRevisionList,
   getSuggestions,
 } = require('../controllers/problemController');
@@ -27,6 +28,7 @@ router.get('/stats', getStats);
 router.get('/settings', getSettings);
 router.get('/streak', getStreak);
 router.put('/streak', updateStreak);
+router.post('/streak/reset', resetStreakAuto);
 router.get('/striver-stats', getStriverStats);
 router.get('/revision-list', getRevisionList);
 router.get('/suggestions', getSuggestions);

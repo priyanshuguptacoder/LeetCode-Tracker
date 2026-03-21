@@ -15,6 +15,7 @@ const settingsSchema = new mongoose.Schema(
     activeDays:    { type: Number, default: 0, min: 0 },
     lastSolvedDate: { type: Date, default: null },
     isSetup: { type: Boolean, default: false }, // true after first manual setup
+    isManualOverride: { type: Boolean, default: false }, // true = rebuildStreak is locked
   },
   { timestamps: true }
 );
