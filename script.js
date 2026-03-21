@@ -785,6 +785,7 @@ function App() {
 
   // Transform MongoDB schema → frontend schema
   const transformProblems = (data) => (data || []).map(p => {
+    if (!p) return null;
     const solvedDateISO = p.solvedDate
       ? toLocalDateStr(new Date(p.solvedDate))
       : parseDDMMM(p.date);
@@ -798,6 +799,7 @@ function App() {
       topics: topics,
       pattern: topics[0] || (p.pattern || 'Miscellaneous'),
       link: p.leetcodeLink || p.link || '',
+      providerTitle: p?.providerTitle || 'LeetCode',
       _solvedDateISO: solvedDateISO,
       submittedAt: p.submittedAt || p.solvedDate || null, // timestamp for sorting Recently Solved
       targeted: p.targeted || false,
@@ -815,7 +817,7 @@ function App() {
       consecutiveSuccess: p.consecutiveSuccess || 0,
       failureLoopFlagged: p.failureLoopFlagged || false,
     };
-  });
+  }).filter(Boolean);
 
   // Fetch problems + streak from API on mount
   useEffect(() => {
@@ -826,7 +828,9 @@ function App() {
           window.API.getAllProblems(),
           window.API.getStreak(),
         ]);
-        if (probRes.success) setApiProblems(transformProblems(probRes.data));
+        if (probRes.success) {
+          setApiProblems(transformProblems(probRes.data));
+        }
         if (streakRes.success) setDbStreak(streakRes.data);
         setLoading(false);
         // Non-blocking secondary fetches
@@ -3065,6 +3069,7 @@ function App() {
 
           // Merge backend data with full problem data from allProblems for extra fields
           const enrichProblem = (p) => {
+            if (!p) return null;
             const full = allProblems.find(ap => ap.number === (p.id || p.number)) || {};
             return {
               ...p,
@@ -3074,11 +3079,12 @@ function App() {
               revisionCount: full.revisionCount ?? p.revisionCount ?? 0,
               lastRevisedAt: full.lastRevisedAt ?? p.lastRevisedAt ?? null,
               link: p.leetcodeLink || full.link || `https://leetcode.com/problems/${p.id}/`,
+              providerTitle: p?.providerTitle || full?.providerTitle || 'LeetCode',
             };
           };
 
-          const enrichedRecent = recentProblems.map(enrichProblem);
-          const enrichedToday  = todayProblems.map(enrichProblem);
+          const enrichedRecent = (recentProblems || []).map(enrichProblem).filter(Boolean);
+          const enrichedToday  = (todayProblems  || []).map(enrichProblem).filter(Boolean);
 
           // Status badge for recently solved cards
           const solveStatus = (lastSubmittedAt) => {
