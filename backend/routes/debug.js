@@ -9,15 +9,17 @@ const {
   manualTest,
   runAll,
   validate,
+  debugStats,
 } = require('../controllers/debugController');
 
-router.get('/health',               health);        // DB + LeetCode API + env
-router.get('/test/leetcode',        testLeetCode);  // live LeetCode GraphQL test
-router.get('/debug/db-check',       dbCheck);       // counts, dupes, missing fields
-router.get('/debug/count-check',    countCheck);    // Problem vs Submission count consistency
-router.get('/debug/frontend-check', frontendCheck); // total + latest 5
-router.post('/debug/manual-test',   manualTest);    // insert + merge + assert
-router.post('/debug/run-all',       runAll);        // full system validation
-router.post('/debug/validate',      validate);      // 10-case validation suite
+router.get('/health',               health);
+router.get('/test/leetcode',        testLeetCode);
+router.get('/debug/db-check',       dbCheck);
+router.get('/debug/count-check',    countCheck);
+router.get('/debug/frontend-check', frontendCheck);
+router.get('/debug/stats',          debugStats);
+router.post('/debug/manual-test',   manualTest);
+router.post('/debug/run-all',       runAll);
+router.post('/debug/validate',      validate);
 
 module.exports = router;

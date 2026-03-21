@@ -1,8 +1,9 @@
-// updated: providerTitle always set on sync, isManualOverride streak guard
+// updated: providerTitle always set on sync
 const axios      = require('axios');
 const Problem    = require('../models/Problem');
 const Submission = require('../models/Submission');
 const { rebuildStreak } = require('./problemController');
+const { getUTCDayKey }  = require('../utils/statsEngine');
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // IN-MEMORY CACHE  (slug → full problem object)
@@ -262,7 +263,7 @@ async function syncToProblemCollection(sub) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// UTC DATE HELPERS
+// UTC DATE HELPERS — day start/end for today queries
 // ═══════════════════════════════════════════════════════════════════════════════
 function getUTCDayStart(date = new Date()) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0));
@@ -272,27 +273,39 @@ function getUTCDayEnd(date = new Date()) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 23, 59, 59, 999));
 }
 
-function getUTCKey(date) {
-  return new Date(date).toISOString().split('T')[0]; // YYYY-MM-DD
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
-// STREAK COMPUTATION
+// STREAK COMPUTATION — pure UTC, walk-back algorithm (uses statsEngine getUTCDayKey)
 // ═══════════════════════════════════════════════════════════════════════════════
 function computeStreaks(submissions) {
   if (!submissions.length) return { currentStreak: 0, longestStreak: 0, totalDays: 0 };
-  const days = [...new Set(submissions.map(s => getUTCKey(s.dateSolved)))].sort();
 
-  let streak = 1, longestStreak = 1;
-  for (let i = 1; i < days.length; i++) {
-    const diff = (new Date(days[i]) - new Date(days[i - 1])) / 86400000;
-    if (diff === 1) { streak++; longestStreak = Math.max(longestStreak, streak); }
-    else streak = 1;
+  const todayKey = getUTCDayKey(new Date());
+  const daySet   = new Set(
+    submissions
+      .map(s => getUTCDayKey(s.dateSolved))
+      .filter(k => k && k <= todayKey)
+  );
+
+  const sortedKeys = [...daySet].sort();
+
+  // Longest streak
+  let longestStreak = 1, temp = 1;
+  for (let i = 1; i < sortedKeys.length; i++) {
+    const diff = (new Date(sortedKeys[i] + 'T00:00:00Z') - new Date(sortedKeys[i - 1] + 'T00:00:00Z')) / 86400000;
+    if (diff === 1) { temp++; longestStreak = Math.max(longestStreak, temp); }
+    else temp = 1;
   }
-  const lastDay  = new Date(days[days.length - 1]);
-  const todayUTC = getUTCDayStart();
-  const diffDays = Math.floor((todayUTC - lastDay) / 86400000);
-  return { currentStreak: diffDays <= 1 ? streak : 0, longestStreak, totalDays: days.length };
+  longestStreak = Math.max(longestStreak, temp);
+
+  // Current streak — walk back from today
+  let currentStreak = 0;
+  let cursor = new Date(todayKey + 'T00:00:00Z');
+  while (daySet.has(getUTCDayKey(cursor))) {
+    currentStreak++;
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
+  }
+
+  return { currentStreak, longestStreak, totalDays: daySet.size };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -434,16 +447,10 @@ async function syncRecentSubmissions() {
     }
   }
 
-  // Step 3: Rebuild streak from DB after any insertions — skip if manual override is active
+  // Step 3: Rebuild streak from DB after any insertions
   if (inserted > 0) {
     try {
-      const Settings = require('../models/Settings');
-      const s = await Settings.findOne({ key: 'global' });
-      if (!s || !s.isManualOverride) {
-        await rebuildStreak();
-      } else {
-        console.log('[SKIPPED] Manual override active — streak rebuild skipped after sync');
-      }
+      await rebuildStreak();
     } catch (e) {
       console.warn('[SYNC] Streak rebuild failed:', e.message);
     }

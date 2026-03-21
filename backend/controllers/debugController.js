@@ -2,6 +2,7 @@ const mongoose   = require('mongoose');
 const axios      = require('axios');
 const Submission = require('../models/Submission');
 const Problem    = require('../models/Problem');
+const { computeStats } = require('../utils/statsEngine');
 
 // ─── Timing helper ────────────────────────────────────────────────────────────
 async function timed(label, fn) {
@@ -768,4 +769,39 @@ exports.validate = async (req, res) => {
     all_passed: allPassed,
     tests:      suite.tests,
   });
+};
+
+// ─── GET /api/debug/stats ─────────────────────────────────────────────────────
+// Full computeStats output — single source of truth diagnostic endpoint.
+// Returns: totalProblems, activeDays, currentStreak, maxStreak, daysTracked,
+//          startDate, todayKey, gaps, days, consistency, isValid, errors
+exports.debugStats = async (req, res) => {
+  try {
+    const problems = await Problem.find(
+      { solved: true, isDeleted: { $ne: true }, solvedDate: { $ne: null } },
+      { solvedDate: 1 }
+    ).lean();
+
+    const stats = computeStats(problems);
+    const totalProblems = await Problem.countDocuments({ solved: true, isDeleted: { $ne: true } });
+
+    res.json({
+      success: true,
+      totalProblems,
+      activeDays:    stats.activeDays,
+      currentStreak: stats.currentStreak,
+      maxStreak:     stats.maxStreak,
+      daysTracked:   stats.daysTracked,
+      consistency:   stats.consistency,
+      startDate:     stats.startDate,
+      todayKey:      stats.todayKey,
+      days:          stats.days,
+      gaps:          stats.gaps,
+      isValid:       stats.isValid,
+      errors:        stats.errors,
+    });
+  } catch (err) {
+    console.error(`[ERROR] debug/stats: ${err.message}`);
+    res.status(500).json({ success: false, error: err.message });
+  }
 };

@@ -18,18 +18,18 @@ const {
   getSettings,
   alignProblems,
   getStreak,
-  updateStreak,
   resetStreakAuto,
   getRevisionList,
   getSuggestions,
+  validateStreak,
 } = require('../controllers/problemController');
 
 // Static routes MUST come before /:id
 router.get('/stats', getStats);
 router.get('/settings', getSettings);
 router.get('/streak', getStreak);
-router.put('/streak', updateStreak);
 router.post('/streak/reset', resetStreakAuto);
+router.get('/streak/validate', validateStreak);
 router.get('/striver-stats', getStriverStats);
 router.get('/revision-list', getRevisionList);
 router.get('/suggestions', getSuggestions);

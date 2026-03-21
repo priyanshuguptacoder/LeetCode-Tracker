@@ -1,17 +1,28 @@
-// updated: streak reads from Settings document (isManualOverride support)
-const Settings = require('../models/Settings');
+const Problem = require('../models/Problem');
+const { computeStats } = require('../utils/statsEngine');
 
-// GET /api/analytics/streak — returns trusted streak values from Settings document
+// GET /api/analytics/streak — always computed from problem dates, never from stored fields
 exports.getStreak = async (req, res) => {
   try {
-    let s = await Settings.findOne({ key: 'global' });
-    if (!s) s = await Settings.create({ key: 'global', currentStreak: 0, activeDays: 0, maxStreak: 0, isManualOverride: false });
+    const problems = await Problem.find(
+      { solved: true, isDeleted: { $ne: true }, solvedDate: { $ne: null } },
+      { solvedDate: 1 }
+    ).lean();
+
+    const stats = computeStats(problems);
+
+    if (!stats.isValid) {
+      return res.status(500).json({ success: false, error: 'Stats invariant violation', errors: stats.errors });
+    }
+
     res.json({
-      success: true,
-      currentStreak:    s.currentStreak,
-      activeDays:       s.activeDays,
-      maxStreak:        s.maxStreak,
-      isManualOverride: s.isManualOverride,
+      success:       true,
+      currentStreak: stats.currentStreak,
+      maxStreak:     stats.maxStreak,
+      activeDays:    stats.activeDays,
+      daysTracked:   stats.daysTracked,
+      consistency:   stats.consistency,
+      startDate:     stats.startDate,
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

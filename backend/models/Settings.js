@@ -14,9 +14,12 @@ const settingsSchema = new mongoose.Schema(
     currentStreak: { type: Number, default: 0, min: 0 },
     maxStreak:     { type: Number, default: 0, min: 0 },
     activeDays:    { type: Number, default: 0, min: 0 },
+    daysTracked:   { type: Number, default: 0, min: 0 },  // today - startDate + 1
+    consistency:   { type: Number, default: 0, min: 0 },  // activeDays/daysTracked * 100
+    startDate:     { type: Date,   default: null },        // earliest UTC solve date
     lastSolvedDate: { type: Date, default: null },
-    isSetup: { type: Boolean, default: false }, // true after first manual setup
-    isManualOverride: { type: Boolean, default: false }, // true = rebuildStreak is locked
+    isSetup: { type: Boolean, default: false },
+    isManualOverride: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

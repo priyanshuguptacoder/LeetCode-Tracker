@@ -546,37 +546,39 @@ function PwModal({ modal, adminPassword, onClose }) {
 // PURE HELPERS — module-level, no React deps
 // ============================================
 
-// Recompute streak/activeDays from an array of YYYY-MM-DD date strings.
+// Recompute streak/activeDays from an array of YYYY-MM-DD UTC date strings.
 // Used after delete to keep dbStreak display in sync without a DB round-trip.
 function computeStreakFromDates(dateStrings) {
-  // Parse YYYY-MM-DD as UTC midnight
-  const parseUTC = (s) => new Date(`${s}T00:00:00.000Z`);
-  const unique = [...new Set(dateStrings.filter(Boolean))].sort();
-  const activeDays = unique.length;
+  const parseUTC = (s) => new Date(s + 'T00:00:00Z');
+  const now      = new Date();
+  const todayKey = now.getUTCFullYear() + '-' +
+    String(now.getUTCMonth() + 1).padStart(2, '0') + '-' +
+    String(now.getUTCDate()).padStart(2, '0');
+
+  const daySet = new Set(dateStrings.filter(Boolean).filter(k => k <= todayKey));
+  const activeDays = daySet.size;
   if (activeDays === 0) return { activeDays: 0, currentStreak: 0, maxStreak: 0 };
 
-  // Max streak
+  const unique = [...daySet].sort();
+
+  // Longest streak
   let maxStreak = 1, tempStreak = 1;
   for (let i = 1; i < unique.length; i++) {
-    const diff = Math.round((parseUTC(unique[i]) - parseUTC(unique[i-1])) / 86400000);
-    if (diff === 1) { tempStreak++; } else { maxStreak = Math.max(maxStreak, tempStreak); tempStreak = 1; }
+    const diff = Math.round((parseUTC(unique[i]) - parseUTC(unique[i - 1])) / 86400000);
+    if (diff === 1) { tempStreak++; maxStreak = Math.max(maxStreak, tempStreak); }
+    else { maxStreak = Math.max(maxStreak, tempStreak); tempStreak = 1; }
   }
   maxStreak = Math.max(maxStreak, tempStreak);
 
-  // Current streak — consecutive days ending today or yesterday (UTC)
-  const now      = new Date();
-  const todayUTC = now.toISOString().split('T')[0];
-  const yestDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1));
-  const yesterdayUTC = yestDate.toISOString().split('T')[0];
-  const lastDate = unique[unique.length - 1];
+  // Current streak — walk back from today
   let currentStreak = 0;
-  if (lastDate === todayUTC || lastDate === yesterdayUTC) {
-    let i = unique.length - 1;
-    currentStreak = 1;
-    while (i > 0) {
-      const diff = Math.round((parseUTC(unique[i]) - parseUTC(unique[i-1])) / 86400000);
-      if (diff === 1) { currentStreak++; i--; } else break;
-    }
+  let cursor = new Date(todayKey + 'T00:00:00Z');
+  while (true) {
+    const key = cursor.getUTCFullYear() + '-' +
+      String(cursor.getUTCMonth() + 1).padStart(2, '0') + '-' +
+      String(cursor.getUTCDate()).padStart(2, '0');
+    if (daySet.has(key)) { currentStreak++; cursor.setUTCDate(cursor.getUTCDate() - 1); }
+    else break;
   }
 
   return { activeDays, currentStreak, maxStreak };
@@ -643,8 +645,7 @@ function App() {
   // ============================================
   // API DATA FETCHING
   // Backend is the SINGLE SOURCE OF TRUTH for all problem data.
-  // solvedDates, streak, activeDays are derived from apiProblems via useMemo.
-  // manualStats in localStorage allows manual override of streak/activeDays.
+  // All streak/activeDays/consistency are computed from problem dates.
   // ============================================
   
   const [apiProblems, setApiProblems] = useState([]);
@@ -674,8 +675,6 @@ function App() {
     lastSolvedDate: null,
     isSetup: false,
   });
-
-  // UTC date helpers — all date math uses UTC to match LeetCode and MongoDB
   const toLocalDateStr = (date) => {
     // Returns YYYY-MM-DD in UTC — used as the canonical date key throughout the app
     return new Date(date).toISOString().split('T')[0];
@@ -862,28 +861,11 @@ function App() {
   }, []);
 
   // ============================================
-  // LOCAL STATE — only data that has no backend equivalent
-  // manualStats allows manual override of streak/activeDays.
-  // Everything else (problems, solved dates, streaks) comes from apiProblems.
+  // LOCAL STATE — UI-only, no backend equivalent
+  // All streak/activeDays/consistency are computed from problem dates.
   // ============================================
 
-  const getInitialState = () => {
-    try {
-      const saved = localStorage.getItem('priyanshu-leetcode-state');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return {
-          manualStats: parsed.manualStats || { currentStreak: null, maxStreak: null, activeDays: null },
-        };
-      }
-    } catch (error) {
-      console.error('Error loading state from localStorage:', error);
-      localStorage.removeItem('priyanshu-leetcode-state');
-    }
-    return { manualStats: { currentStreak: null, maxStreak: null, activeDays: null } };
-  };
-
-  const [state, setState] = useState(getInitialState());
+  const [state, setState] = useState({});
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('theme');
     return saved ? saved === 'dark' : true; // default dark
@@ -901,7 +883,6 @@ function App() {
   const [patternFilter, setPatternFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
   const [showModal, setShowModal] = useState(false);
-  const [showAlignmentModal, setShowAlignmentModal] = useState(false);
   const [notification, setNotification] = useState(null);
   const [syncing, setSyncing] = useState(false);
 
@@ -2051,18 +2032,10 @@ function App() {
     return items;
   }, [coachingMetrics, easyCount, mediumCount, hardCount]);
 
-  // Resolved display values:
-  // Priority: dbStreak (from MongoDB) > manualStats (localStorage override) > computed from solvedDates
-  // Once isSetup=true, dbStreak is always authoritative.
-  const computedActiveDays = Object.values(solvedDates).filter(Boolean).length
-    ? new Set(Object.values(solvedDates).filter(Boolean)).size
-    : 0;
-  const displayCurrentStreak = dbStreak.isSetup ? dbStreak.currentStreak
-    : (state.manualStats?.currentStreak != null ? state.manualStats.currentStreak : 0);
-  const displayMaxStreak = dbStreak.isSetup ? dbStreak.maxStreak
-    : (state.manualStats?.maxStreak != null ? state.manualStats.maxStreak : 0);
-  const displayActiveDays = dbStreak.isSetup ? dbStreak.activeDays
-    : (state.manualStats?.activeDays != null ? state.manualStats.activeDays : computedActiveDays);
+  // Streak display — always from dbStreak (computed from problem dates on backend)
+  const displayCurrentStreak = dbStreak.currentStreak ?? 0;
+  const displayMaxStreak     = dbStreak.maxStreak     ?? 0;
+  const displayActiveDays    = dbStreak.activeDays    ?? 0;
 
   // Advanced Analytics
   const consistencyScore = React.useMemo(() => {
@@ -2639,13 +2612,6 @@ function App() {
           <div className="streak-card">
             <div className="streak-header">
               <h3 className="card-title">🔥 Streak Stats</h3>
-              <button
-                className="btn-align-activity"
-                onClick={() => setShowAlignmentModal(true)}
-                title={dbStreak.isSetup ? 'Edit streak stats' : 'Initial setup — set your streak'}
-              >
-                {dbStreak.isSetup ? '✏️ Edit' : '⚙️ Setup'}
-              </button>
             </div>
             {/* Streak stats — read-only display, values come from DB */}
             <div className="streak-stats">
@@ -3967,104 +3933,6 @@ function App() {
           onClose={() => setRevisionModal(null)}
         />
       )}
-
-      {/* Manual Stats Modal */}
-      {showAlignmentModal && (() => {
-        const isDbSetup = dbStreak.isSetup;
-        const ms = state.manualStats || {};
-
-        const handleSave = async (e) => {
-          e.preventDefault();
-          const form = e.target;
-          const parse = (name) => {
-            const v = form[name].value.trim();
-            return v === '' ? null : parseInt(v);
-          };
-          const cs = parse('currentStreak');
-          const mx = parse('maxStreak');
-          const ad = parse('activeDays');
-
-          if (cs === null || mx === null || ad === null) {
-            showNotification('❌ All three fields are required', 'error'); return;
-          }
-          if (cs < 0 || mx < 0 || ad < 0) {
-            showNotification('❌ Values must be ≥ 0', 'error'); return;
-          }
-          if (mx < cs) {
-            showNotification('❌ Max Streak must be ≥ Current Streak', 'error'); return;
-          }
-          if (ad < cs) {
-            showNotification('❌ Active Days must be ≥ Current Streak', 'error'); return;
-          }
-
-          try {
-            const payload = { currentStreak: cs, maxStreak: mx, activeDays: ad };
-            if (isDbSetup) payload.force = true; // editing after setup
-            const res = await window.API.updateStreak(payload);
-            if (res.success) {
-              setDbStreak(res.data);
-              // Also clear any localStorage manual overrides — DB is now authoritative
-              setState(prev => ({ ...prev, manualStats: { currentStreak: null, maxStreak: null, activeDays: null } }));
-              setShowAlignmentModal(false);
-              showNotification('✓ Stats saved to database', 'success');
-            }
-          } catch (err) {
-            showNotification(`❌ ${err.message}`, 'error');
-          }
-        };
-
-        return (
-          <div className="modal-overlay" onClick={() => setShowAlignmentModal(false)}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-              <div className="modal-header">
-                <h2>{isDbSetup ? '✏️ Edit Stats' : '⚙️ Initial Setup — Set Your Stats'}</h2>
-                <button className="modal-close" onClick={() => setShowAlignmentModal(false)}>×</button>
-              </div>
-              <form onSubmit={handleSave}>
-                <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  {!isDbSetup && (
-                    <div className="form-hint" style={{ background: 'rgba(99,102,241,0.1)', padding: '0.6rem 0.8rem', borderRadius: '8px' }}>
-                      🚀 First-time setup — enter your current stats from LeetCode. After this, streak updates automatically when you add solved problems.
-                    </div>
-                  )}
-                  {isDbSetup && (
-                    <div className="form-hint" style={{ background: 'rgba(245,158,11,0.1)', padding: '0.6rem 0.8rem', borderRadius: '8px' }}>
-                      ⚠️ Stats are auto-managed. Only edit if you need to correct a mistake.
-                    </div>
-                  )}
-                  <div className="form-group">
-                    <label className="form-label">Current Streak (days)</label>
-                    <input name="currentStreak" type="number" min="0" className="form-input"
-                      defaultValue={isDbSetup ? dbStreak.currentStreak : (ms.currentStreak != null ? ms.currentStreak : '')}
-                      placeholder="e.g. 12" required />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Max Streak (days)</label>
-                    <input name="maxStreak" type="number" min="0" className="form-input"
-                      defaultValue={isDbSetup ? dbStreak.maxStreak : (ms.maxStreak != null ? ms.maxStreak : '')}
-                      placeholder="e.g. 30" required />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Active Days</label>
-                    <input name="activeDays" type="number" min="0" className="form-input"
-                      defaultValue={isDbSetup ? dbStreak.activeDays : (ms.activeDays != null ? ms.activeDays : '')}
-                      placeholder="e.g. 45" required />
-                  </div>
-                  <div className="form-hint">
-                    💡 Rules: Max Streak ≥ Current Streak, Active Days ≥ Current Streak
-                  </div>
-                </div>
-                <div className="modal-footer">
-                  <button type="button" className="btn-secondary" onClick={() => setShowAlignmentModal(false)}>Cancel</button>
-                  <button type="submit" className="btn-primary">✓ Save to Database</button>
-                </div>
-              </form>
-            </div>
-          </div>
-        );
-      })()}
-
-
 
       {/* Scroll buttons */}
       <div className="scroll-btns">

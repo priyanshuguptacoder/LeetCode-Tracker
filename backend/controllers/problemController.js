@@ -1,173 +1,81 @@
-// updated: providerTitle hardening, isManualOverride streak lock, resetStreakAuto
-const Problem = require('../models/Problem');
+// updated: providerTitle hardening, streak computed from statsEngine
+const Problem    = require('../models/Problem');
 const Submission = require('../models/Submission');
-const Settings = require('../models/Settings');
+const Settings   = require('../models/Settings');
+const { computeStats, getUTCDayKey } = require('../utils/statsEngine');
 
-// ─── UTC date helpers ─────────────────────────────────────────────────────────
-function todayStr() {
-  return new Date().toISOString().split('T')[0]; // YYYY-MM-DD UTC
-}
+// ─── todayUTCKey — thin wrapper used by applyStreakUpdate ─────────────────────
+function todayUTCKey() { return getUTCDayKey(new Date()); }
 
-function dateStr(date) {
-  if (!date) return null;
-  return new Date(date).toISOString().split('T')[0]; // YYYY-MM-DD UTC
-}
-
-// Calendar-day difference between two YYYY-MM-DD strings (b minus a), UTC-safe
-function dayDiff(a, b) {
-  return Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000);
-}
-
-// ─── STREAK REBUILD — backend single source of truth ─────────────────────────
+// ─── STREAK REBUILD — delegates to statsEngine, writes result to Settings ─────
 // Called after: delete, sync, manual add/update.
-// Reads all non-deleted solved problems, computes streak, writes to Settings.
-// SKIPPED if isManualOverride is true — manual values are preserved.
 async function rebuildStreak() {
-  let s = await Settings.findOne({ key: 'global' });
-  if (!s) {
-    s = await Settings.create({ key: 'global', currentStreak: 0, activeDays: 0, maxStreak: 0, isManualOverride: false });
-  }
-  if (s.isManualOverride) {
-    console.log('[STREAK LOCKED] Skipping rebuild — manual override active');
-    return { currentStreak: s.currentStreak, activeDays: s.activeDays, maxStreak: s.maxStreak };
-  }
-
   const problems = await Problem.find(
     { solved: true, isDeleted: { $ne: true }, solvedDate: { $ne: null } },
     { solvedDate: 1 }
   ).lean();
 
-  const dates = [...new Set(
-    problems.map(p => dateStr(p.solvedDate)).filter(Boolean)
-  )].sort();
+  const stats = computeStats(problems);
 
-  const activeDays = dates.length;
-  if (activeDays === 0) {
-    s = await Settings.findOneAndUpdate(
-      { key: 'global' },
-      { $set: { currentStreak: 0, maxStreak: 0, activeDays: 0, lastSolvedDate: null } },
-      { new: true, upsert: true }
-    );
-    return streakPayload(s);
+  if (!stats.isValid) {
+    console.error('[STREAK REBUILD] Invariant violations:', stats.errors);
   }
 
-  // Max streak
-  let maxStreak = 1, tempStreak = 1;
-  for (let i = 1; i < dates.length; i++) {
-    if (dayDiff(dates[i - 1], dates[i]) === 1) { tempStreak++; maxStreak = Math.max(maxStreak, tempStreak); }
-    else tempStreak = 1;
-  }
-  maxStreak = Math.max(maxStreak, tempStreak);
+  const lastSolvedDate = stats.days.length > 0
+    ? new Date(stats.days[stats.days.length - 1] + 'T00:00:00Z')
+    : null;
 
-  // Current streak — consecutive days ending today or yesterday (UTC)
-  const todayUTC = todayStr();
-  const yesterdayUTC = dateStr(new Date(Date.now() - 86400000));
-  let currentStreak = 0;
-  const lastDate = dates[dates.length - 1];
-  if (lastDate === todayUTC || lastDate === yesterdayUTC) {
-    currentStreak = 1;
-    let i = dates.length - 1;
-    while (i > 0 && dayDiff(dates[i - 1], dates[i]) === 1) { currentStreak++; i--; }
-  }
-
-  const [ty, tm, td] = lastDate.split('-').map(Number);
-  const lastSolvedDate = new Date(Date.UTC(ty, tm - 1, td, 0, 0, 0));
-
-  s = await Settings.findOneAndUpdate(
+  await Settings.findOneAndUpdate(
     { key: 'global' },
-    { $set: { currentStreak, maxStreak, activeDays, lastSolvedDate } },
-    { new: true, upsert: true }
+    {
+      $set: {
+        currentStreak: stats.currentStreak,
+        maxStreak:     stats.maxStreak,
+        activeDays:    stats.activeDays,
+        daysTracked:   stats.daysTracked,
+        consistency:   stats.consistency,
+        startDate:     stats.startDate ? new Date(stats.startDate + 'T00:00:00Z') : null,
+        lastSolvedDate,
+      },
+    },
+    { upsert: true }
   );
-  console.log(`[STREAK REBUILD] current=${currentStreak} max=${maxStreak} activeDays=${activeDays}`);
-  return streakPayload(s);
+
+  return stats;
 }
 
-// ─── Streak update — 3-case incremental logic (used on add/solve) ─────────────
-async function applyStreakUpdate(settings) {
-  const today = todayStr();
-  const last  = settings.lastSolvedDate ? dateStr(settings.lastSolvedDate) : null;
-  let { currentStreak, maxStreak, activeDays } = settings;
-
-  if (last === today) {
-    // CASE 1: already solved today — no change
-  } else if (last && dayDiff(last, today) === 1) {
-    // CASE 2: consecutive day — extend streak
-    currentStreak += 1;
-    activeDays    += 1;
-  } else {
-    // CASE 3: first solve ever OR gap > 1 day — reset streak to 1
-    currentStreak = 1;
-    activeDays   += 1;
-  }
-
-  if (currentStreak > maxStreak) maxStreak = currentStreak;
-  if (activeDays < currentStreak) activeDays = currentStreak;
-
-  const lastSolvedDate = new Date(`${today}T00:00:00.000Z`);
-  return Settings.findOneAndUpdate(
-    { key: 'global' },
-    { $set: { currentStreak, maxStreak, activeDays, lastSolvedDate } },
-    { new: true, upsert: true }
-  );
+// ─── applyStreakUpdate — incremental update after a single new solve ──────────
+// Runs a full rebuild so stats stay consistent with statsEngine.
+async function applyStreakUpdate() {
+  return rebuildStreak();
 }
 
-function streakPayload(s) {
+// ─── streakPayload — shapes stats for API responses ──────────────────────────
+function streakPayload(stats) {
   return {
-    currentStreak:  s.currentStreak,
-    maxStreak:      s.maxStreak,
-    activeDays:     s.activeDays,
-    lastSolvedDate: s.lastSolvedDate,
-    isSetup:        s.isSetup,
+    currentStreak:  stats.currentStreak  ?? 0,
+    maxStreak:      stats.maxStreak      ?? 0,
+    activeDays:     stats.activeDays     ?? 0,
+    daysTracked:    stats.daysTracked    ?? 0,
+    consistency:    stats.consistency    ?? 0,
+    startDate:      stats.startDate      ?? null,
   };
 }
 
 // ─── GET /api/problems/streak ─────────────────────────────────────────────────
 exports.getStreak = async (req, res) => {
   try {
-    let s = await Settings.findOne({ key: 'global' });
-    if (!s) s = await Settings.create({ key: 'global' });
-    res.json({ success: true, data: streakPayload(s) });
+    const problems = await Problem.find(
+      { solved: true, isDeleted: { $ne: true }, solvedDate: { $ne: null } },
+      { solvedDate: 1 }
+    ).lean();
+    const stats = computeStats(problems);
+    if (!stats.isValid) {
+      return res.status(500).json({ success: false, error: 'Stats invariant violation', errors: stats.errors });
+    }
+    res.json({ success: true, data: streakPayload(stats) });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to fetch streak', message: err.message });
-  }
-};
-
-// ─── PUT /api/problems/streak ─────────────────────────────────────────────────
-exports.updateStreak = async (req, res) => {
-  try {
-    const { currentStreak, maxStreak, activeDays, lastSolvedDate, force } = req.body;
-    let s = await Settings.findOne({ key: 'global' });
-    if (!s) s = await Settings.create({ key: 'global', currentStreak: 0, activeDays: 0, maxStreak: 0, isManualOverride: false });
-
-    if (s.isSetup && !force) {
-      return res.status(403).json({ success: false, error: 'Already set up. Pass force:true to override.' });
-    }
-
-    const cs = parseInt(currentStreak);
-    let ms   = parseInt(maxStreak);
-    const ad = parseInt(activeDays);
-
-    if (isNaN(cs) || cs < 0) return res.status(400).json({ success: false, error: 'currentStreak must be >= 0' });
-    if (isNaN(ad) || ad < 0) return res.status(400).json({ success: false, error: 'activeDays must be >= 0' });
-    if (isNaN(ms) || ms < 0) return res.status(400).json({ success: false, error: 'maxStreak must be >= 0' });
-
-    if (cs > ad) {
-      return res.status(400).json({ success: false, error: 'currentStreak cannot be greater than activeDays' });
-    }
-    if (ms < cs) ms = cs;
-
-    const updateFields = { currentStreak: cs, maxStreak: ms, activeDays: ad, isSetup: true, isManualOverride: true };
-    if (lastSolvedDate) updateFields.lastSolvedDate = new Date(lastSolvedDate);
-    if (!lastSolvedDate) updateFields.lastSolvedDate = new Date(`${todayStr()}T00:00:00.000Z`);
-
-    s = await Settings.findOneAndUpdate(
-      { key: 'global' },
-      { $set: updateFields },
-      { new: true, upsert: true }
-    );
-    res.json({ success: true, data: streakPayload(s) });
-  } catch (err) {
-    res.status(500).json({ success: false, error: 'Failed to update streak', message: err.message });
   }
 };
 
@@ -248,14 +156,8 @@ exports.createProblem = async (req, res) => {
 
     let streakData = null;
     if (isSolved) {
-      let s = await Settings.findOne({ key: 'global' });
-      if (!s) s = await Settings.create({ key: 'global' });
-      if (s.isSetup) {
-        const updated = await applyStreakUpdate(s);
-        streakData = streakPayload(updated);
-      } else {
-        streakData = streakPayload(s);
-      }
+      const updated = await applyStreakUpdate();
+      streakData = streakPayload(updated);
     }
     res.status(201).json({ success: true, data: problem, streak: streakData });
   } catch (err) {
@@ -288,14 +190,8 @@ exports.updateProblem = async (req, res) => {
     let streakData = null;
     const isNewlySolved = updates.solved === true && before.solved === false;
     if (isNewlySolved) {
-      let s = await Settings.findOne({ key: 'global' });
-      if (!s) s = await Settings.create({ key: 'global' });
-      if (s.isSetup) {
-        const updated = await applyStreakUpdate(s);
-        streakData = streakPayload(updated);
-      } else {
-        streakData = streakPayload(s);
-      }
+      const updated = await applyStreakUpdate();
+      streakData = streakPayload(updated);
     }
     res.json({ success: true, data: problem, streak: streakData });
   } catch (err) {
@@ -466,12 +362,7 @@ exports.deleteProblem = async (req, res) => {
     // Rebuild streak from remaining non-deleted solved problems (backend = single source of truth)
     let streakData = null;
     if (problem.solved) {
-      const settings = await Settings.findOne({ key: 'global' });
-      if (!settings || !settings.isManualOverride) {
-        streakData = await rebuildStreak();
-      } else {
-        streakData = { currentStreak: settings.currentStreak, activeDays: settings.activeDays, maxStreak: settings.maxStreak };
-      }
+      streakData = streakPayload(await rebuildStreak());
     }
 
     res.json({ success: true, data: { id: problem.id, title: problem.title }, streak: streakData });
@@ -743,15 +634,11 @@ exports.getStriverStats = async (req, res) => {
 };
 
 // ─── POST /api/problems/streak/reset ─────────────────────────────────────────
-// Clears isManualOverride and rebuilds streak from DB
+// Rebuilds streak from DB — always deterministic
 exports.resetStreakAuto = async (req, res) => {
   try {
-    let s = await Settings.findOne({ key: 'global' });
-    if (!s) s = await Settings.create({ key: 'global', currentStreak: 0, activeDays: 0, maxStreak: 0, isManualOverride: false });
-    s.isManualOverride = false;
-    await s.save();
     const rebuilt = await rebuildStreak();
-    res.json({ success: true, data: rebuilt });
+    res.json({ success: true, data: streakPayload(rebuilt) });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -759,3 +646,45 @@ exports.resetStreakAuto = async (req, res) => {
 
 // ─── Export rebuildStreak for use by other controllers ────────────────────────
 exports.rebuildStreak = rebuildStreak;
+
+// ─── GET /api/problems/streak/validate ───────────────────────────────────────
+// Validates streak correctness and lists all gap days explicitly.
+exports.validateStreak = async (req, res) => {
+  try {
+    const problems = await Problem.find(
+      { solved: true, isDeleted: { $ne: true }, solvedDate: { $ne: null } },
+      { solvedDate: 1 }
+    ).lean();
+
+    const stats = computeStats(problems);
+
+    // Compare with stored values
+    const stored = await Settings.findOne({ key: 'global' });
+    const storedMax     = stored?.maxStreak     ?? null;
+    const storedCurrent = stored?.currentStreak ?? null;
+    const storedActive  = stored?.activeDays    ?? null;
+
+    const isCorrect = storedMax === stats.maxStreak &&
+                      storedCurrent === stats.currentStreak &&
+                      storedActive  === stats.activeDays;
+
+    if (!isCorrect) {
+      console.log(`[VALIDATE] Mismatch — stored(current=${storedCurrent} max=${storedMax} active=${storedActive}) computed(current=${stats.currentStreak} max=${stats.maxStreak} active=${stats.activeDays})`);
+    } else {
+      console.log('[VALIDATE] Streak logic is CORRECT');
+    }
+
+    res.json({
+      success: true,
+      isCorrect,
+      computed: { currentStreak: stats.currentStreak, maxStreak: stats.maxStreak, activeDays: stats.activeDays },
+      stored:   { currentStreak: storedCurrent, maxStreak: storedMax, activeDays: storedActive },
+      days:         stats.days,
+      gaps:         stats.gaps,
+      totalGapDays: stats.gaps.length,
+      todayKey:     stats.todayKey,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
