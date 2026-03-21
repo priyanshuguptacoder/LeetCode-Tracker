@@ -43,7 +43,7 @@ async function rebuildStreak() {
 
   const activeDays = dates.length;
   if (activeDays === 0) {
-    const s = await Settings.findOneAndUpdate(
+    s = await Settings.findOneAndUpdate(
       { key: 'global' },
       { $set: { currentStreak: 0, maxStreak: 0, activeDays: 0, lastSolvedDate: null } },
       { new: true, upsert: true }
@@ -73,7 +73,7 @@ async function rebuildStreak() {
   const [ty, tm, td] = lastDate.split('-').map(Number);
   const lastSolvedDate = new Date(Date.UTC(ty, tm - 1, td, 0, 0, 0));
 
-  const s = await Settings.findOneAndUpdate(
+  s = await Settings.findOneAndUpdate(
     { key: 'global' },
     { $set: { currentStreak, maxStreak, activeDays, lastSolvedDate } },
     { new: true, upsert: true }
