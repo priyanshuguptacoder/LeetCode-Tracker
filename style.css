@@ -1746,6 +1746,12 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
     -webkit-overflow-scrolling: touch;
 }
 
+@media (min-width: 769px) {
+    .table-wrapper {
+        overflow-x: clip;
+    }
+}
+
 .problems-table {
     width: 100%;
     border-collapse: collapse;
@@ -1768,18 +1774,23 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
     white-space: nowrap;
     position: sticky;
     top: calc(var(--app-header-height) + var(--table-header-height));
-    z-index: 9;
+    z-index: 12;
     background: var(--bg-tertiary);
+}
+
+/* Fix 1: Remove stacking context from tbody — was causing rows to render above sticky th */
+.problems-table tbody {
+    position: static;
+    z-index: auto;
 }
 
 .problems-table tbody tr {
     border-bottom: 1px solid var(--border);
-    transition: background 0.15s ease, box-shadow 0.15s ease;
-    animation: fadeInRow 0.3s ease;
+    transition: background 0.15s ease, opacity 0.2s ease;
 }
 
 @keyframes fadeInRow {
-    from { opacity: 0; transform: translateY(-4px); }
+    from { opacity: 0; transform: translateY(4px); }
     to   { opacity: 1; transform: translateY(0); }
 }
 
@@ -1826,11 +1837,16 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
     max-width: 280px;
 }
 
-/* Desktop: table scrollable horizontally */
+/* Desktop: table scrollable horizontally — use clip (not auto) so sticky th isn't broken */
 .table-wrapper {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     border-radius: 0 0 16px 16px;
+}
+@media (min-width: 769px) {
+    .table-wrapper {
+        overflow-x: clip;
+    }
 }
 .problems-table {
     min-width: 640px;

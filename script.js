@@ -3989,3 +3989,20 @@ function App() {
 }
 
 ReactDOM.render(<App />, document.getElementById('root'));
+
+// Sync sticky offset CSS vars from actual rendered heights
+// Runs on load and resize so --app-header-height / --table-header-height always match reality
+function syncStickyOffsets() {
+  const appHeader   = document.querySelector('.header');
+  const tableHeader = document.querySelector('.table-header');
+  if (appHeader) {
+    document.documentElement.style.setProperty('--app-header-height', appHeader.offsetHeight + 'px');
+  }
+  if (tableHeader) {
+    document.documentElement.style.setProperty('--table-header-height', tableHeader.offsetHeight + 'px');
+  }
+}
+document.addEventListener('DOMContentLoaded', syncStickyOffsets);
+window.addEventListener('resize', syncStickyOffsets);
+// Also run immediately in case DOMContentLoaded already fired
+syncStickyOffsets();
