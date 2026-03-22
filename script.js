@@ -3990,9 +3990,14 @@ function App() {
 
 ReactDOM.render(<App />, document.getElementById('root'));
 
-// Sync sticky offset CSS vars from actual rendered heights
-// Runs on load and resize so --app-header-height / --table-header-height always match reality
+// Sync sticky offset CSS vars — desktop only.
+// On mobile, zero out the vars so sticky th top offsets don't affect layout.
 function syncStickyOffsets() {
+  if (window.innerWidth <= 768) {
+    document.documentElement.style.setProperty('--app-header-height', '0px');
+    document.documentElement.style.setProperty('--table-header-height', '0px');
+    return;
+  }
   const appHeader   = document.querySelector('.header');
   const tableHeader = document.querySelector('.table-header');
   if (appHeader) {
@@ -4004,5 +4009,4 @@ function syncStickyOffsets() {
 }
 document.addEventListener('DOMContentLoaded', syncStickyOffsets);
 window.addEventListener('resize', syncStickyOffsets);
-// Also run immediately in case DOMContentLoaded already fired
 syncStickyOffsets();

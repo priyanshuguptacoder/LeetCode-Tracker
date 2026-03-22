@@ -101,9 +101,9 @@ body.light-mode {
     .header {
         position: relative;
     }
-    /* table-header and th don't need offset on mobile since header isn't sticky */
     .table-header {
-        top: 0;
+        position: relative;
+        top: auto;
     }
     .problems-table th {
         position: static;
