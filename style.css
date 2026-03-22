@@ -1500,6 +1500,8 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
     box-shadow: var(--shadow-sm);
     animation: filterCardEntry 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
     transform-origin: top center;
+    position: relative;
+    z-index: 20;
 }
 
 @keyframes filterCardEntry {
@@ -1688,7 +1690,7 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
     overflow: visible;
     box-shadow: var(--shadow-sm);
     margin-bottom: 24px;
-    animation: filterCardEntry 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both;
+    animation: filterCardEntry 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.08s forwards;
 }
 
 .table-header {
