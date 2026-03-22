@@ -823,15 +823,18 @@ function App() {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [probRes, streakRes] = await Promise.all([
-          window.API.getAllProblems(),
-          window.API.getStreak(),
-        ]);
+        const probRes = await window.API.getAllProblems();
         if (probRes.success) {
           setApiProblems(transformProblems(probRes.data));
         }
-        if (streakRes.success) setDbStreak(streakRes.data);
         setLoading(false);
+        // Fetch streak independently — never block problem display on streak failure
+        try {
+          const streakRes = await window.API.getStreak();
+          if (streakRes.success) setDbStreak(streakRes.data);
+        } catch (streakErr) {
+          console.error('Streak fetch failed:', streakErr.message);
+        }
         // Non-blocking secondary fetches
         try {
           const [sugRes, recentTodayRes] = await Promise.allSettled([
@@ -2314,11 +2317,12 @@ function App() {
     return allProblems.filter(problem => {
       const matchesSearch =
         q === '' ||
-        problem.number.toString().includes(q) ||
-        (problem.title || '').toLowerCase().includes(q) ||
-        (problem.difficulty || '').toLowerCase().includes(q) ||
-        (problem.pattern || '').toLowerCase().includes(q) ||
-        (problem.topics || []).some(t => t.toLowerCase().includes(q));
+        (!isNaN(q) && q !== ''
+          ? problem.number === Number(q)
+          : (problem.title || '').toLowerCase().includes(q) ||
+            (problem.difficulty || '').toLowerCase().includes(q) ||
+            (problem.pattern || '').toLowerCase().includes(q) ||
+            (problem.topics || []).some(t => t.toLowerCase().includes(q)));
 
       const matchesDifficulty =
         difficultyFilter === 'All' || problem.difficulty === difficultyFilter;
