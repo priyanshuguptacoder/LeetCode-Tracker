@@ -43,6 +43,10 @@
     --space-md: 16px;
     --space-lg: 24px;
     --space-xl: 32px;
+
+    /* Sticky layout heights — must match rendered header heights */
+    --app-header-height: 65px;
+    --table-header-height: 57px;
 }
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
@@ -96,6 +100,13 @@ body.light-mode {
 @media (max-width: 768px) {
     .header {
         position: relative;
+    }
+    /* table-header and thead don't need offset on mobile since header isn't sticky */
+    .table-header {
+        top: 0;
+    }
+    .problems-table thead {
+        top: var(--table-header-height);
     }
 }
 
@@ -1690,7 +1701,7 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     position: sticky;
-    top: 0;
+    top: var(--app-header-height);
     z-index: 10;
     transition: box-shadow 0.25s ease, background 0.25s ease;
 }
@@ -1741,7 +1752,7 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
 .problems-table thead {
     background: var(--bg-tertiary);
     position: sticky;
-    top: 57px;
+    top: calc(var(--app-header-height) + var(--table-header-height));
     z-index: 9;
 }
 
