@@ -1674,7 +1674,7 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
     background: var(--bg-secondary);
     border: 1px solid var(--border);
     border-radius: 16px;
-    overflow: hidden;
+    overflow: visible;
     box-shadow: var(--shadow-sm);
     margin-bottom: 24px;
     animation: filterCardEntry 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both;
@@ -1795,6 +1795,7 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
     font-size: 13px;
     font-weight: 500;
     vertical-align: middle;
+    color: var(--text-primary);
 }
 
 .problem-number {
@@ -1814,6 +1815,7 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
 .table-wrapper {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    border-radius: 0 0 16px 16px;
 }
 .problems-table {
     min-width: 640px;

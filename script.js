@@ -881,6 +881,8 @@ function App() {
     setSearchTerm(val);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => setDebouncedSearch(val), 300);
+    // Clear navbar difficulty filter when user starts typing — prevents silent AND-kill
+    if (val.trim() !== '') setSelectedFilter(null);
   };
   const [difficultyFilter, setDifficultyFilter] = useState('All');
   const [patternFilter, setPatternFilter] = useState('All');
@@ -2315,14 +2317,18 @@ function App() {
   const filteredProblems = React.useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase();
     return allProblems.filter(problem => {
-      const matchesSearch =
-        q === '' ||
-        (!isNaN(q) && q !== ''
-          ? problem.number === Number(q)
-          : (problem.title || '').toLowerCase().includes(q) ||
-            (problem.difficulty || '').toLowerCase().includes(q) ||
-            (problem.pattern || '').toLowerCase().includes(q) ||
-            (problem.topics || []).some(t => t.toLowerCase().includes(q)));
+      let matchesSearch;
+      if (q === '') {
+        matchesSearch = true;
+      } else if (/^[0-9]+$/.test(q)) {
+        matchesSearch = problem.number === Number(q);
+      } else {
+        matchesSearch =
+          (problem.title || '').toLowerCase().includes(q) ||
+          (problem.difficulty || '').toLowerCase().includes(q) ||
+          (problem.pattern || '').toLowerCase().includes(q) ||
+          (Array.isArray(problem.topics) ? problem.topics : []).some(t => t.toLowerCase().includes(q));
+      }
 
       const matchesDifficulty =
         difficultyFilter === 'All' || problem.difficulty === difficultyFilter;
