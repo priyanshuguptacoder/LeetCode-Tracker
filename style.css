@@ -101,12 +101,12 @@ body.light-mode {
     .header {
         position: relative;
     }
-    /* table-header and thead don't need offset on mobile since header isn't sticky */
+    /* table-header and th don't need offset on mobile since header isn't sticky */
     .table-header {
         top: 0;
     }
-    .problems-table thead {
-        top: var(--table-header-height);
+    .problems-table th {
+        position: static;
     }
 }
 
@@ -1751,11 +1751,9 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
     border-collapse: collapse;
 }
 
+/* sticky must be on th, NOT thead — thead sticky is ignored by browsers with border-collapse */
 .problems-table thead {
     background: var(--bg-tertiary);
-    position: sticky;
-    top: calc(var(--app-header-height) + var(--table-header-height));
-    z-index: 9;
 }
 
 .problems-table th {
@@ -1768,6 +1766,10 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
     letter-spacing: 0.6px;
     border-bottom: 1px solid var(--border);
     white-space: nowrap;
+    position: sticky;
+    top: calc(var(--app-header-height) + var(--table-header-height));
+    z-index: 9;
+    background: var(--bg-tertiary);
 }
 
 .problems-table tbody tr {
@@ -1835,6 +1837,10 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
 }
 
 body.light-mode .problems-table thead {
+    background: #F1F5F9;
+}
+
+body.light-mode .problems-table th {
     background: #F1F5F9;
 }
 
@@ -2639,6 +2645,7 @@ body.light-mode .problems-table thead {
 }
 
 body.light-mode .problems-table th {
+    background: #F9F7EF;
     color: #6B7280;
 }
 
