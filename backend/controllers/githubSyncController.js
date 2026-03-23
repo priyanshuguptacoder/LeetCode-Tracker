@@ -268,20 +268,17 @@ async function getFileCommitDate(octokit, owner, repo, path, ref) {
   return new Date();
 }
 
-// ─── Compute streaks from submission dates (IST-aware) ───────────────────────
+// ─── Compute streaks from submission dates (UTC) ──────────────────────────────
 function computeStreaks(submissions) {
   if (!submissions.length) return { currentStreak: 0, longestStreak: 0, totalDays: 0 };
-  const toISTKey = (d) => {
-    const ist = new Date(new Date(d).getTime() + 330 * 60 * 1000);
-    return ist.getUTCFullYear() + '-' +
-      String(ist.getUTCMonth() + 1).padStart(2, '0') + '-' +
-      String(ist.getUTCDate()).padStart(2, '0');
-  };
-  const todayKey     = toISTKey(new Date());
-  const yesterdayKey = toISTKey(new Date(Date.now() - 86400000));
+
+  const todayKey     = new Date().toISOString().split('T')[0];
+  const yesterdayKey = new Date(Date.now() - 86400000).toISOString().split('T')[0];
 
   const daySet = new Set(
-    submissions.map(s => toISTKey(s.dateSolved)).filter(k => k <= todayKey)
+    submissions
+      .map(s => new Date(s.dateSolved).toISOString().split('T')[0])
+      .filter(k => k <= todayKey)
   );
   const days = [...daySet].sort();
 
@@ -293,14 +290,13 @@ function computeStreaks(submissions) {
   }
   longestStreak = Math.max(longestStreak, temp);
 
-  // Current streak — alive if solved today OR yesterday
   const startKey = daySet.has(todayKey) ? todayKey : (daySet.has(yesterdayKey) ? yesterdayKey : null);
   let currentStreak = 0;
   if (startKey) {
     let cursor = new Date(startKey + 'T00:00:00Z');
-    while (daySet.has(toISTKey(cursor))) {
+    while (daySet.has(cursor.toISOString().split('T')[0])) {
       currentStreak++;
-      cursor.setUTCDate(cursor.getUTCDate() - 1);
+      cursor = new Date(cursor - 86400000);
     }
   }
   return { currentStreak, longestStreak, totalDays: daySet.size };

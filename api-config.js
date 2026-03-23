@@ -105,6 +105,11 @@ const api = {
     if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Sync failed'); }
     return r.json();
   },
+  syncCalendar: async () => {
+    const r = await fetch(`${API_BASE_URL}/problem/sync/calendar`, { method: 'POST' });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Calendar sync failed'); }
+    return r.json();
+  },
   getSyncStatus: async () => {
     const r = await fetch(`${API_BASE_URL}/problem/sync/status`);
     if (!r.ok) return { status: 'expired' };

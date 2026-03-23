@@ -9,13 +9,26 @@ function todayUTCKey() { return getUTCDayKey(new Date()); }
 
 // ─── STREAK REBUILD — delegates to statsEngine, writes result to Settings ─────
 // Called after: delete, sync, manual add/update.
-async function rebuildStreak() {
+// calendarDates: optional YYYY-MM-DD IST strings from LeetCode submissionCalendar.
+// When provided, streak is computed from calendar (matches LeetCode exactly).
+// When null, falls back to problem solvedDates from DB.
+async function rebuildStreak(calendarDates = null) {
   const problems = await Problem.find(
     { solved: true, isDeleted: { $ne: true }, solvedDate: { $ne: null } },
     { solvedDate: 1 }
   ).lean();
 
-  const stats = computeStats(problems);
+  // If no calendarDates passed in, check if we have stored ones in Settings
+  let effectiveCalendarDates = calendarDates;
+  if (!effectiveCalendarDates) {
+    const stored = await Settings.findOne({ key: 'global' }, { submissionCalendarDates: 1 }).lean();
+    if (stored?.submissionCalendarDates?.length > 0) {
+      effectiveCalendarDates = stored.submissionCalendarDates;
+      console.log(`[STREAK REBUILD] using stored submissionCalendar (${effectiveCalendarDates.length} dates)`);
+    }
+  }
+
+  const stats = computeStats(problems, effectiveCalendarDates);
 
   if (!stats.isValid) {
     console.error('[STREAK REBUILD] Invariant violations:', stats.errors);
@@ -65,11 +78,19 @@ function streakPayload(stats) {
 // ─── GET /api/problems/streak ─────────────────────────────────────────────────
 exports.getStreak = async (req, res) => {
   try {
-    const problems = await Problem.find(
-      { solved: true, isDeleted: { $ne: true }, solvedDate: { $ne: null } },
-      { solvedDate: 1 }
-    ).lean();
-    const stats = computeStats(problems);
+    const [problems, settings] = await Promise.all([
+      Problem.find(
+        { solved: true, isDeleted: { $ne: true }, solvedDate: { $ne: null } },
+        { solvedDate: 1 }
+      ).lean(),
+      Settings.findOne({ key: 'global' }, { submissionCalendarDates: 1 }).lean(),
+    ]);
+
+    const calendarDates = settings?.submissionCalendarDates?.length > 0
+      ? settings.submissionCalendarDates
+      : null;
+
+    const stats = computeStats(problems, calendarDates);
     if (!stats.isValid) {
       return res.status(500).json({ success: false, error: 'Stats invariant violation', errors: stats.errors });
     }
@@ -651,12 +672,19 @@ exports.rebuildStreak = rebuildStreak;
 // Validates streak correctness and lists all gap days explicitly.
 exports.validateStreak = async (req, res) => {
   try {
-    const problems = await Problem.find(
-      { solved: true, isDeleted: { $ne: true }, solvedDate: { $ne: null } },
-      { solvedDate: 1 }
-    ).lean();
+    const [problems, settings] = await Promise.all([
+      Problem.find(
+        { solved: true, isDeleted: { $ne: true }, solvedDate: { $ne: null } },
+        { solvedDate: 1 }
+      ).lean(),
+      Settings.findOne({ key: 'global' }).lean(),
+    ]);
 
-    const stats = computeStats(problems);
+    const calendarDates = settings?.submissionCalendarDates?.length > 0
+      ? settings.submissionCalendarDates
+      : null;
+
+    const stats = computeStats(problems, calendarDates);
 
     // Compare with stored values
     const stored = await Settings.findOne({ key: 'global' });

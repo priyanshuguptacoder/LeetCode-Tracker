@@ -263,8 +263,9 @@ async function syncToProblemCollection(sub) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// IST DATE HELPERS — day start/end for today queries (IST = UTC+5:30)
-// Using UTC boundaries causes "today" to miss problems solved after midnight IST
+// IST DAY WINDOW HELPERS — used only for "today's problems" display queries
+// These bound the IST calendar day so the "Solved Today" list is correct for
+// an IST user. Streak/activeDays computation uses UTC (matches LeetCode).
 // ═══════════════════════════════════════════════════════════════════════════════
 function getISTDayStart(date = new Date()) {
   // IST midnight = UTC 18:30 previous day
@@ -286,31 +287,22 @@ function getUTCDayStart(date = new Date()) { return getISTDayStart(date); }
 function getUTCDayEnd(date = new Date())   { return getISTDayEnd(date); }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// STREAK COMPUTATION — IST-aware, walk-back algorithm
+// STREAK COMPUTATION — UTC-aware, walk-back algorithm
 // ═══════════════════════════════════════════════════════════════════════════════
 function computeStreaks(submissions) {
   if (!submissions.length) return { currentStreak: 0, longestStreak: 0, totalDays: 0 };
 
-  const istOffset = 330 * 60 * 1000;
-  const toISTKey = (d) => {
-    const ist = new Date(new Date(d).getTime() + istOffset);
-    return ist.getUTCFullYear() + '-' +
-      String(ist.getUTCMonth() + 1).padStart(2, '0') + '-' +
-      String(ist.getUTCDate()).padStart(2, '0');
-  };
-
-  const todayKey     = toISTKey(new Date());
-  const yesterdayKey = toISTKey(new Date(Date.now() - 86400000));
+  const todayKey     = new Date().toISOString().split('T')[0];
+  const yesterdayKey = new Date(Date.now() - 86400000).toISOString().split('T')[0];
 
   const daySet = new Set(
     submissions
-      .map(s => toISTKey(s.dateSolved))
+      .map(s => new Date(s.dateSolved).toISOString().split('T')[0])
       .filter(k => k && k <= todayKey)
   );
 
   const sortedKeys = [...daySet].sort();
 
-  // Longest streak
   let longestStreak = 1, temp = 1;
   for (let i = 1; i < sortedKeys.length; i++) {
     const diff = (new Date(sortedKeys[i] + 'T00:00:00Z') - new Date(sortedKeys[i - 1] + 'T00:00:00Z')) / 86400000;
@@ -319,14 +311,13 @@ function computeStreaks(submissions) {
   }
   longestStreak = Math.max(longestStreak, temp);
 
-  // Current streak — alive if solved today OR yesterday
   const startKey = daySet.has(todayKey) ? todayKey : (daySet.has(yesterdayKey) ? yesterdayKey : null);
   let currentStreak = 0;
   if (startKey) {
     let cursor = new Date(startKey + 'T00:00:00Z');
-    while (daySet.has(toISTKey(cursor))) {
+    while (daySet.has(cursor.toISOString().split('T')[0])) {
       currentStreak++;
-      cursor.setUTCDate(cursor.getUTCDate() - 1);
+      cursor = new Date(cursor - 86400000);
     }
   }
 
@@ -403,6 +394,80 @@ async function fetchRecentAcceptedSubmissions() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// FETCH USER CALENDAR — submission calendar from LeetCode (authenticated)
+// Returns sorted array of YYYY-MM-DD IST strings for every day with a submission.
+// LeetCode's submissionCalendar is a JSON string: { "unixTimestamp": count, ... }
+// ═══════════════════════════════════════════════════════════════════════════════
+const USER_CALENDAR_QUERY = `
+  query userCalendar($username: String!) {
+    matchedUser(username: $username) {
+      userCalendar {
+        submissionCalendar
+        totalActiveDays
+        streak
+      }
+    }
+  }
+`;
+
+function parseSubmissionCalendar(jsonStr) {
+  // jsonStr: '{"1609459200": 3, "1609545600": 1, ...}'
+  // Keys are unix timestamps (seconds). LeetCode uses UTC day boundary.
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch (e) {
+    console.error('[CALENDAR] Failed to parse submissionCalendar JSON:', e.message);
+    return [];
+  }
+
+  const toUTCKey = (tsSeconds) => {
+    return new Date(parseInt(tsSeconds, 10) * 1000).toISOString().split('T')[0];
+  };
+
+  const dateSet = new Set(Object.keys(parsed).map(toUTCKey));
+  return [...dateSet].sort();
+}
+
+async function fetchUserCalendar() {
+  const session  = process.env.LEETCODE_SESSION;
+  const csrf     = process.env.LEETCODE_CSRF;
+  const username = process.env.LEETCODE_USERNAME;
+
+  if (!session || !csrf || !username) {
+    throw new Error('LEETCODE_SESSION, LEETCODE_CSRF, LEETCODE_USERNAME env vars required');
+  }
+
+  const { data } = await axios.post(
+    LC_GRAPHQL,
+    { query: USER_CALENDAR_QUERY, variables: { username } },
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        'Referer':      'https://leetcode.com',
+        'Cookie':       `LEETCODE_SESSION=${session}; csrftoken=${csrf}`,
+        'x-csrftoken':  csrf,
+      },
+      timeout: 10000,
+    }
+  );
+
+  const calendar = data?.data?.matchedUser?.userCalendar;
+  if (!calendar?.submissionCalendar) {
+    throw new Error('userCalendar not found in LeetCode response');
+  }
+
+  const dates = parseSubmissionCalendar(calendar.submissionCalendar);
+  console.log(`[CALENDAR] parsed ${dates.length} active days | LC totalActiveDays=${calendar.totalActiveDays} streak=${calendar.streak}`);
+  return {
+    dates,
+    totalActiveDays: calendar.totalActiveDays,
+    lcStreak:        calendar.streak,
+  };
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // CORE SYNC: syncRecentSubmissions()
 //
 // USER INTENT LAYER — strict rules:
@@ -411,25 +476,49 @@ async function fetchRecentAcceptedSubmissions() {
 //   3. If exists and not deleted → SKIP (already synced)
 //   4. If not exists → INSERT via upsertProblem
 //   5. If LeetCode API fails → abort entirely, do NOT modify DB
-//   6. After any insertions → rebuild streak from DB (backend = single source of truth)
+//   6. Fetch userCalendar and store submissionCalendarDates in Settings
+//   7. Rebuild streak from submissionCalendar dates (matches LeetCode exactly)
 //
-// Returns: { fetched, inserted, skipped, dbTotal, errors }
+// Returns: { fetched, inserted, skipped, dbTotal, errors, calendarDates }
 // ═══════════════════════════════════════════════════════════════════════════════
 async function syncRecentSubmissions() {
   console.log('[SYNC START] Fetching recent accepted submissions from LeetCode');
 
-  // Step 1: Fetch from LeetCode with retry — if this fails, abort before touching DB
-  const submissions = await fetchWithRetry(() => fetchRecentAcceptedSubmissions());
+  // Step 1: Fetch submissions + calendar in parallel
+  const [submissions, calendarResult] = await Promise.all([
+    fetchWithRetry(() => fetchRecentAcceptedSubmissions()),
+    fetchWithRetry(() => fetchUserCalendar()).catch(err => {
+      console.warn('[SYNC] userCalendar fetch failed (non-fatal):', err.message);
+      return null;
+    }),
+  ]);
   console.log(`[SYNC FETCHED ${submissions.length}] unique accepted slugs from LeetCode`);
+
+  // Step 2: Store submissionCalendar dates in Settings (always, even if no new problems)
+  let calendarDates = null;
+  if (calendarResult && calendarResult.dates.length > 0) {
+    calendarDates = calendarResult.dates;
+    const Settings = require('../models/Settings');
+    await Settings.findOneAndUpdate(
+      { key: 'global' },
+      {
+        $set: {
+          submissionCalendarDates:     calendarDates,
+          submissionCalendarUpdatedAt: new Date(),
+        },
+      },
+      { upsert: true }
+    );
+    console.log(`[SYNC] Stored ${calendarDates.length} submissionCalendar dates in Settings`);
+  }
 
   let inserted = 0, skipped = 0;
   const errors = [];
 
-  // Step 2: Process each slug — strict intent-lock check
+  // Step 3: Process each slug — strict intent-lock check
   for (const sub of submissions) {
     const slug = sub.titleSlug.toLowerCase().trim();
     try {
-      // Check Problem collection first (includes soft-deleted) — this is the intent lock
       const existingProblem = await Problem.findOne({
         leetcodeLink: { $regex: slug, $options: 'i' }
       }).lean();
@@ -445,7 +534,6 @@ async function syncRecentSubmissions() {
         continue;
       }
 
-      // Also check Submission collection
       const existingSubmission = await Submission.findOne({ slug }).lean();
       if (existingSubmission) {
         if (existingSubmission.isDeleted) {
@@ -458,12 +546,10 @@ async function syncRecentSubmissions() {
         continue;
       }
 
-      // New problem — fetch metadata + insert
       await upsertProblem(slug, { dateSolved: sub.timestamp });
       console.log(`[SYNC ADDED] ${slug}`);
       inserted++;
 
-      // Throttle to avoid hammering LeetCode API
       await new Promise(r => setTimeout(r, 300));
 
     } catch (err) {
@@ -472,23 +558,20 @@ async function syncRecentSubmissions() {
     }
   }
 
-  // Step 3: Rebuild streak from DB after any insertions
-  if (inserted > 0) {
-    try {
-      await rebuildStreak();
-    } catch (e) {
-      console.warn('[SYNC] Streak rebuild failed:', e.message);
-    }
+  // Step 4: Rebuild streak — always run, prefer submissionCalendar dates
+  try {
+    await rebuildStreak(calendarDates);
+  } catch (e) {
+    console.warn('[SYNC] Streak rebuild failed:', e.message);
   }
 
-  // Step 4: Final DB count
-  const dbTotal = await Submission.countDocuments({ isDeleted: { $ne: true } });
+  const dbTotal      = await Submission.countDocuments({ isDeleted: { $ne: true } });
   const problemTotal = await Problem.countDocuments({ solved: true, isDeleted: { $ne: true } });
 
   console.log(`[SYNC COMPLETE] fetched=${submissions.length} inserted=${inserted} skipped=${skipped} errors=${errors.length}`);
   console.log(`[SYNC DB STATE] Submission: ${dbTotal} | Problem (solved): ${problemTotal}`);
 
-  return { fetched: submissions.length, inserted, skipped, dbTotal, problemTotal, errors };
+  return { fetched: submissions.length, inserted, skipped, dbTotal, problemTotal, errors, calendarDates };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -629,6 +712,45 @@ exports.syncSubmissions = async (req, res) => {
 exports.upsertProblem         = upsertProblem;
 exports.upsertManual          = upsertManual;
 exports.syncRecentSubmissions = syncRecentSubmissions;
+
+// POST /api/problem/sync/calendar — fetch & store submissionCalendar only (no problem inserts)
+// Use this to backfill streak data without triggering a full sync.
+exports.syncCalendar = async (req, res) => {
+  if (!process.env.LEETCODE_SESSION || !process.env.LEETCODE_CSRF || !process.env.LEETCODE_USERNAME) {
+    return res.status(500).json({ success: false, error: 'LEETCODE_SESSION, LEETCODE_CSRF, LEETCODE_USERNAME env vars required' });
+  }
+  try {
+    const calendarResult = await fetchWithRetry(() => fetchUserCalendar());
+    const calendarDates  = calendarResult.dates;
+
+    const Settings = require('../models/Settings');
+    await Settings.findOneAndUpdate(
+      { key: 'global' },
+      {
+        $set: {
+          submissionCalendarDates:     calendarDates,
+          submissionCalendarUpdatedAt: new Date(),
+        },
+      },
+      { upsert: true }
+    );
+
+    // Rebuild streak from calendar
+    const { rebuildStreak } = require('./problemController');
+    await rebuildStreak(calendarDates);
+
+    return res.json({
+      success:        true,
+      activeDays:     calendarDates.length,
+      lcActiveDays:   calendarResult.totalActiveDays,
+      lcStreak:       calendarResult.lcStreak,
+      calendarDates,
+    });
+  } catch (err) {
+    console.error('[CALENDAR SYNC]', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};
 
 // GET /api/sync/status — validates LeetCode session cookie is still active
 exports.syncStatus = async (req, res) => {

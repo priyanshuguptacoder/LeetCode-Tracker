@@ -2,26 +2,16 @@
 // ALL metrics are derived exclusively from solvedDate fields.
 // NEVER reads stored streak/activeDays/consistency from Settings.
 // This module is the canonical implementation — import it everywhere.
+//
+// DATE BOUNDARY: UTC midnight (00:00 UTC) — matches LeetCode exactly.
+// A solve at 19:01 UTC March 18 → "2026-03-18" ✓
+// A solve at 23:50 UTC March 18 → "2026-03-18" ✓ (same LeetCode day)
+// A solve at 00:30 UTC March 19 → "2026-03-19" ✓ (new LeetCode day)
 
 // ─── UTC day key — ONE definition, used everywhere ───────────────────────────
 function getUTCDayKey(date) {
   const d = new Date(date);
-  return d.getUTCFullYear() + '-' +
-    String(d.getUTCMonth() + 1).padStart(2, '0') + '-' +
-    String(d.getUTCDate()).padStart(2, '0');
-}
-
-// ─── IST day key — for "today" comparisons only ──────────────────────────────
-// Solves stored as UTC timestamps need to be bucketed by IST calendar day.
-// IST = UTC+5:30 = UTC + 330 minutes.
-function getISTDayKey(date) {
-  const d = new Date(date);
-  const istOffset = 330; // minutes
-  const istMs = d.getTime() + istOffset * 60 * 1000;
-  const ist = new Date(istMs);
-  return ist.getUTCFullYear() + '-' +
-    String(ist.getUTCMonth() + 1).padStart(2, '0') + '-' +
-    String(ist.getUTCDate()).padStart(2, '0');
+  return d.toISOString().split('T')[0];
 }
 
 // ─── Next UTC day key ─────────────────────────────────────────────────────────
@@ -53,24 +43,36 @@ function isNextDay(prev, curr) {
 
 // ─── computeStats — pure, deterministic, self-validating ─────────────────────
 // Input: array of objects with a solvedDate (Date | string | null)
+//        optional calendarDates: YYYY-MM-DD UTC strings from LeetCode submissionCalendar
+//        When calendarDates is provided and non-empty, it is used as the day set
+//        for streak/activeDays instead of solvedDate — this matches LeetCode exactly.
 // Output: { currentStreak, maxStreak, activeDays, daysTracked, consistency,
 //           startDate, todayKey, days, gaps, isValid, errors }
-function computeStats(problems) {
-  const todayKey = getISTDayKey(new Date());
+function computeStats(problems, calendarDates = null) {
+  const todayKey = getUTCDayKey(new Date());
 
-  // Step 1: build canonical IST day set — bucket each solvedDate by IST calendar day
+  // Step 1: build canonical UTC day set
+  // Prefer calendarDates (LeetCode submission calendar) when available.
   const daySet = new Set();
-  for (const p of problems) {
-    if (!p.solvedDate) continue;
-    const key = getISTDayKey(p.solvedDate);
-    if (key <= todayKey) daySet.add(key);
+
+  if (Array.isArray(calendarDates) && calendarDates.length > 0) {
+    for (const k of calendarDates) {
+      if (k && k <= todayKey) daySet.add(k);
+    }
+    console.log(`[STATS ENGINE] using submissionCalendar (${calendarDates.length} dates)`);
+  } else {
+    for (const p of problems) {
+      if (!p.solvedDate) continue;
+      const key = getUTCDayKey(p.solvedDate);
+      if (key <= todayKey) daySet.add(key);
+    }
+    console.log(`[STATS ENGINE] using problem solvedDates (${problems.length} problems)`);
   }
 
   const days       = [...daySet].sort();
   const activeDays = daySet.size;
 
-  console.log(`[STATS ENGINE] total problems: ${problems.length}`);
-  console.log(`[STATS ENGINE] unique UTC days (${activeDays}): [${days.join(', ')}]`);
+  console.log(`[STATS ENGINE] unique UTC days (${activeDays}): [${days.slice(-5).join(', ')}${days.length > 5 ? '…' : ''}]`);
   console.log(`[STATS ENGINE] todayKey: ${todayKey}`);
 
   // Step 2: edge case — no data
@@ -104,18 +106,17 @@ function computeStats(problems) {
   }
   maxStreak = Math.max(maxStreak, 1);
 
-  // Step 6: current streak — walk back from today OR yesterday (IST)
+  // Step 6: current streak — walk back from today OR yesterday (UTC)
   // A streak is still alive if the user solved yesterday but not yet today.
   // Only break if the last active day was 2+ days ago.
-  // IMPORTANT: daySet contains IST keys — cursor walk-back must also use getISTDayKey.
-  const yesterdayKey = getISTDayKey(new Date(Date.now() - 86400000));
+  const yesterdayKey = getUTCDayKey(new Date(Date.now() - 86400000));
   const startCursor = daySet.has(todayKey) ? todayKey : (daySet.has(yesterdayKey) ? yesterdayKey : null);
 
   let currentStreak = 0;
   if (startCursor) {
     let cursor = new Date(startCursor + 'T00:00:00Z');
     while (true) {
-      const key = getISTDayKey(cursor);
+      const key = getUTCDayKey(cursor);
       if (daySet.has(key)) {
         currentStreak++;
         cursor.setUTCDate(cursor.getUTCDate() - 1);
@@ -143,13 +144,6 @@ function computeStats(problems) {
     errors.push(`currentStreak (${currentStreak}) > maxStreak (${maxStreak}) — impossible`);
   }
 
-  // Gap-based validation
-  const expectedMax = activeDays - gaps.length;
-  if (maxStreak !== expectedMax) {
-    console.warn(`[STATS ENGINE] gap-based check: maxStreak=${maxStreak} expectedMax=${expectedMax} (activeDays=${activeDays} gaps=${gaps.length})`);
-  }
-
-  // Today validation
   if (!daySet.has(todayKey)) {
     console.warn(`[STATS ENGINE] today (${todayKey}) not in daySet — currentStreak will be 0 unless yesterday solved`);
   }
@@ -173,4 +167,4 @@ function computeStats(problems) {
   };
 }
 
-module.exports = { computeStats, getUTCDayKey, getISTDayKey, getNextDay, detectGaps };
+module.exports = { computeStats, getUTCDayKey, getNextDay, detectGaps };

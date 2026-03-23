@@ -7,8 +7,12 @@ function RevisionPanel() {
   const fetchDue = () => {
     setLoading(true);
     fetch('/api/revision/due')
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
       .then(d => { if (d.success) setProblems(d.data); })
+      .catch(err => console.error('Revision fetch error:', err.message))
       .finally(() => setLoading(false));
   };
 

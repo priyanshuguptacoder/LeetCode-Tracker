@@ -7,6 +7,7 @@ const {
   getRevision,
   getStreaks,
   syncSubmissions,
+  syncCalendar,
   syncStatus,
   getRecentProblems,
   getTodayProblems,
@@ -22,6 +23,7 @@ router.get('/recent',            getRecentProblems);  // GET  /api/problem/recen
 router.get('/today',             getTodayProblems);   // GET  /api/problem/today
 router.post('/manual',           manualEntry);        // POST /api/problem/manual
 router.post('/sync',             syncSubmissions);    // POST /api/problem/sync
+router.post('/sync/calendar',    syncCalendar);       // POST /api/problem/sync/calendar
 router.get('/sync/status',       syncStatus);         // GET  /api/problem/sync/status
 router.get('/:slug',             getProblem);         // GET  /api/problem/:slug
 
