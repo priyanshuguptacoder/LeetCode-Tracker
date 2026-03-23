@@ -263,26 +263,48 @@ async function syncToProblemCollection(sub) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// UTC DATE HELPERS — day start/end for today queries
+// IST DATE HELPERS — day start/end for today queries (IST = UTC+5:30)
+// Using UTC boundaries causes "today" to miss problems solved after midnight IST
 // ═══════════════════════════════════════════════════════════════════════════════
-function getUTCDayStart(date = new Date()) {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0));
+function getISTDayStart(date = new Date()) {
+  // IST midnight = UTC 18:30 previous day
+  const istOffset = 330 * 60 * 1000;
+  const istNow = new Date(date.getTime() + istOffset);
+  const istMidnight = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate(), 0, 0, 0, 0));
+  return new Date(istMidnight.getTime() - istOffset);
 }
 
-function getUTCDayEnd(date = new Date()) {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 23, 59, 59, 999));
+function getISTDayEnd(date = new Date()) {
+  const istOffset = 330 * 60 * 1000;
+  const istNow = new Date(date.getTime() + istOffset);
+  const istEndOfDay = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate(), 23, 59, 59, 999));
+  return new Date(istEndOfDay.getTime() - istOffset);
 }
 
+// Keep UTC versions as aliases for backward compat
+function getUTCDayStart(date = new Date()) { return getISTDayStart(date); }
+function getUTCDayEnd(date = new Date())   { return getISTDayEnd(date); }
+
 // ═══════════════════════════════════════════════════════════════════════════════
-// STREAK COMPUTATION — pure UTC, walk-back algorithm (uses statsEngine getUTCDayKey)
+// STREAK COMPUTATION — IST-aware, walk-back algorithm
 // ═══════════════════════════════════════════════════════════════════════════════
 function computeStreaks(submissions) {
   if (!submissions.length) return { currentStreak: 0, longestStreak: 0, totalDays: 0 };
 
-  const todayKey = getUTCDayKey(new Date());
-  const daySet   = new Set(
+  const istOffset = 330 * 60 * 1000;
+  const toISTKey = (d) => {
+    const ist = new Date(new Date(d).getTime() + istOffset);
+    return ist.getUTCFullYear() + '-' +
+      String(ist.getUTCMonth() + 1).padStart(2, '0') + '-' +
+      String(ist.getUTCDate()).padStart(2, '0');
+  };
+
+  const todayKey     = toISTKey(new Date());
+  const yesterdayKey = toISTKey(new Date(Date.now() - 86400000));
+
+  const daySet = new Set(
     submissions
-      .map(s => getUTCDayKey(s.dateSolved))
+      .map(s => toISTKey(s.dateSolved))
       .filter(k => k && k <= todayKey)
   );
 
@@ -297,12 +319,15 @@ function computeStreaks(submissions) {
   }
   longestStreak = Math.max(longestStreak, temp);
 
-  // Current streak — walk back from today
+  // Current streak — alive if solved today OR yesterday
+  const startKey = daySet.has(todayKey) ? todayKey : (daySet.has(yesterdayKey) ? yesterdayKey : null);
   let currentStreak = 0;
-  let cursor = new Date(todayKey + 'T00:00:00Z');
-  while (daySet.has(getUTCDayKey(cursor))) {
-    currentStreak++;
-    cursor.setUTCDate(cursor.getUTCDate() - 1);
+  if (startKey) {
+    let cursor = new Date(startKey + 'T00:00:00Z');
+    while (daySet.has(toISTKey(cursor))) {
+      currentStreak++;
+      cursor.setUTCDate(cursor.getUTCDate() - 1);
+    }
   }
 
   return { currentStreak, longestStreak, totalDays: daySet.size };

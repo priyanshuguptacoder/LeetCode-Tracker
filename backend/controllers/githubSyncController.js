@@ -268,23 +268,42 @@ async function getFileCommitDate(octokit, owner, repo, path, ref) {
   return new Date();
 }
 
-// ─── Compute streaks from submission dates ────────────────────────────────────
+// ─── Compute streaks from submission dates (IST-aware) ───────────────────────
 function computeStreaks(submissions) {
   if (!submissions.length) return { currentStreak: 0, longestStreak: 0, totalDays: 0 };
-  const days = [...new Set(
-    submissions.map(s => s.dateSolved.toISOString().split('T')[0])
-  )].sort();
+  const toISTKey = (d) => {
+    const ist = new Date(new Date(d).getTime() + 330 * 60 * 1000);
+    return ist.getUTCFullYear() + '-' +
+      String(ist.getUTCMonth() + 1).padStart(2, '0') + '-' +
+      String(ist.getUTCDate()).padStart(2, '0');
+  };
+  const todayKey     = toISTKey(new Date());
+  const yesterdayKey = toISTKey(new Date(Date.now() - 86400000));
 
-  let streak = 1, longestStreak = 1;
+  const daySet = new Set(
+    submissions.map(s => toISTKey(s.dateSolved)).filter(k => k <= todayKey)
+  );
+  const days = [...daySet].sort();
+
+  let longestStreak = 1, temp = 1;
   for (let i = 1; i < days.length; i++) {
-    const diff = (new Date(days[i]) - new Date(days[i - 1])) / 86400000;
-    if (diff === 1) { streak++; longestStreak = Math.max(longestStreak, streak); }
-    else streak = 1;
+    const diff = (new Date(days[i] + 'T00:00:00Z') - new Date(days[i - 1] + 'T00:00:00Z')) / 86400000;
+    if (diff === 1) { temp++; longestStreak = Math.max(longestStreak, temp); }
+    else temp = 1;
   }
-  const lastDay  = new Date(days[days.length - 1]);
-  const today    = new Date(); today.setHours(0, 0, 0, 0);
-  const diffDays = Math.floor((today - lastDay) / 86400000);
-  return { currentStreak: diffDays <= 1 ? streak : 0, longestStreak, totalDays: days.length };
+  longestStreak = Math.max(longestStreak, temp);
+
+  // Current streak — alive if solved today OR yesterday
+  const startKey = daySet.has(todayKey) ? todayKey : (daySet.has(yesterdayKey) ? yesterdayKey : null);
+  let currentStreak = 0;
+  if (startKey) {
+    let cursor = new Date(startKey + 'T00:00:00Z');
+    while (daySet.has(toISTKey(cursor))) {
+      currentStreak++;
+      cursor.setUTCDate(cursor.getUTCDate() - 1);
+    }
+  }
+  return { currentStreak, longestStreak, totalDays: daySet.size };
 }
 
 // ─── HMAC verification ───────────────────────────────────────────────────────

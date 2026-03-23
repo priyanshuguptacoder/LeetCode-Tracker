@@ -546,14 +546,20 @@ function PwModal({ modal, adminPassword, onClose }) {
 // PURE HELPERS — module-level, no React deps
 // ============================================
 
-// Recompute streak/activeDays from an array of YYYY-MM-DD UTC date strings.
+// Recompute streak/activeDays from an array of YYYY-MM-DD IST date strings.
 // Used after delete to keep dbStreak display in sync without a DB round-trip.
 function computeStreakFromDates(dateStrings) {
+  // IST = UTC+5:30
+  const toISTKey = (d) => {
+    const istMs = d.getTime() + 330 * 60 * 1000;
+    const ist = new Date(istMs);
+    return ist.getUTCFullYear() + '-' +
+      String(ist.getUTCMonth() + 1).padStart(2, '0') + '-' +
+      String(ist.getUTCDate()).padStart(2, '0');
+  };
   const parseUTC = (s) => new Date(s + 'T00:00:00Z');
   const now      = new Date();
-  const todayKey = now.getUTCFullYear() + '-' +
-    String(now.getUTCMonth() + 1).padStart(2, '0') + '-' +
-    String(now.getUTCDate()).padStart(2, '0');
+  const todayKey = toISTKey(now);
 
   const daySet = new Set(dateStrings.filter(Boolean).filter(k => k <= todayKey));
   const activeDays = daySet.size;
@@ -570,15 +576,18 @@ function computeStreakFromDates(dateStrings) {
   }
   maxStreak = Math.max(maxStreak, tempStreak);
 
-  // Current streak — walk back from today
+  // Current streak — alive if solved today OR yesterday (don't break mid-day)
+  // IMPORTANT: daySet contains IST keys — cursor walk-back must also use toISTKey
+  const yesterdayKey = toISTKey(new Date(now.getTime() - 86400000));
+  const startCursor = daySet.has(todayKey) ? todayKey : (daySet.has(yesterdayKey) ? yesterdayKey : null);
   let currentStreak = 0;
-  let cursor = new Date(todayKey + 'T00:00:00Z');
-  while (true) {
-    const key = cursor.getUTCFullYear() + '-' +
-      String(cursor.getUTCMonth() + 1).padStart(2, '0') + '-' +
-      String(cursor.getUTCDate()).padStart(2, '0');
-    if (daySet.has(key)) { currentStreak++; cursor.setUTCDate(cursor.getUTCDate() - 1); }
-    else break;
+  if (startCursor) {
+    let cursor = new Date(startCursor + 'T00:00:00Z');
+    while (true) {
+      const key = toISTKey(cursor);
+      if (daySet.has(key)) { currentStreak++; cursor.setUTCDate(cursor.getUTCDate() - 1); }
+      else break;
+    }
   }
 
   return { activeDays, currentStreak, maxStreak };
@@ -676,8 +685,13 @@ function App() {
     isSetup: false,
   });
   const toLocalDateStr = (date) => {
-    // Returns YYYY-MM-DD in UTC — used as the canonical date key throughout the app
-    return new Date(date).toISOString().split('T')[0];
+    // Returns YYYY-MM-DD in IST (UTC+5:30) — canonical date key for streak bucketing
+    const d = new Date(date);
+    const istMs = d.getTime() + 330 * 60 * 1000;
+    const ist = new Date(istMs);
+    return ist.getUTCFullYear() + '-' +
+      String(ist.getUTCMonth() + 1).padStart(2, '0') + '-' +
+      String(ist.getUTCDate()).padStart(2, '0');
   };
 
   const parseLocalDate = (dateStr) => {
@@ -692,14 +706,25 @@ function App() {
       ? parseLocalDate(date)
       : new Date(date);
     if (isNaN(d.getTime())) return '—';
-    const todayUTC = new Date(new Date().toISOString().split('T')[0] + 'T00:00:00.000Z');
-    const days = Math.floor((todayUTC - d) / 86400000);
+    // Use IST for "Today" comparison so it's correct after midnight IST
+    const istMs = Date.now() + 330 * 60 * 1000;
+    const istNow = new Date(istMs);
+    const todayIST = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate()));
+    const days = Math.floor((todayIST - d) / 86400000);
     if (days === 0) return 'Today';
     if (days <= 7) return `${days}d ago`;
     return d.toLocaleString('en-US', { timeZone: 'UTC', day: '2-digit', month: 'short', year: '2-digit' });
   };
 
-  const todayLocalStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD UTC
+  const todayLocalStr = (() => {
+    // YYYY-MM-DD in IST (UTC+5:30) — used for "Solved Today" badge
+    const d = new Date();
+    const istMs = d.getTime() + 330 * 60 * 1000;
+    const ist = new Date(istMs);
+    return ist.getUTCFullYear() + '-' +
+      String(ist.getUTCMonth() + 1).padStart(2, '0') + '-' +
+      String(ist.getUTCDate()).padStart(2, '0');
+  })();
 
   // Parse "DD-MMM" → local date string "YYYY-MM-DD"
   const MONTH_MAP = {
@@ -1313,7 +1338,7 @@ function App() {
     // Phase 8: daily required to hit moderate monthly target
     const daysInMonth = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 0)).getUTCDate();
     const dayOfMonth  = today.getUTCDate();
-    const remainingDays = Math.max(1, daysInMonth - dayOfMonth);
+    const remainingDays = Math.max(1, daysInMonth - dayOfMonth + 1); // include today
     const moderateMonthlyTarget = Math.round(parseFloat(moderate) * daysInMonth);
     const dailyRequired = Math.max(0, ((moderateMonthlyTarget - currentMonthCount) / remainingDays)).toFixed(1);
 
@@ -1397,10 +1422,11 @@ function App() {
         return;
       }
       setSyncStatus('ok');
-      // Refresh problems + recent/today from DB after sync
-      const [probRes, recentTodayRes] = await Promise.allSettled([
+      // Refresh problems + streak + recent/today from DB after sync
+      const [probRes, recentTodayRes, streakRes] = await Promise.allSettled([
         window.API.getAllProblems(),
         window.API.getRecentAndToday(),
+        window.API.getStreak(),
       ]);
       if (probRes.status === 'fulfilled' && probRes.value.success)
         setApiProblems(transformProblems(probRes.value.data));
@@ -1408,6 +1434,8 @@ function App() {
         setRecentProblems(recentTodayRes.value.recentSolved || []);
         setTodayProblems(recentTodayRes.value.todaySolved || []);
       }
+      if (streakRes.status === 'fulfilled' && streakRes.value.success)
+        setDbStreak(streakRes.value.data);
       showNotification(
         result.added > 0
           ? `✅ Sync complete — ${result.added} new problem${result.added === 1 ? '' : 's'} added`
@@ -1630,14 +1658,23 @@ function App() {
   const [dailyRevisionCount, setDailyRevisionCount] = React.useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('dailyRevision') || '{}');
-      const today = new Date().toISOString().split('T')[0];
+      // Use IST date so the counter resets at midnight IST, not 6:30 AM IST
+      const istMs = Date.now() + 330 * 60 * 1000;
+      const ist = new Date(istMs);
+      const today = ist.getUTCFullYear() + '-' +
+        String(ist.getUTCMonth() + 1).padStart(2, '0') + '-' +
+        String(ist.getUTCDate()).padStart(2, '0');
       return saved.date === today ? (saved.count || 0) : 0;
     } catch { return 0; }
   });
   const DAILY_REVISION_LIMIT = 5;
 
   const incrementDailyRevision = () => {
-    const today = new Date().toISOString().split('T')[0];
+    const istMs = Date.now() + 330 * 60 * 1000;
+    const ist = new Date(istMs);
+    const today = ist.getUTCFullYear() + '-' +
+      String(ist.getUTCMonth() + 1).padStart(2, '0') + '-' +
+      String(ist.getUTCDate()).padStart(2, '0');
     const newCount = dailyRevisionCount + 1;
     setDailyRevisionCount(newCount);
     localStorage.setItem('dailyRevision', JSON.stringify({ date: today, count: newCount }));
@@ -1917,7 +1954,17 @@ function App() {
   // COACHING INTELLIGENCE — derived metrics
   // ============================================
   const coachingMetrics = React.useMemo(() => {
-    const today = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
+    // IST today for all day-difference calculations
+    const istMs = Date.now() + 330 * 60 * 1000;
+    const istNow = new Date(istMs);
+    const today = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate()));
+    // IST date key helper — consistent with toLocalDateStr
+    const toISTDateStr = (d) => {
+      const ist = new Date(new Date(d).getTime() + 330 * 60 * 1000);
+      return ist.getUTCFullYear() + '-' +
+        String(ist.getUTCMonth() + 1).padStart(2, '0') + '-' +
+        String(ist.getUTCDate()).padStart(2, '0');
+    };
     const solved = allProblems.filter(p => p.status === 'Done');
     const revised = allProblems.filter(p => (p.revisionCount || 0) > 0);
 
@@ -1929,7 +1976,7 @@ function App() {
       .filter(p => p._solvedDateISO && p.lastRevisedAt)
       .map(p => {
         const s = parseLocalDate(p._solvedDateISO);
-        const r = parseLocalDate(new Date(p.lastRevisedAt).toISOString().split('T')[0]);
+        const r = parseLocalDate(toISTDateStr(p.lastRevisedAt));
         return Math.max(0, Math.round((r - s) / 86400000));
       });
     const avgGap = gaps.length > 0 ? gaps.reduce((a,b) => a+b, 0) / gaps.length : 0;
@@ -1938,7 +1985,7 @@ function App() {
     const forgottenCount = solved.filter(p => {
       if ((p.revisionCount || 0) === 0) return true;
       if (!p.lastRevisedAt) return true;
-      const r = parseLocalDate(new Date(p.lastRevisedAt).toISOString().split('T')[0]);
+      const r = parseLocalDate(toISTDateStr(p.lastRevisedAt));
       return Math.round((today - r) / 86400000) > 7;
     }).length;
 

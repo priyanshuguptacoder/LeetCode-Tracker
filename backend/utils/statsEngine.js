@@ -11,6 +11,19 @@ function getUTCDayKey(date) {
     String(d.getUTCDate()).padStart(2, '0');
 }
 
+// ─── IST day key — for "today" comparisons only ──────────────────────────────
+// Solves stored as UTC timestamps need to be bucketed by IST calendar day.
+// IST = UTC+5:30 = UTC + 330 minutes.
+function getISTDayKey(date) {
+  const d = new Date(date);
+  const istOffset = 330; // minutes
+  const istMs = d.getTime() + istOffset * 60 * 1000;
+  const ist = new Date(istMs);
+  return ist.getUTCFullYear() + '-' +
+    String(ist.getUTCMonth() + 1).padStart(2, '0') + '-' +
+    String(ist.getUTCDate()).padStart(2, '0');
+}
+
 // ─── Next UTC day key ─────────────────────────────────────────────────────────
 function getNextDay(dateStr) {
   const d = new Date(dateStr + 'T00:00:00Z');
@@ -43,13 +56,13 @@ function isNextDay(prev, curr) {
 // Output: { currentStreak, maxStreak, activeDays, daysTracked, consistency,
 //           startDate, todayKey, days, gaps, isValid, errors }
 function computeStats(problems) {
-  const todayKey = getUTCDayKey(new Date());
+  const todayKey = getISTDayKey(new Date());
 
-  // Step 1: build canonical UTC day set — ignore nulls and future dates
+  // Step 1: build canonical IST day set — bucket each solvedDate by IST calendar day
   const daySet = new Set();
   for (const p of problems) {
     if (!p.solvedDate) continue;
-    const key = getUTCDayKey(p.solvedDate);
+    const key = getISTDayKey(p.solvedDate);
     if (key <= todayKey) daySet.add(key);
   }
 
@@ -91,16 +104,24 @@ function computeStats(problems) {
   }
   maxStreak = Math.max(maxStreak, 1);
 
-  // Step 6: current streak — walk back from today
+  // Step 6: current streak — walk back from today OR yesterday (IST)
+  // A streak is still alive if the user solved yesterday but not yet today.
+  // Only break if the last active day was 2+ days ago.
+  // IMPORTANT: daySet contains IST keys — cursor walk-back must also use getISTDayKey.
+  const yesterdayKey = getISTDayKey(new Date(Date.now() - 86400000));
+  const startCursor = daySet.has(todayKey) ? todayKey : (daySet.has(yesterdayKey) ? yesterdayKey : null);
+
   let currentStreak = 0;
-  let cursor = new Date(todayKey + 'T00:00:00Z');
-  while (true) {
-    const key = getUTCDayKey(cursor);
-    if (daySet.has(key)) {
-      currentStreak++;
-      cursor.setUTCDate(cursor.getUTCDate() - 1);
-    } else {
-      break;
+  if (startCursor) {
+    let cursor = new Date(startCursor + 'T00:00:00Z');
+    while (true) {
+      const key = getISTDayKey(cursor);
+      if (daySet.has(key)) {
+        currentStreak++;
+        cursor.setUTCDate(cursor.getUTCDate() - 1);
+      } else {
+        break;
+      }
     }
   }
 
@@ -152,4 +173,4 @@ function computeStats(problems) {
   };
 }
 
-module.exports = { computeStats, getUTCDayKey, getNextDay, detectGaps };
+module.exports = { computeStats, getUTCDayKey, getISTDayKey, getNextDay, detectGaps };

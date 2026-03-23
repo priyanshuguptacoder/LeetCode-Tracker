@@ -23,11 +23,15 @@ function RevisionPanel() {
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ problemId, feedback }),
       });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
       if (data.success) {
-        // Remove from list — it's been rescheduled
         setProblems(prev => prev.filter(p => p.id !== problemId));
+      } else {
+        console.error('Revision update failed:', data.error);
       }
+    } catch (err) {
+      console.error('Revision update error:', err.message);
     } finally {
       setUpdating(null);
     }

@@ -17,12 +17,14 @@ exports.getStreak = async (req, res) => {
 
     res.json({
       success:       true,
-      currentStreak: stats.currentStreak,
-      maxStreak:     stats.maxStreak,
-      activeDays:    stats.activeDays,
-      daysTracked:   stats.daysTracked,
-      consistency:   stats.consistency,
-      startDate:     stats.startDate,
+      data: {
+        currentStreak: stats.currentStreak,
+        maxStreak:     stats.maxStreak,
+        activeDays:    stats.activeDays,
+        daysTracked:   stats.daysTracked,
+        consistency:   stats.consistency,
+        startDate:     stats.startDate,
+      },
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
