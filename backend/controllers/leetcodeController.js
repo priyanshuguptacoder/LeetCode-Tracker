@@ -263,28 +263,19 @@ async function syncToProblemCollection(sub) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// IST DAY WINDOW HELPERS — used only for "today's problems" display queries
-// These bound the IST calendar day so the "Solved Today" list is correct for
-// an IST user. Streak/activeDays computation uses UTC (matches LeetCode).
+// UTC DAY WINDOW HELPERS — used for "today's problems" display queries
+// Bounds the UTC calendar day (00:00 UTC → 23:59:59.999 UTC).
+// Matches LeetCode's day boundary exactly (resets at 00:00 UTC).
 // ═══════════════════════════════════════════════════════════════════════════════
-function getISTDayStart(date = new Date()) {
-  // IST midnight = UTC 18:30 previous day
-  const istOffset = 330 * 60 * 1000;
-  const istNow = new Date(date.getTime() + istOffset);
-  const istMidnight = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate(), 0, 0, 0, 0));
-  return new Date(istMidnight.getTime() - istOffset);
+function getUTCDayStart(date = new Date()) {
+  const d = new Date(date);
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0));
 }
 
-function getISTDayEnd(date = new Date()) {
-  const istOffset = 330 * 60 * 1000;
-  const istNow = new Date(date.getTime() + istOffset);
-  const istEndOfDay = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate(), 23, 59, 59, 999));
-  return new Date(istEndOfDay.getTime() - istOffset);
+function getUTCDayEnd(date = new Date()) {
+  const d = new Date(date);
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59, 59, 999));
 }
-
-// Keep UTC versions as aliases for backward compat
-function getUTCDayStart(date = new Date()) { return getISTDayStart(date); }
-function getUTCDayEnd(date = new Date())   { return getISTDayEnd(date); }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // STREAK COMPUTATION — UTC-aware, walk-back algorithm
