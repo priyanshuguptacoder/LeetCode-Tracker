@@ -22,8 +22,9 @@ const settingsSchema = new mongoose.Schema(
     isManualOverride: { type: Boolean, default: false },
 
     // ── LeetCode submission calendar ─────────────────────────────────────────
-    // Stored as sorted array of YYYY-MM-DD IST strings from LeetCode's
+    // Stored as sorted array of YYYY-MM-DD UTC strings from LeetCode's
     // userCalendar.submissionCalendar (unix timestamp map).
+    // UTC matches LeetCode's day boundary (resets at 00:00 UTC).
     // Used as the authoritative source for streak/activeDays — more accurate
     // than solvedDate from problems because it includes all submission days,
     // not just the problems we've manually tracked.

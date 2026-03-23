@@ -395,8 +395,9 @@ async function fetchRecentAcceptedSubmissions() {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // FETCH USER CALENDAR — submission calendar from LeetCode (authenticated)
-// Returns sorted array of YYYY-MM-DD IST strings for every day with a submission.
+// Returns sorted array of YYYY-MM-DD UTC strings for every day with a submission.
 // LeetCode's submissionCalendar is a JSON string: { "unixTimestamp": count, ... }
+// UTC matches LeetCode's day boundary (resets at 00:00 UTC).
 // ═══════════════════════════════════════════════════════════════════════════════
 const USER_CALENDAR_QUERY = `
   query userCalendar($username: String!) {

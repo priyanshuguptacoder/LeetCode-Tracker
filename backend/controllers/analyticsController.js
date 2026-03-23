@@ -19,6 +19,15 @@ exports.getStreak = async (req, res) => {
 
     const stats = computeStats(problems, calendarDates);
 
+    // Debug log — visible in Render logs to diagnose streak issues
+    const yesterdayUTC = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    console.log(
+      '[STREAK] todayKey:', stats.todayKey,
+      '| currentStreak:', stats.currentStreak,
+      '| calendarDates last 3:', calendarDates ? calendarDates.slice(-3) : 'none (using solvedDates)',
+      '| daySet has yesterday:', stats.days.includes(yesterdayUTC)
+    );
+
     if (!stats.isValid) {
       return res.status(500).json({ success: false, error: 'Stats invariant violation', errors: stats.errors });
     }
