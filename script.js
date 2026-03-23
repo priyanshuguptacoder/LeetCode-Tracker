@@ -2248,22 +2248,10 @@ function App() {
         const bTime = b.targetedAt ? new Date(b.targetedAt).getTime() : 0;
         return bTime - aTime;
       });
-    console.log('🎯 Targeted Problems:', list.length, list.map(p => p.number));
     return { list, totalCount: list.length };
   }, [allProblems]);
 
-  // ── Safety check: verify strict data separation ──────────────────────────
-  React.useEffect(() => {
-    const solvedProblems   = allProblems.filter(p => p.status === 'Done');
-    const targetedList     = targetedProblems.list;
-    const revisionList     = intelligentRevision;
 
-    console.log('📊 Data Separation Check:', {
-      solved:   solvedProblems.length,
-      targeted: targetedList.length,
-      revision: revisionList.length,
-    });
-  }, [allProblems, targetedProblems, intelligentRevision]);
 
   // ============================================
   // PHASE 10: PERFORMANCE INSIGHTS
