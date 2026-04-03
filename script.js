@@ -337,74 +337,128 @@ function MistakeTypeModal({ problemTitle, onConfirm, onClose }) {
   );
 }
 
-// ============================================
-// REVISION MODE MODAL — 15-min timer, evaluate result
-// ============================================
 function RevisionModeModal({ problem, onComplete, onClose }) {
   const LIMIT = 15;
-  const [phase, setPhase]       = React.useState('ready'); // ready | solving | done
-  const [elapsed, setElapsed]   = React.useState(0);
-  const [hintsUsed, setHintsUsed] = React.useState(false);
-  const [success, setSuccess]   = React.useState(null);
-  const timerRef = React.useRef(null);
 
+  const [phase, setPhase] = React.useState('ready'); // ready | solving | done
+  const [elapsed, setElapsed] = React.useState(0);
+  const [hintsUsed, setHintsUsed] = React.useState(false);
+  const [success, setSuccess] = React.useState(null);
+
+  const timerRef = React.useRef(null);
+  const startTimeRef = React.useRef(null);
+
+  // ▶️ START TIMER
   const startTimer = () => {
+    // 🚫 Prevent multiple timers
+    if (timerRef.current) return;
+
     setPhase('solving');
+    startTimeRef.current = Date.now();
+
     timerRef.current = setInterval(() => {
-      setElapsed(prev => {
-        if (prev + 1 >= LIMIT * 60) {
-          clearInterval(timerRef.current);
-          setPhase('done');
-          return LIMIT * 60;
-        }
-        return prev + 1;
-      });
+      const currentElapsed = Math.floor(
+        (Date.now() - startTimeRef.current) / 1000
+      );
+
+      if (currentElapsed >= LIMIT * 60) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+
+        setElapsed(LIMIT * 60);
+        setPhase('done');
+      } else {
+        setElapsed(currentElapsed);
+      }
     }, 1000);
   };
 
+  // ⏹ STOP TIMER
   const stopTimer = (result) => {
-    clearInterval(timerRef.current);
+    // 🛡️ Prevent crash if stop called before start
+    if (!startTimeRef.current) return;
+
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
+    const finalElapsed = Math.floor(
+      (Date.now() - startTimeRef.current) / 1000
+    );
+
+    setElapsed(Math.min(finalElapsed, LIMIT * 60));
     setSuccess(result);
     setPhase('done');
   };
 
-  React.useEffect(() => () => clearInterval(timerRef.current), []);
+  // 🧹 CLEANUP
+  React.useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, []);
 
+  // ⏱ TIME CALCULATIONS
   const mins = Math.floor(elapsed / 60);
   const secs = elapsed % 60;
   const timeTakenMins = parseFloat((elapsed / 60).toFixed(1));
   const isOverTime = elapsed >= LIMIT * 60;
 
+  // 📊 CONFIDENCE LOGIC
   const confidenceLabel = () => {
     if (success && !hintsUsed) {
-      if (timeTakenMins <= 12) return { label: 'HIGH ✅', color: 'var(--success)' };
-      if (timeTakenMins <= 15) return { label: 'MEDIUM ⚡', color: 'var(--warning, #f59e0b)' };
+      if (timeTakenMins <= 12) {
+        return { label: 'HIGH ✅', color: 'var(--success)' };
+      }
+      if (timeTakenMins <= 15) {
+        return { label: 'MEDIUM ⚡', color: 'var(--warning, #f59e0b)' };
+      }
     }
     return { label: 'LOW ❌', color: 'var(--danger, #ef4444)' };
   };
 
+  // 🎯 UI
   return (
     <div className="pw-modal-overlay">
-      <div className="pw-modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()}>
+      <div
+        className="pw-modal"
+        style={{ maxWidth: 460 }}
+        onClick={(e) => e.stopPropagation()}
+      >
         {phase === 'ready' && (
           <>
             <div className="admin-modal-icon">🔁</div>
             <h3>Revision Mode</h3>
+
             <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-              <strong style={{ color: 'var(--primary)' }}>#{problem.number} {problem.title}</strong>
+              <strong style={{ color: 'var(--primary)' }}>
+                #{problem.number} {problem.title}
+              </strong>
             </p>
+
             <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
               Solve from scratch. No hints. You have <strong>15 minutes</strong>.
             </p>
+
             <div className="pw-modal-actions">
-              <button className="btn-secondary" onClick={onClose}>Cancel</button>
+              <button className="btn-secondary" onClick={onClose}>
+                Cancel
+              </button>
+
               <a
                 href={problem.link || `https://leetcode.com/problems/${problem.number}/`}
-                target="_blank" rel="noopener noreferrer"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="btn-confirm"
                 style={{ textDecoration: 'none' }}
                 onClick={startTimer}
-              >Open & Start Timer ↗</a>
+              >
+                Open & Start Timer ↗
+              </a>
             </div>
           </>
         )}
@@ -414,37 +468,88 @@ function RevisionModeModal({ problem, onComplete, onClose }) {
             <div className="admin-modal-icon" style={{ fontSize: '2rem' }}>
               {isOverTime ? '⏰' : '⏱'}
             </div>
-            <h3 style={{ color: isOverTime ? 'var(--danger, #ef4444)' : 'var(--text-primary)' }}>
-              {isOverTime ? 'Time Up!' : `${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`}
+
+            <h3
+              style={{
+                color: isOverTime ? 'var(--danger, #ef4444)' : 'var(--text-primary)'
+              }}
+            >
+              {isOverTime
+                ? 'Time Up!'
+                : `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`}
             </h3>
+
             <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
-              {isOverTime ? 'Mark your result below.' : 'Solving from scratch — no hints allowed.'}
+              {isOverTime
+                ? 'Mark your result below.'
+                : 'Solving from scratch — no hints allowed.'}
             </p>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem',
-              color: 'var(--text-secondary)', marginBottom: '1rem', cursor: 'pointer' }}>
-              <input type="checkbox" checked={hintsUsed} onChange={e => setHintsUsed(e.target.checked)} />
+
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                fontSize: '0.85rem',
+                color: 'var(--text-secondary)',
+                marginBottom: '1rem',
+                cursor: 'pointer'
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={hintsUsed}
+                onChange={(e) => setHintsUsed(e.target.checked)}
+              />
               I used a hint
             </label>
+
             <div className="pw-modal-actions">
-              <button className="btn-danger" onClick={() => stopTimer(false)}>❌ Failed</button>
-              <button className="btn-confirm" onClick={() => stopTimer(true)}>✅ Solved</button>
+              <button className="btn-danger" onClick={() => stopTimer(false)}>
+                ❌ Failed
+              </button>
+              <button className="btn-confirm" onClick={() => stopTimer(true)}>
+                ✅ Solved
+              </button>
             </div>
           </>
         )}
 
         {phase === 'done' && success !== null && (
           <>
-            <div className="admin-modal-icon">{success ? '🎉' : '😓'}</div>
+            <div className="admin-modal-icon">
+              {success ? '🎉' : '😓'}
+            </div>
+
             <h3>{success ? 'Nice work!' : 'Keep practicing'}</h3>
+
             <p style={{ fontSize: '0.85rem', marginBottom: '0.5rem' }}>
-              Time: <strong>{timeTakenMins} min</strong> · Hints: <strong>{hintsUsed ? 'Yes' : 'No'}</strong>
+              Time: <strong>{timeTakenMins} min</strong> · Hints:{' '}
+              <strong>{hintsUsed ? 'Yes' : 'No'}</strong>
             </p>
+
             <p style={{ fontSize: '0.85rem', marginBottom: '1rem' }}>
-              Confidence: <strong style={{ color: confidenceLabel().color }}>{confidenceLabel().label}</strong>
+              Confidence:{' '}
+              <strong style={{ color: confidenceLabel().color }}>
+                {confidenceLabel().label}
+              </strong>
             </p>
+
             <div className="pw-modal-actions">
-              <button className="btn-secondary" onClick={onClose}>Cancel</button>
-              <button className="btn-confirm" onClick={() => onComplete({ timeTaken: timeTakenMins, hintsUsed, success })}>
+              <button className="btn-secondary" onClick={onClose}>
+                Cancel
+              </button>
+
+              <button
+                className="btn-confirm"
+                onClick={() =>
+                  onComplete({
+                    timeTaken: timeTakenMins,
+                    hintsUsed,
+                    success
+                  })
+                }
+              >
                 Save Result
               </button>
             </div>
