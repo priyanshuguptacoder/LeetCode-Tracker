@@ -19,18 +19,20 @@ const CF_API_BASE = 'https://codeforces.com/api';
  * - 2400+     → 5 (Hard)
  */
 function normalizeDifficulty(rating) {
-  if (!rating || rating < 800) return 1;
-  const normalized = Math.ceil(rating / 400);
-  return Math.min(normalized, 5);
+  if (!rating) return 2; // Default to Medium
+  if (rating <= 1200) return 1;
+  if (rating <= 1600) return 3;
+  return 5;
 }
 
 /**
- * Convert normalized difficulty (1-5) to LeetCode-style string
+ * Convert rating to LeetCode-style string
+ * Easy <= 1200, Medium <= 1600, Hard > 1600
  */
 function difficultyToString(rating) {
   if (!rating) return 'Medium';
-  if (rating <= 2) return 'Easy';
-  if (rating <= 3) return 'Medium';
+  if (rating <= 1200) return 'Easy';
+  if (rating <= 1600) return 'Medium';
   return 'Hard';
 }
 
@@ -124,18 +126,18 @@ function deduplicateProblems(submissions) {
  */
 function transformToSchema(cfProblem) {
   const { contestId, index, name, rating, tags, solvedAt } = cfProblem;
-  const difficultyRating = normalizeDifficulty(rating);
-  const difficultyString = difficultyToString(difficultyRating);
+  const difficulty = difficultyToString(rating);
+  const difficultyRating = difficulty === 'Easy' ? 1 : difficulty === 'Medium' ? 3 : 5;
 
   return {
-    id: `CF-${contestId}-${index}`,
+    id: `CF-${contestId}${index}`,
     contestId,
     index,
     title: name,
     platform: 'CF',
     rawDifficulty: rating || null,
     difficultyRating,
-    difficulty: difficultyString,
+    difficulty: difficulty,
     tags: tags || [],
     solved: true,
     solvedDate: solvedAt,

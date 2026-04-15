@@ -791,11 +791,11 @@ exports.getRecentProblems = async (req, res) => {
       isDeleted: { $ne: true },
       lastSubmittedAt: { $ne: null },
     })
-      .sort({ lastSubmittedAt: -1 })
+      .sort({ lastSubmittedAt: -1, _id: -1 })
       .limit(9)
       .select('id title difficulty topics leetcodeLink lastSubmittedAt solvedDate')
       .lean();
-    res.json({ success: true, data: problems });
+    res.json({ success: true, data: Array.isArray(problems) ? problems : [] });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

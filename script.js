@@ -1401,13 +1401,21 @@ function App() {
   // Never stored in state — always computed. Refresh page → correct stats.
   const solvedDates = React.useMemo(() => {
     const map = {};
-    apiProblems.forEach(p => {
+    // Sort by date to ensure if multiple problems are solved on same day, the latest one is kept in map (though date is key)
+    const sorted = [...apiProblems].sort((a,b) => new Date(a.submittedAt || a._solvedDateISO) - new Date(b.submittedAt || b._solvedDateISO));
+    sorted.forEach(p => {
       if (p.status === 'Done' && p._solvedDateISO) {
         map[p.number] = p._solvedDateISO;
       }
     });
     return map;
   }, [apiProblems]);
+
+  // Unified global activity days for streak calculation
+  const globalActivityDays = React.useMemo(() => {
+    const days = new Set(Object.values(solvedDates).filter(d => d));
+    return [...days].sort();
+  }, [solvedDates]);
 
   // ============================================
   // HISTORICAL DATE GENERATION (ONE-TIME)
@@ -2444,7 +2452,16 @@ function App() {
       const matchesPlatform =
         platformFilter === 'ALL' || problem.platform === platformFilter;
 
-      return matchesSearch && matchesDifficulty && matchesPattern && matchesStatus && matchesSelectedFilter && matchesPlatform;
+      // CF TLE Mode filter
+      const matchesTLE =
+        platformFilter !== 'CF' || 
+        difficultyFilter !== 'TLE' ||
+        (
+          (problem.rawDifficulty >= 1200 && problem.rawDifficulty <= 1800) ||
+          (Array.isArray(problem.topics) && problem.topics.some(t => ['dp', 'graphs', 'greedy', 'binary search', 'math'].includes(t.toLowerCase())))
+        );
+
+      return matchesSearch && matchesDifficulty && matchesPattern && matchesStatus && matchesSelectedFilter && matchesPlatform && matchesTLE;
     });
   }, [allProblems, debouncedSearch, difficultyFilter, patternFilter, statusFilter, selectedFilter, platformFilter]);
 
@@ -3687,12 +3704,17 @@ function App() {
                 </thead>
                 <tbody>
                   {filteredProblems.length > 0 ? (
-                    filteredProblems.map(problem => (
+                    filteredProblems.map((problem, index) => (
                       <tr key={problem._id || problem.id} data-problem-number={problem.number}
                         className={selectedProblemId === problem.number ? 'highlight-row' : ''}
                       >
-                        <td className="problem-number">{problem.number}</td>
-                        <td className="problem-title">{problem.title}</td>
+                        <td className="problem-number">{index + 1}</td>
+                        <td className="problem-title">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                             <span style={{ fontSize: '0.8rem', opacity: 0.6 }}>#{problem.number}</span>
+                             <span>{problem.title}</span>
+                          </div>
+                        </td>
                         <td>
                           <span className={`badge badge-${(problem.difficulty || 'medium').toLowerCase()}`}>
                             {problem.difficulty}
