@@ -30,23 +30,26 @@ const allowedOrigins = [
   "https://competativeprogrammingtrackerpriyanshu.vercel.app",
   ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
   "http://localhost:3000",
-  "http://localhost:5500"
-].map(o => o.replace(/\/+$/, '')); // normalize: strip trailing slashes
+  "http://localhost:5500",
+  "http://127.0.0.1:5500"
+].map(o => (o || '').trim().replace(/\/+$/, '')); // full normalization
 
 console.log('[INIT] CORS allowedOrigins:', allowedOrigins);
 
 const corsOptions = {
   origin: (origin, callback) => {
-    // Allow non-browser requests (Postman, curl, server-to-server)
+    // 1. Allow non-browser requests (Postman/curl)
     if (!origin) return callback(null, true);
 
-    const normalized = origin.replace(/\/+$/, '');
+    // 2. Normalize incoming origin
+    const normalized = origin.trim().replace(/\/+$/, '');
 
+    // 3. Robust validation
     if (allowedOrigins.includes(normalized)) {
       callback(null, true);
     } else {
-      console.warn(`[CORS] Blocked origin: "${origin}" | Allowed: ${JSON.stringify(allowedOrigins)}`);
-      callback(new Error('Not allowed by CORS'));
+      console.warn(`[CORS] Blocked mismatch: "${origin}" | Expected from: ${JSON.stringify(allowedOrigins)}`);
+      callback(new Error('CORS_ORIGIN_NOT_ALLOWED'));
     }
   },
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
@@ -127,18 +130,16 @@ mongoose
     // One-time backfill: copy solvedDate → lastSubmittedAt for problems missing it
     try {
       const Problem = require('./models/Problem');
-      const problemsToBackfill = await Problem.find({ solved: true, solvedDate: { $ne: null }, lastSubmittedAt: null });
-      let count = 0;
-      for (const doc of problemsToBackfill) {
-        doc.lastSubmittedAt = doc.solvedDate;
-        await doc.save();
-        count++;
-      }
-      if (count > 0) {
-        console.log(`[BACKFILL] Set lastSubmittedAt on ${count} problems`);
+      const subset = await Problem.find({ solved: true, solvedDate: { $ne: null }, lastSubmittedAt: null });
+      if (subset.length > 0) {
+        await Promise.all(subset.map(doc => {
+          doc.lastSubmittedAt = doc.solvedDate;
+          return doc.save();
+        }));
+        console.log(`[BACKFILL] Parallel-set lastSubmittedAt on ${subset.length} problems`);
       }
     } catch (e) {
-      console.warn('[BACKFILL] lastSubmittedAt backfill failed:', e.message);
+      console.warn('[BACKFILL] Parallel backfill failed:', e.message);
     }
 
     // Backfill: set isDeleted=false on all existing docs that predate the soft-delete field

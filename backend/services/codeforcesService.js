@@ -167,7 +167,8 @@ async function syncCodeforcesProblems(handle) {
     console.log(`[CF] User validated: ${userInfo.handle} (rating: ${userInfo.rating || 'N/A'})`);
 
     // 2. Fetch all submissions
-    const submissions = await fetchUserSubmissions(handle);
+    const rawSubmissions = await fetchUserSubmissions(handle);
+    const submissions = Array.isArray(rawSubmissions) ? rawSubmissions : [];
     console.log(`[CF] Fetched ${submissions.length} total submissions`);
 
     // 3. Filter accepted and deduplicate
