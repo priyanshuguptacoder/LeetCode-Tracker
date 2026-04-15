@@ -2656,6 +2656,21 @@ function App() {
                   <>🔄 Sync LeetCode</>
                 )}
               </button>
+
+              <button
+                className="btn-sync-lc"
+                onClick={handleCFSync}
+                disabled={cfSyncing}
+                title="Sync Codeforces problems"
+                style={{ marginLeft: '8px' }}
+              >
+                {cfSyncing ? (
+                  <><span className="sync-spinner">⟳</span> Syncing...</>
+                ) : (
+                  <>🔄 Sync CF</>
+                )}
+              </button>
+
               <a
                 href="https://leetcode.com/u/invisiblemanfromheart/"
                 target="_blank"
@@ -2663,6 +2678,19 @@ function App() {
                 className="btn-profile"
               >
                 <span>LeetCode Profile</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
+                </svg>
+              </a>
+
+              <a
+                href="https://codeforces.com/profile/priyanshuguptacoder"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-profile"
+                style={{ marginLeft: '8px' }}
+              >
+                <span>CF Profile</span>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
                 </svg>
@@ -3554,27 +3582,6 @@ function App() {
                 }}>{tab.count}</span>
               </button>
             ))}
-            {/* CF Sync Button */}
-            <button
-              className="platform-tab-btn"
-              onClick={handleCFSync}
-              disabled={cfSyncing}
-              title="Sync Codeforces problems"
-              style={{
-                padding: '8px 14px',
-                borderRadius: '10px',
-                border: '1.5px solid var(--border)',
-                background: cfSyncing ? 'rgba(99,102,241,0.1)' : 'var(--bg-tertiary)',
-                color: 'var(--text-secondary)',
-                fontWeight: 500,
-                fontSize: '0.85rem',
-                cursor: cfSyncing ? 'wait' : 'pointer',
-                transition: 'all 0.2s ease',
-                marginLeft: 'auto',
-              }}
-            >
-              {cfSyncing ? '⏳ Syncing CF...' : '🔄 Sync CF'}
-            </button>
           </div>
 
           <div className="filters-card">
