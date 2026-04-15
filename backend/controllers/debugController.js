@@ -930,3 +930,46 @@ exports.backfillProblemIdNums = async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 };
+
+// ─── GET /api/debug/backfill-difficulty ──────────────────────────────────────
+// Standardizes all problems based on rating
+exports.backfillDifficulty = async (req, res) => {
+  try {
+    const problems = await Problem.find({});
+    let updated = 0;
+
+    const getTargetDifficulty = (rating) => {
+      const r = Number(rating);
+      if (!rating || isNaN(r)) return 'Medium';
+      if (r <= 1000) return 'Easy';
+      if (r <= 1400) return 'Medium';
+      return 'Hard';
+    };
+
+    for (const p of problems) {
+      if (p.platform === 'CF') {
+        const rating = p.rawDifficulty;
+        const target = getTargetDifficulty(rating);
+        if (p.difficulty !== target) {
+          p.difficulty = target;
+          await p.save();
+          updated++;
+        }
+      } else if (p.platform === 'LC') {
+        // LeetCode difficulties are already Easy/Medium/Hard from API
+        // But we ensure they are precisely title-cased
+        const current = p.difficulty;
+        const target = current.charAt(0).toUpperCase() + current.slice(1).toLowerCase();
+        if (current !== target) {
+          p.difficulty = target;
+          await p.save();
+          updated++;
+        }
+      }
+    }
+
+    res.json({ success: true, total: problems.length, updated });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};

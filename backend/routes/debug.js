@@ -13,6 +13,7 @@ const {
   debugStats,
   cleanupCFIds,
   backfillProblemIdNums,
+  backfillDifficulty,
 } = require('../controllers/debugController');
 
 router.get('/health',               health);
@@ -24,6 +25,7 @@ router.get('/debug/frontend-check', frontendCheck);
 router.get('/debug/stats',          debugStats);
 router.get('/debug/cleanup-cf-ids', cleanupCFIds);
 router.get('/debug/backfill-ids',   backfillProblemIdNums);
+router.get('/debug/backfill-difficulty', backfillDifficulty);
 router.post('/debug/manual-test',   manualTest);
 router.post('/debug/run-all',       runAll);
 router.post('/debug/validate',      validate);
