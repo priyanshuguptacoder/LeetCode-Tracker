@@ -140,54 +140,33 @@ exports.getAllProblems = async (req, res) => {
     const l = page ? (parseInt(limit, 10) || 50) : 0;
 
     const platformFilter = platform !== 'ALL' ? { platform: platform.toUpperCase() } : {};
-    const plat = platform.toUpperCase();
 
-    // ─── STRICT NUMERIC SORT ─────────────────────────────────────────────────
-    // Data is guaranteed clean by startup backfill — no runtime fallback needed.
+    // ─── STRICT NUMERIC SORT — data must be clean before reaching here ────────
+    // Startup backfill ensures problemIdNum / contestId are always set.
     let sortStage;
+    const plat = platform.toUpperCase();
     if (plat === 'LC') {
       sortStage = { problemIdNum: 1 };
-      // Runtime assertion — cheap count, only warns, never blocks the response
-      Problem.countDocuments({ platform: 'LC', $or: [{ problemIdNum: null }, { problemIdNum: 0 }] })
-        .then(n => { if (n > 0) console.warn(`[SORT] ${n} LC problems missing problemIdNum — order may be wrong`); })
-        .catch(() => {});
     } else if (plat === 'CF') {
       sortStage = { contestId: 1, index: 1 };
     } else {
+      // ALL: group by platform first, then numeric within each
       sortStage = { platform: 1, problemIdNum: 1, contestId: 1, index: 1 };
     }
 
-    let q = Problem.find(platformFilter).sort(sortStage).lean();
-    if (l > 0) q = q.skip((p - 1) * l).limit(l);
+    let query = Problem.find(platformFilter).sort(sortStage).lean();
+    if (l > 0) query = query.skip((p - 1) * l).limit(l);
 
     const [rawProblems, rawTotal] = await Promise.all([
-      q,
+      query,
       Problem.countDocuments(platformFilter),
     ]);
 
     const problems = Array.isArray(rawProblems) ? rawProblems : [];
-    const total    = typeof rawTotal === 'number' ? rawTotal : 0;
-
-    // ─── DATA INTEGRITY LOG — visible in Render logs ──────────────────────────
-    if (problems.length > 0) {
-      const sample = problems.slice(0, 5).map(p => ({
-        id: p.uniqueId,
-        problemIdNum: p.problemIdNum ?? null,
-        contestId: p.contestId ?? null,
-        index: p.index ?? null,
-      }));
-      console.log(`[SORT CHECK] platform=${plat} first5:`, JSON.stringify(sample));
-    }
+    const total = typeof rawTotal === 'number' ? rawTotal : 0;
 
     const data = problems.map(p => {
       if (!p) return null;
-      // Validate data integrity — log any dirty docs
-      if (p.platform === 'LC' && typeof p.problemIdNum !== 'number') {
-        console.error('[INVALID LC DATA] missing numeric problemIdNum:', p.uniqueId);
-      }
-      if (p.platform === 'CF' && (!p.contestId || !p.index)) {
-        console.error('[INVALID CF DATA] missing contestId or index:', p.uniqueId);
-      }
       if (!p.providerTitle) p.providerTitle = p.platform === 'CF' ? 'Codeforces' : 'LeetCode';
       if (!p.leetcodeLink && p.platformLink) p.leetcodeLink = p.platformLink;
       return p;
@@ -203,13 +182,13 @@ exports.getAllProblems = async (req, res) => {
       data,
     });
   } catch (err) {
-    console.error('[API ERROR /api/problems]', err);
-    return res.status(500).json({
+    console.error("[API ERROR /api/problems]", err);
+    return res.status(500).json({ 
       success: false,
-      error: 'Internal Server Error',
+      error: "Internal Server Error", 
       message: err.message,
       data: [],
-      count: 0,
+      count: 0
     });
   }
 };
@@ -501,25 +480,6 @@ exports.unreviseProblem = async (req, res) => {
   }
 };
 
-// ─── PATCH /api/problems/:id/target — unified toggle (replaces separate target/untarget) ──
-exports.toggleTarget = async (req, res) => {
-  try {
-    const existing = await findProblemById(req.params.id);
-    if (!existing || existing.isDeleted) {
-      return res.status(404).json({ success: false, error: 'Problem not found' });
-    }
-    const newVal = !existing.targeted;
-    const updated = await Problem.findOneAndUpdate(
-      { uniqueId: existing.uniqueId },
-      { $set: { targeted: newVal, targetedAt: newVal ? new Date() : null } },
-      { new: true }
-    );
-    res.json({ success: true, data: { id: updated.id, uniqueId: updated.uniqueId, targeted: updated.targeted, targetedAt: updated.targetedAt } });
-  } catch (err) {
-    res.status(500).json({ success: false, error: 'Failed to toggle target', message: err.message });
-  }
-};
-
 // ─── POST /api/problems/:id/target ───────────────────────────────────────────
 exports.targetProblem = async (req, res) => {
   try {
@@ -595,42 +555,16 @@ exports.deleteProblem = async (req, res) => {
 };
 
 // ─── GET /api/problems/revision-list ─────────────────────────────────────────
-// Returns up to 9 due-for-revision problems: 6 LC + 3 CF (balanced).
-// Edge-case fill: if one platform is short, fill from the other.
+// Only problems where nextRevisionAt <= now (due for revision)
 exports.getRevisionList = async (req, res) => {
   try {
     const now = new Date();
-
-    // Fetch all due problems sorted by oldest revision first (most urgent)
-    const all = await Problem.find({
-      solved: true,
-      isDeleted: { $ne: true },
-      needsRevision: true,
-      $or: [
-        { nextRevisionAt: { $lte: now } },
-        { nextRevisionAt: null },          // never scheduled → also due
-      ],
-    })
-      .sort({ lastRevisedAt: 1, solvedDate: 1 })
-      .lean();
-
-    const lc = all.filter(p => p.platform === 'LC');
-    const cf = all.filter(p => p.platform === 'CF');
-
-    let lcSelected = lc.slice(0, 6);
-    let cfSelected = cf.slice(0, 3);
-
-    // Fill gaps from the other platform
-    if (lcSelected.length < 6) {
-      cfSelected = cf.slice(0, Math.min(cf.length, 9 - lcSelected.length));
-    }
-    if (cfSelected.length < 3) {
-      lcSelected = lc.slice(0, Math.min(lc.length, 9 - cfSelected.length));
-    }
-
-    const result = [...lcSelected, ...cfSelected].slice(0, 9);
-
-    res.json({ success: true, count: result.length, data: result });
+    const problems = await Problem.find({ solved: true, isDeleted: { $ne: true } });
+    const list = problems.filter(p => {
+      if (!p.nextRevisionAt) return false;
+      return now >= new Date(p.nextRevisionAt);
+    });
+    res.json({ success: true, count: (list || []).length, data: list || [] });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to fetch revision list', message: err.message });
   }
