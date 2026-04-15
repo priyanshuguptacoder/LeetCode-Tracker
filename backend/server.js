@@ -217,6 +217,18 @@ mongoose
       console.warn('[BACKFILL] isDeleted backfill failed:', e.message);
     }
 
+    // Backfill: set platform='LC' on all docs missing the platform field (pre-multi-platform data)
+    try {
+      const Problem = require('./models/Problem');
+      const res = await Problem.updateMany(
+        { $or: [{ platform: { $exists: false } }, { platform: null }, { platform: '' }] },
+        { $set: { platform: 'LC' } }
+      );
+      if (res.modifiedCount > 0) console.log(`[BACKFILL] Set platform=LC on ${res.modifiedCount} legacy problems`);
+    } catch (e) {
+      console.warn('[BACKFILL] platform backfill failed:', e.message);
+    }
+
     // Backfill: strip leading "#N " from LC problem titles and ensure problemIdNum is set
     try {
       const Problem = require('./models/Problem');

@@ -915,9 +915,9 @@ function App() {
   // Transform MongoDB schema → frontend schema
   const transformProblems = (data) => (data || []).map(p => {
     if (!p) return null;
-    // Hard assertions — skip corrupt docs rather than silently display garbage
-    if (!p.uniqueId && !p.id) { console.error('[TRANSFORM] skipping doc with no uniqueId/id', p); return null; }
-    if (!p.platform) { console.error('[TRANSFORM] skipping doc with no platform', p.uniqueId || p.id); return null; }
+    // Hard assertions — log corrupt docs but never skip them
+    if (!p.uniqueId && !p.id) { console.error('[TRANSFORM] doc with no uniqueId/id', p); }
+    if (!p.platform) { console.warn('[TRANSFORM] doc missing platform, defaulting to LC:', p.uniqueId || p.id || p.problemIdNum); }
     const solvedDateISO = p.solvedDate
       ? toLocalDateStr(new Date(p.solvedDate))
       : parseDDMMM(p.date);
