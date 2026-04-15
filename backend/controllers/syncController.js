@@ -74,8 +74,8 @@ async function syncCodeforcesContest(cfHandle) {
   const ui = userInfo.status === 'fulfilled' ? userInfo.value : {};
 
   const payload = {
-    rating: cd.currentRating ?? null,
-    maxRating: cd.maxRating ?? null,
+    rating: ui.rating ?? cd.currentRating ?? null,       // user.info rating is most reliable
+    maxRating: ui.maxRating ?? cd.maxRating ?? null,
     rank: ui.rank ?? null,
     maxRank: ui.maxRank ?? null,
     contestCount: cd.contestCount ?? 0,

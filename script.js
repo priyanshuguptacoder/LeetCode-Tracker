@@ -662,14 +662,7 @@ function computeStriverStats(problems) {
 }
 
 function computeTLEStats(problems) {
-  const tle = problems.filter(p => p.platform === 'CF').filter(p => {
-    const r = Number(p.rawDifficulty || p.rating);
-    const inBand = !Number.isNaN(r) && r >= 1200 && r <= 1800;
-    const hasTag = Array.isArray(p.topics) && p.topics.some(t =>
-      ['dp', 'graphs', 'greedy', 'binary search'].includes((t || '').toLowerCase())
-    );
-    return inBand || hasTag;
-  });
+  const tle = problems.filter(p => p.isTLE);
   const solved = tle.filter(p => p.status === 'Done');
   return {
     easy: solved.filter(p => p.difficulty === 'Easy').length,
@@ -953,23 +946,33 @@ function App() {
       : parseDDMMM(p.date);
     const topics = getTopicsForProblem(p);
     const status = p.solved ? 'Done' : p.inProgress ? 'In Progress' : 'Not Started';
+
+    // Compute TLE flag: CF problems in 1200–1800 rating band OR with key competitive topics
+    const cfRating = Number(p.rawDifficulty || p.rating || 0);
+    const isTLE = p.platform === 'CF' && (
+      (cfRating >= 1200 && cfRating <= 1800) ||
+      (Array.isArray(topics) && topics.some(t =>
+        ['dp', 'graphs', 'greedy', 'binary search'].includes((t || '').toLowerCase())
+      ))
+    );
+
     return {
       ...p,
       number: p.id ?? p.number,
       platform: p.platform || 'LC',
       status,
+      isTLE,
       userDifficulty: p.userDifficulty || p.difficulty || 'Medium',
       topics: topics,
       pattern: topics[0] || (p.pattern || 'Miscellaneous'),
       link: p.platformLink || p.leetcodeLink || p.link || '',
       providerTitle: p?.providerTitle || (p.platform === 'CF' ? 'Codeforces' : 'LeetCode'),
       _solvedDateISO: solvedDateISO,
-      submittedAt: p.submittedAt || p.solvedDate || null, // timestamp for sorting Recently Solved
+      submittedAt: p.submittedAt || p.solvedDate || null,
       targeted: p.targeted || false,
       isStriver: p.isStriver || false,
       confidence: p.confidence ?? 3,
       nextRevisionAt: p.nextRevisionAt || null,
-      // Revision Intelligence Engine fields
       needsRevision: p.needsRevision || false,
       solveTime: p.solveTime || null,
       hintsUsed: p.hintsUsed || false,
@@ -1060,7 +1063,6 @@ function App() {
   const [statusFilter, setStatusFilter] = useState('All');
   const [platformFilter, setPlatformFilter] = useState('ALL'); // 'ALL' | 'LC' | 'CF'
   const [sortOrder, setSortOrder] = useState('recent'); // 'recent' | 'problem'
-  const [cfSheetMode, setCfSheetMode] = useState('ALL'); // 'ALL' | 'TLE'
   const [showModal, setShowModal] = useState(false);
   const [notification, setNotification] = useState(null);
   const [syncing, setSyncing] = useState(false);
@@ -2491,10 +2493,10 @@ function App() {
   // Filters
   const patterns = ['All', ...new Set(allProblems.map(p => p.pattern))].sort();
 
-  // Reset CF sheet mode when leaving CF
+  // Reset status filter when switching platforms
   useEffect(() => {
-    if (platformFilter !== 'CF' && cfSheetMode !== 'ALL') setCfSheetMode('ALL');
-  }, [platformFilter, cfSheetMode]);
+    if (platformFilter !== 'CF' && statusFilter === 'TLE') setStatusFilter('All');
+  }, [platformFilter, statusFilter]);
 
   const filteredProblems = React.useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase();
@@ -2526,6 +2528,7 @@ function App() {
         statusFilter === 'All' ||
         (statusFilter === 'Targeted' ? problem.targeted === true :
           statusFilter === 'Striver' ? problem.isStriver === true :
+          statusFilter === 'TLE' ? problem.isTLE === true :
             problem.status === statusFilter);
 
       // selectedFilter from DifficultyNavbar
@@ -2541,18 +2544,9 @@ function App() {
       const matchesPlatform =
         platformFilter === 'ALL' || problem.platform === platformFilter;
 
-      // CF TLE Mode filter
-      const matchesTLE =
-        platformFilter !== 'CF' ||
-        cfSheetMode !== 'TLE' ||
-        (
-          (Number(problem.rawDifficulty || problem.rating) >= 1200 && Number(problem.rawDifficulty || problem.rating) <= 1800) ||
-          (Array.isArray(problem.topics) && problem.topics.some(t => ['dp', 'graphs', 'greedy', 'binary search'].includes(t.toLowerCase())))
-        );
-
-      return matchesSearch && matchesDifficulty && matchesPattern && matchesStatus && matchesSelectedFilter && matchesPlatform && matchesTLE;
+      return matchesSearch && matchesDifficulty && matchesPattern && matchesStatus && matchesSelectedFilter && matchesPlatform;
     });
-  }, [allProblems, debouncedSearch, difficultyFilter, patternFilter, statusFilter, selectedFilter, platformFilter, cfSheetMode]);
+  }, [allProblems, debouncedSearch, difficultyFilter, patternFilter, statusFilter, selectedFilter, platformFilter]);
 
   // Animate table count when filtered problems change
   useEffect(() => {
@@ -3132,7 +3126,7 @@ function App() {
               </div>
             </div>
 
-            {/* Contest Stats — placed at top near core KPIs */}
+            {/* Contest Stats — placed below streak/monthly analytics */}
             <ContestStats stats={contestStats} />
           </div>
 
@@ -3711,35 +3705,6 @@ function App() {
             ))}
           </div>
 
-          {/* CF Sheet Toggle */}
-          {platformFilter === 'CF' && (
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-              {[
-                { key: 'ALL', label: 'All' },
-                { key: 'TLE', label: 'TLE Sheet' },
-              ].map(t => (
-                <button
-                  key={t.key}
-                  className={`platform-tab-btn${cfSheetMode === t.key ? ' active' : ''}`}
-                  onClick={() => setCfSheetMode(t.key)}
-                  style={{
-                    padding: '8px 18px',
-                    borderRadius: '10px',
-                    border: cfSheetMode === t.key ? '1.5px solid var(--primary)' : '1.5px solid var(--border)',
-                    background: cfSheetMode === t.key ? 'rgba(99,102,241,0.15)' : 'var(--bg-tertiary)',
-                    color: cfSheetMode === t.key ? 'var(--primary)' : 'var(--text-secondary)',
-                    fontWeight: cfSheetMode === t.key ? 700 : 500,
-                    fontSize: '0.85rem',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                  }}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-          )}
-
           <div className="filters-card">
             <div className="filters-grid">
               <div className="filter-group">
@@ -3792,6 +3757,7 @@ function App() {
                   <option>Done</option>
                   <option>Targeted</option>
                   <option>Striver</option>
+                  <option>TLE</option>
                 </select>
               </div>
               {(searchTerm || difficultyFilter !== 'All' || patternFilter !== 'All' || statusFilter !== 'All' || selectedFilter !== null || platformFilter !== 'ALL') && (

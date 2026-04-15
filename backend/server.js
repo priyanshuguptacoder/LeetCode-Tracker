@@ -217,6 +217,44 @@ mongoose
       console.warn('[BACKFILL] isDeleted backfill failed:', e.message);
     }
 
+    // Backfill: ensure LC problems have numeric problemIdNum for correct sorting
+    try {
+      const Problem = require('./models/Problem');
+      const lcMissing = await Problem.find({
+        platform: 'LC',
+        $or: [{ problemIdNum: null }, { problemIdNum: { $exists: false } }],
+      }, { _id: 1, uniqueId: 1, id: 1 }).lean();
+      if (lcMissing.length > 0) {
+        await Problem.bulkWrite(lcMissing.map(doc => {
+          const match = (doc.uniqueId || doc.id || '').match(/(\d+)/);
+          const num = match ? parseInt(match[1], 10) : 999999;
+          return { updateOne: { filter: { _id: doc._id }, update: { $set: { problemIdNum: num } } } };
+        }));
+        console.log(`[BACKFILL] Set problemIdNum on ${lcMissing.length} LC problems`);
+      }
+    } catch (e) {
+      console.warn('[BACKFILL] problemIdNum backfill failed:', e.message);
+    }
+
+    // Backfill: ensure CF problems have numeric contestId for correct sorting
+    try {
+      const Problem = require('./models/Problem');
+      const cfMissing = await Problem.find({
+        platform: 'CF',
+        $or: [{ contestId: null }, { contestId: { $exists: false } }],
+      }, { _id: 1, uniqueId: 1 }).lean();
+      if (cfMissing.length > 0) {
+        await Problem.bulkWrite(cfMissing.map(doc => {
+          const match = (doc.uniqueId || '').match(/CF-(\d+)/);
+          const num = match ? parseInt(match[1], 10) : 999999;
+          return { updateOne: { filter: { _id: doc._id }, update: { $set: { contestId: num } } } };
+        }));
+        console.log(`[BACKFILL] Set contestId on ${cfMissing.length} CF problems`);
+      }
+    } catch (e) {
+      console.warn('[BACKFILL] CF contestId backfill failed:', e.message);
+    }
+
     // Initialize automated 12-hour sync for Codeforces
     const { initCron } = require('./tasks/cronSync');
     initCron();
