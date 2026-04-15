@@ -26,16 +26,21 @@ const revisionRoutes    = require('./routes/revision');
 const app  = express();
 const PORT = process.env.PORT || 5001;
 
+const allowedOrigins = [
+  process.env.FRONTEND_URL || "https://competativeprogrammingtrackerpriyanshu.vercel.app",
+  "http://localhost:3000",
+  "http://localhost:5500"
+];
+
 app.use(cors({
-  origin: [
-    "https://leetcodetrackerpriyanshucoder.netlify.app",
-    "http://localhost:3000",
-    "http://localhost:5500",
-    "http://127.0.0.1:5500"
-  ],
+  origin: allowedOrigins,
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-  credentials: true
+  credentials: true,
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"]
 }));
+
+// Explicit preflight handling
+app.options("*", cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
