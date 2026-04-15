@@ -113,9 +113,14 @@ exports.getAllProblems = async (req, res) => {
     const platformFilter = platform !== 'ALL' ? { platform: platform.toUpperCase() } : {};
     console.log(`[DEBUG] query: ${JSON.stringify(platformFilter)}`);
     
+    // Platform-specific stable sort
+    const sortOption = platform === 'CF' 
+      ? { contestId: 1, index: 1 } 
+      : (platform === 'LC' ? { id: 1 } : { lastSubmittedAt: -1, _id: -1 });
+
     const [rawProblems, rawTotal] = await Promise.all([
       Problem.find(platformFilter)
-        .sort({ lastSubmittedAt: -1, _id: -1 })
+        .sort(sortOption)
         .skip((p - 1) * l)
         .limit(l)
         .lean(),

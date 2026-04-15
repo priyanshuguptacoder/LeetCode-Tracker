@@ -852,3 +852,59 @@ exports.debugStats = async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 };
+
+// ─── GET /api/debug/cleanup-cf-ids ────────────────────────────────────────────
+// Canonical ID = "CF-{contestId}{index}"
+// 1. Identifies all CF problems
+// 2. Normalizes IDs (removes dashes, trims, upper case)
+// 3. Merges duplicates (keeps latest)
+// 4. Updates records
+exports.cleanupCFIds = async (req, res) => {
+  try {
+    const problems = await Problem.find({ platform: 'CF' });
+    const seen = new Map(); // normalizedId -> problem doc
+    const toDelete = [];
+    const ArrayUpdates = [];
+
+    for (const p of problems) {
+      if (!p.contestId || !p.index) continue;
+      
+      const normalizedId = `CF-${p.contestId}${p.index.trim().toUpperCase()}`;
+      
+      if (seen.has(normalizedId)) {
+        const existing = seen.get(normalizedId);
+        // Keep the one with more data or later solvedDate
+        const keepExisting = (existing.solvedDate || 0) >= (p.solvedDate || 0);
+        
+        if (keepExisting) {
+          toDelete.push(p._id);
+        } else {
+          toDelete.push(existing._id);
+          seen.set(normalizedId, p);
+          ArrayUpdates.push({ id: p._id, canonicalId: normalizedId });
+        }
+      } else {
+        seen.set(normalizedId, p);
+        if (p.id !== normalizedId) {
+          ArrayUpdates.push({ id: p._id, canonicalId: normalizedId });
+        }
+      }
+    }
+
+    // execute
+    if (toDelete.length > 0) await Problem.deleteMany({ _id: { $in: toDelete } });
+    for (const item of ArrayUpdates) {
+      await Problem.updateOne({ _id: item.id }, { $set: { id: item.canonicalId } });
+    }
+
+    res.json({
+      success: true,
+      processed: problems.length,
+      normalized: seen.size,
+      updated: ArrayUpdates.length,
+      deleted: toDelete.length,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
