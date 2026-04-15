@@ -62,6 +62,16 @@ async function upsertSolvedProblem(incoming) {
     (Array.isArray(topics) && topics.some(t => TLE_TOPICS.includes((t || '').toLowerCase())))
   );
 
+  // Always derive problemIdNum from uniqueId for LC — never trust the caller
+  const resolvedProblemIdNum = platform === 'LC'
+    ? (() => { const m = uniqueId.match(/^LC-(\d+)$/); return m ? parseInt(m[1], 10) : (problemIdNum || null); })()
+    : (problemIdNum || null);
+
+  if (platform === 'LC' && !resolvedProblemIdNum) {
+    console.error('[UPSERT] Cannot extract problemIdNum from LC uniqueId:', uniqueId);
+    // Don't throw — still insert, but log so it shows in Render logs
+  }
+
   const set = {
     uniqueId,
     id: uniqueId,
@@ -77,7 +87,7 @@ async function upsertSolvedProblem(incoming) {
     contestId,
     index,
     rating,
-    problemIdNum,
+    problemIdNum: resolvedProblemIdNum,
     isTLE,
     providerTitle: platform === 'CF' ? 'Codeforces' : 'LeetCode',
   };

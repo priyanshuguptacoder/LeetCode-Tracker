@@ -12,8 +12,9 @@ const {
   targetProblem,
   untargetProblem,
   toggleStriver,
-  getStriverStats,
+  toggleTLE,
   getTLEStats,
+  getStriverStats,
   markStriverProblems,
   getStats,
   getSettings,
@@ -46,6 +47,7 @@ router.post('/:id/unrevise', unreviseProblem);
 router.post('/:id/target', targetProblem);
 router.post('/:id/untarget', untargetProblem);
 router.patch('/:id/striver', toggleStriver);
+router.patch('/:id/tle', toggleTLE);
 router.delete('/:id', deleteProblem);
 
 module.exports = router;

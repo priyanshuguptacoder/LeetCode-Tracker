@@ -133,108 +133,61 @@ exports.getStreak = async (req, res) => {
 // ─── GET /api/problems ────────────────────────────────────────────────────────
 // Query params: ?platform=LC | ?platform=CF | ?platform=ALL (default: ALL)
 exports.getAllProblems = async (req, res) => {
-  const { platform = 'ALL', page, limit, sort = 'recent' } = req.query;
-  console.log(`[DEBUG] getAllProblems platform: ${platform}, sort: ${sort}`);
+  const { platform = 'ALL', page, limit } = req.query;
 
   try {
     const p = page ? parseInt(page, 10) || 1 : 1;
-    const l = page ? (parseInt(limit, 10) || 50) : 0; 
-    
+    const l = page ? (parseInt(limit, 10) || 50) : 0;
+
     const platformFilter = platform !== 'ALL' ? { platform: platform.toUpperCase() } : {};
-    
-    // ─── SORTING LOGIC WITH DEFENSIVE FALLBACK ─────────────────────────────────
-    // If numeric field is missing, use 999999 so it goes LAST (not first)
-    let sortStage = {};
-    if (sort === 'recent') {
-      sortStage = { lastSubmittedAt: -1, _id: -1 };
+    const plat = platform.toUpperCase();
+
+    // ─── STRICT NUMERIC SORT ─────────────────────────────────────────────────
+    // Data is guaranteed clean by startup backfill — no runtime fallback needed.
+    let sortStage;
+    if (plat === 'LC') {
+      sortStage = { problemIdNum: 1 };
+    } else if (plat === 'CF') {
+      sortStage = { contestId: 1, index: 1 };
     } else {
-      // problem order — TRUE NUMERIC SORTING (no lexicographic)
-      if (platform === 'CF') {
-        sortStage = { contestId: 1, index: 1 };
-      } else if (platform === 'LC') {
-        sortStage = { problemIdNum: 1, _id: 1 };
-      } else {
-        sortStage = { platform: 1, problemIdNum: 1, contestId: 1, index: 1 };
-      }
+      sortStage = { platform: 1, problemIdNum: 1, contestId: 1, index: 1 };
     }
 
-    // Build aggregation pipeline with defensive numeric conversion
-    const pipeline = [
-      { $match: platformFilter },
-      // Add computed fields with fallback for missing numeric values
-      {
-        $addFields: {
-          // DEFENSIVE: Ensure numeric fields exist with fallback to 999999 (goes last)
-          problemIdNum: {
-            $cond: [
-              { $and: [{ $ne: ['$problemIdNum', null] }, { $ne: ['$problemIdNum', ''] }] },
-              { $toInt: '$problemIdNum' },
-              999999
-            ]
-          },
-          contestId: {
-            $cond: [
-              { $and: [{ $ne: ['$contestId', null] }, { $ne: ['$contestId', ''] }] },
-              { $toInt: '$contestId' },
-              999999
-            ]
-          },
-          index: { $ifNull: ['$index', ''] },
-          // Ensure safe defaults for other fields
-          title: { $ifNull: ['$title', 'Untitled Problem'] },
-          difficulty: { $ifNull: ['$difficulty', 'Medium'] },
-          topics: { $ifNull: ['$topics', []] },
-          solved: { $ifNull: ['$solved', false] },
-          revisionCount: { $ifNull: ['$revisionCount', 0] },
-        }
-      },
-      { $sort: sortStage },
-      ...(l > 0 ? [{ $skip: (p - 1) * l }, { $limit: l }] : [])
-    ];
+    let q = Problem.find(platformFilter).sort(sortStage).lean();
+    if (l > 0) q = q.skip((p - 1) * l).limit(l);
 
     const [rawProblems, rawTotal] = await Promise.all([
-      Problem.aggregate(pipeline),
-      Problem.countDocuments(platformFilter)
+      q,
+      Problem.countDocuments(platformFilter),
     ]);
 
     const problems = Array.isArray(rawProblems) ? rawProblems : [];
-    const total = typeof rawTotal === 'number' ? rawTotal : 0;
-    console.log(`[DEBUG] result count: ${problems.length}, total count: ${total}`);
+    const total    = typeof rawTotal === 'number' ? rawTotal : 0;
 
-    // Final defensive transformation
     const data = problems.map(p => {
-      const obj = p || {};
-      // Ensure numeric types for frontend
-      if (obj.problemIdNum != null) obj.problemIdNum = Number(obj.problemIdNum);
-      if (obj.contestId != null) obj.contestId = Number(obj.contestId);
-      if (obj.revisionCount != null) obj.revisionCount = Number(obj.revisionCount);
-      
-      if (!obj.providerTitle) {
-        obj.providerTitle = obj.platform === 'CF' ? 'Codeforces' : 'LeetCode';
-      }
-      if (!obj.leetcodeLink && obj.platformLink) {
-        obj.leetcodeLink = obj.platformLink;
-      }
-      return obj;
-    });
-    
-    return res.json({ 
-      success: true, 
+      if (!p) return null;
+      if (!p.providerTitle) p.providerTitle = p.platform === 'CF' ? 'Codeforces' : 'LeetCode';
+      if (!p.leetcodeLink && p.platformLink) p.leetcodeLink = p.platformLink;
+      return p;
+    }).filter(Boolean);
+
+    return res.json({
+      success: true,
       total,
       page: p,
       limit: l,
-      count: data.length, 
+      count: data.length,
       platform: (platform || 'ALL').toUpperCase(),
-      data
+      data,
     });
   } catch (err) {
-    console.error("[API ERROR /api/problems]", err);
-    return res.status(500).json({ 
+    console.error('[API ERROR /api/problems]', err);
+    return res.status(500).json({
       success: false,
-      error: "Internal Server Error", 
+      error: 'Internal Server Error',
       message: err.message,
       data: [],
-      count: 0
+      count: 0,
     });
   }
 };
@@ -798,21 +751,36 @@ exports.alignProblems = async (req, res) => {
 // ─── PATCH /api/problems/:id/striver ─────────────────────────────────────────
 exports.toggleStriver = async (req, res) => {
   try {
-    const idParam = req.params.id;
-    // Support numeric IDs (63 → LC-63), string IDs (LC-63, CF-1700A)
-    const existing = await findProblemById(idParam);
+    const existing = await findProblemById(req.params.id);
     if (!existing || existing.isDeleted) {
       return res.status(404).json({ success: false, error: 'Problem not found' });
     }
-    const newVal = !existing.isStriver;
     const updated = await Problem.findOneAndUpdate(
       { uniqueId: existing.uniqueId },
-      { $set: { isStriver: newVal } },
+      { $set: { isStriver: !existing.isStriver } },
       { new: true }
     );
-    res.json({ success: true, data: { id: updated.id, isStriver: updated.isStriver } });
+    res.json({ success: true, data: { id: updated.id, uniqueId: updated.uniqueId, isStriver: updated.isStriver } });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to toggle striver', message: err.message });
+  }
+};
+
+// ─── PATCH /api/problems/:id/tle ─────────────────────────────────────────────
+exports.toggleTLE = async (req, res) => {
+  try {
+    const existing = await findProblemById(req.params.id);
+    if (!existing || existing.isDeleted) {
+      return res.status(404).json({ success: false, error: 'Problem not found' });
+    }
+    const updated = await Problem.findOneAndUpdate(
+      { uniqueId: existing.uniqueId },
+      { $set: { isTLE: !existing.isTLE } },
+      { new: true }
+    );
+    res.json({ success: true, data: { id: updated.id, uniqueId: updated.uniqueId, isTLE: updated.isTLE } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Failed to toggle TLE', message: err.message });
   }
 };
 

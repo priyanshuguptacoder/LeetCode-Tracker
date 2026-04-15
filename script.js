@@ -765,6 +765,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState(null);
   const [striverId, setStriverId] = useState(null);
+  const [tleId, setTleId] = useState(null);
   const [recentProblems, setRecentProblems] = useState([]);
   const [todayProblems, setTodayProblems] = useState([]);
   const [syncStatus, setSyncStatus] = useState('checking');
@@ -1755,7 +1756,7 @@ function App() {
   };
 
   const handleDelete = (number, isCustom) => {
-    const problem = apiProblemsRef.current.find(p => p.number === number);
+    const problem = apiProblemsRef.current.find(p => String(p.number) === String(number));
     const doDelete = async () => {
       const tableRow = document.querySelector(`[data-problem-number="${number}"]`);
       if (tableRow) {
@@ -1767,7 +1768,7 @@ function App() {
         const response = await window.API.deleteProblem(number);
         if (response.success) {
           // Remove from local state — all useMemo stats recompute automatically
-          setApiProblems(prev => prev.filter(p => p.number !== number));
+          setApiProblems(prev => prev.filter(p => String(p.number) !== String(number)));
           // Refetch streak from backend (single source of truth after soft-delete + rebuild)
           if (problem && problem.status === 'Done') {
             try {
@@ -1819,7 +1820,7 @@ function App() {
 
   const handleRevise = (number) => {
     requireAdmin(() => {
-      const problem = apiProblemsRef.current.find(p => p.number === number);
+      const problem = apiProblemsRef.current.find(p => String(p.number) === String(number));
       if (!problem) return;
       setRevisionModal(problem);
     });
@@ -1836,7 +1837,7 @@ function App() {
       const res = await window.API.reviseProblem(problem.number, { timeTaken, hintsUsed, success });
       if (res.success) {
         setApiProblems(prev => prev.map(p =>
-          p.number === problem.number
+          String(p.number) === String(problem.number)
             ? {
               ...p,
               revisionCount: res.data.revisionCount,
@@ -1875,12 +1876,11 @@ function App() {
         const res = await window.API.unreviseProblem(number);
         if (res.success) {
           setApiProblems(prev => prev.map(p =>
-            p.number === number
+            String(p.number) === String(number)
               ? {
                 ...p,
                 revisionCount: res.data.revisionCount,
                 lastRevisedAt: res.data.lastRevisedAt,
-                // Reset nextRevisionAt and confidence when count drops to 0
                 nextRevisionAt: res.data.revisionCount === 0 ? null : p.nextRevisionAt,
                 confidence: res.data.revisionCount === 0 ? 3 : p.confidence,
               }
@@ -1903,7 +1903,7 @@ function App() {
     requireAdmin(async () => {
       if (targetingId === number) return;
       // Use ref to get fresh state even after admin modal delay
-      const problem = apiProblemsRef.current.find(p => p.number === number);
+      const problem = apiProblemsRef.current.find(p => String(p.number) === String(number));
       const isCurrentlyTargeted = problem?.targeted || false;
       try {
         setTargetingId(number);
@@ -1912,7 +1912,7 @@ function App() {
           : await window.API.targetProblem(number);
         if (res.success) {
           setApiProblems(prev => prev.map(p =>
-            p.number === number
+            String(p.number) === String(number)
               ? { ...p, targeted: res.data.targeted, targetedAt: res.data.targetedAt }
               : p
           ));
@@ -1981,30 +1981,79 @@ function App() {
     return () => window.removeEventListener('scroll', onScroll);
   }, [loading]);
 
-  // ── Striver toggle ────────────────────────────────────────────────────────
   // ============================================
-  // STRIVER TOGGLE
+  // STRIVER TOGGLE — optimistic update, uniqueId as backend key
   // ============================================
   const handleToggleStriver = (number) => {
     requireAdmin(async () => {
-      if (striverId === number) return;
+      const problem = apiProblemsRef.current.find(p => String(p.number) === String(number));
+      const uid = problem?.uniqueId || problem?.id;
+      if (!uid || striverId === uid) return;
+      // Optimistic update — flip immediately, revert on error
+      const prev = problem.isStriver;
+      setApiProblems(ps => ps.map(p =>
+        String(p.number) === String(number) ? { ...p, isStriver: !prev } : p
+      ));
       try {
-        setStriverId(number);
-        const res = await window.API.toggleStriver(number);
+        setStriverId(uid);
+        const res = await window.API.toggleStriver(uid);
         if (res.success) {
-          // Update local state — striverStats useMemo recomputes automatically
-          setApiProblems(prev => prev.map(p =>
-            p.number === number ? { ...p, isStriver: res.data.isStriver } : p
+          // Confirm with server value
+          setApiProblems(ps => ps.map(p =>
+            String(p.number) === String(number) ? { ...p, isStriver: res.data.isStriver } : p
           ));
-          showNotification(
-            res.data.isStriver ? '📘 Added to Striver sheet' : '✅ Removed from Striver',
-            'success'
-          );
+          window.API.getStriverStats().then(r => { if (r.success) setStriverStats(r.data); }).catch(() => {});
+          showNotification(res.data.isStriver ? '📘 Added to Striver' : '✅ Removed from Striver', 'success');
+        } else {
+          // Revert
+          setApiProblems(ps => ps.map(p =>
+            String(p.number) === String(number) ? { ...p, isStriver: prev } : p
+          ));
         }
       } catch (err) {
+        setApiProblems(ps => ps.map(p =>
+          String(p.number) === String(number) ? { ...p, isStriver: prev } : p
+        ));
         showNotification(`❌ ${err.message}`, 'error');
       } finally {
         setStriverId(null);
+      }
+    });
+  };
+
+  // ============================================
+  // TLE TOGGLE — optimistic update, uniqueId as backend key
+  // ============================================
+  const handleToggleTLE = (number) => {
+    requireAdmin(async () => {
+      const problem = apiProblemsRef.current.find(p => String(p.number) === String(number));
+      const uid = problem?.uniqueId || problem?.id;
+      if (!uid || tleId === uid) return;
+      const prev = problem.isTLE;
+      setApiProblems(ps => ps.map(p =>
+        String(p.number) === String(number) ? { ...p, isTLE: !prev } : p
+      ));
+      try {
+        setTleId(uid);
+        const res = await window.API.toggleTLE(uid);
+        if (res.success) {
+          setApiProblems(ps => ps.map(p =>
+            String(p.number) === String(number) ? { ...p, isTLE: res.data.isTLE } : p
+          ));
+          window.API.getTLEStats().then(r => { if (r.success) setTleStats(r.data); }).catch(() => {});
+          showNotification(res.data.isTLE ? '🏆 Added to TLE sheet' : '✅ Removed from TLE sheet', 'success');
+        } else {
+          setApiProblems(ps => ps.map(p =>
+            String(p.number) === String(number) ? { ...p, isTLE: prev } : p
+          ));
+        }
+      } catch (err) {
+        setApiProblems(ps => ps.map(p =>
+          String(p.number) === String(number) ? { ...p, isTLE: prev } : p
+        ));
+        showNotification(`❌ ${err.message}`, 'error');
+      } finally {
+        setTleId(null);
       }
     });
   };
@@ -3867,10 +3916,18 @@ function App() {
                             <button
                               className={`btn-striver${problem.isStriver ? ' active' : ''}`}
                               onClick={() => handleToggleStriver(problem.number)}
-                              disabled={striverId === problem.number}
+                              disabled={striverId === (problem.uniqueId || problem.id)}
                               title={problem.isStriver ? 'Remove from Striver' : 'Mark as Striver'}
                             >
-                              {striverId === problem.number ? '⏳' : '📘'}
+                              {striverId === (problem.uniqueId || problem.id) ? '⏳' : '📘'}
+                            </button>
+                            <button
+                              className={`btn-tle${problem.isTLE ? ' active' : ''}`}
+                              onClick={() => handleToggleTLE(problem.number)}
+                              disabled={tleId === (problem.uniqueId || problem.id)}
+                              title={problem.isTLE ? 'Remove from TLE sheet' : 'Add to TLE sheet'}
+                            >
+                              {tleId === (problem.uniqueId || problem.id) ? '⏳' : '🏆'}
                             </button>
                             <button
                               className="btn-delete"
@@ -4000,10 +4057,18 @@ function App() {
                       <button
                         className={`btn-striver${problem.isStriver ? ' active' : ''}`}
                         onClick={() => handleToggleStriver(problem.number)}
-                        disabled={striverId === problem.number}
+                        disabled={striverId === (problem.uniqueId || problem.id)}
                         title={problem.isStriver ? 'Remove from Striver' : 'Mark as Striver'}
                       >
-                        {striverId === problem.number ? '⏳' : '📘'}
+                        {striverId === (problem.uniqueId || problem.id) ? '⏳' : '📘'}
+                      </button>
+                      <button
+                        className={`btn-tle${problem.isTLE ? ' active' : ''}`}
+                        onClick={() => handleToggleTLE(problem.number)}
+                        disabled={tleId === (problem.uniqueId || problem.id)}
+                        title={problem.isTLE ? 'Remove from TLE sheet' : 'Add to TLE sheet'}
+                      >
+                        {tleId === (problem.uniqueId || problem.id) ? '⏳' : '🏆'}
                       </button>
                       <button
                         className="btn-delete"

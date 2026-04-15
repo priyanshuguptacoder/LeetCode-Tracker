@@ -251,15 +251,19 @@ mongoose
       const Problem = require('./models/Problem');
       const lcMissing = await Problem.find({
         platform: 'LC',
-        $or: [{ problemIdNum: null }, { problemIdNum: { $exists: false } }],
+        $or: [{ problemIdNum: null }, { problemIdNum: { $exists: false } }, { problemIdNum: 0 }],
       }, { _id: 1, uniqueId: 1, id: 1 }).lean();
       if (lcMissing.length > 0) {
-        await Problem.bulkWrite(lcMissing.map(doc => {
-          const match = (doc.uniqueId || doc.id || '').match(/(\d+)/);
-          const num = match ? parseInt(match[1], 10) : 999999;
+        const ops = lcMissing.map(doc => {
+          const m = (doc.uniqueId || doc.id || '').match(/^LC-(\d+)$/);
+          const num = m ? parseInt(m[1], 10) : null;
+          if (!num) return null;
           return { updateOne: { filter: { _id: doc._id }, update: { $set: { problemIdNum: num } } } };
-        }));
-        console.log(`[BACKFILL] Set problemIdNum on ${lcMissing.length} LC problems`);
+        }).filter(Boolean);
+        if (ops.length > 0) {
+          await Problem.bulkWrite(ops);
+          console.log(`[BACKFILL] Set problemIdNum on ${ops.length} LC problems`);
+        }
       }
     } catch (e) {
       console.warn('[BACKFILL] problemIdNum backfill failed:', e.message);
@@ -328,6 +332,22 @@ mongoose
       }
     } catch (e) {
       console.warn('[CF RESET] Failed:', e.message);
+    }
+
+    // Assertion: verify no LC problems are still missing problemIdNum after backfill
+    try {
+      const Problem = require('./models/Problem');
+      const missing = await Problem.countDocuments({
+        platform: 'LC',
+        $or: [{ problemIdNum: null }, { problemIdNum: { $exists: false } }, { problemIdNum: 0 }],
+      });
+      if (missing > 0) {
+        console.error(`[ASSERT] CRITICAL: ${missing} LC problems still missing problemIdNum — sorting will be incorrect`);
+      } else {
+        console.log('[ASSERT] All LC problems have problemIdNum ✓');
+      }
+    } catch (e) {
+      console.warn('[ASSERT] problemIdNum check failed:', e.message);
     }
 
     // Initialize automated 12-hour sync for Codeforces

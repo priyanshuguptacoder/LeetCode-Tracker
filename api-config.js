@@ -81,8 +81,13 @@ const api = {
     return r.json();
   },
   toggleStriver: async (id) => {
-    const r = await fetch(`${API_BASE_URL}/problems/${id}/striver`, { method: 'PATCH' });
+    const r = await fetch(`${API_BASE_URL}/problems/${encodeURIComponent(id)}/striver`, { method: 'PATCH' });
     if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Failed to toggle striver'); }
+    return r.json();
+  },
+  toggleTLE: async (id) => {
+    const r = await fetch(`${API_BASE_URL}/problems/${encodeURIComponent(id)}/tle`, { method: 'PATCH' });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Failed to toggle TLE'); }
     return r.json();
   },
   getStriverStats: async () => {
