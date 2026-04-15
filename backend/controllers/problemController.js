@@ -103,45 +103,58 @@ exports.getStreak = async (req, res) => {
 // ─── GET /api/problems ────────────────────────────────────────────────────────
 // Query params: ?platform=LC | ?platform=CF | ?platform=ALL (default: ALL)
 exports.getAllProblems = async (req, res) => {
+  const { platform = 'LC', page, limit } = req.query;
+  console.log(`[DEBUG] platform: ${platform}, page: ${page}, limit: ${limit}`);
+
   try {
-    const { platform = 'LC', page, limit } = req.query;
     const p = page ? parseInt(page, 10) || 1 : 1;
-    const l = page ? (parseInt(limit, 10) || 50) : 0; // 0 disables limit, returning all items
+    const l = page ? (parseInt(limit, 10) || 50) : 0; 
     
-    // Build query filter
     const platformFilter = platform !== 'ALL' ? { platform: platform.toUpperCase() } : {};
+    console.log(`[DEBUG] query: ${JSON.stringify(platformFilter)}`);
     
-    const [problems, total] = await Promise.all([
+    const [rawProblems, rawTotal] = await Promise.all([
       Problem.find(platformFilter)
         .sort({ lastSubmittedAt: -1, _id: -1 })
         .skip((p - 1) * l)
-        .limit(l),
+        .limit(l)
+        .lean(),
       Problem.countDocuments(platformFilter)
     ]);
 
+    const problems = Array.isArray(rawProblems) ? rawProblems : [];
+    const total = typeof rawTotal === 'number' ? rawTotal : 0;
+    console.log(`[DEBUG] result count: ${problems.length}, total count: ${total}`);
+
     const data = problems.map(p => {
-      const obj = p.toObject();
-      // Backward compatibility: ensure providerTitle and legacy fields
+      const obj = p || {};
       if (!obj.providerTitle) {
         obj.providerTitle = obj.platform === 'CF' ? 'Codeforces' : 'LeetCode';
       }
-      // Ensure legacy leetcodeLink exists for old frontend compatibility
       if (!obj.leetcodeLink && obj.platformLink) {
         obj.leetcodeLink = obj.platformLink;
       }
       return obj;
     });
     
-    res.json({ 
+    return res.json({ 
       success: true, 
       total,
       page: p,
       limit: l,
-      count: (data || []).length, 
+      count: data.length, 
       platform: (platform || 'ALL').toUpperCase(),
-      data: data || []    });
+      data
+    });
   } catch (err) {
-    res.status(500).json({ success: false, error: 'Failed to fetch problems', message: err.message });
+    console.error("[API ERROR /api/problems]", err);
+    return res.status(500).json({ 
+      success: false,
+      error: "Internal Server Error", 
+      message: err.message,
+      data: [],
+      count: 0
+    });
   }
 };
 
