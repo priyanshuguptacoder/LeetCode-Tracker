@@ -1044,7 +1044,7 @@ function App() {
   const [difficultyFilter, setDifficultyFilter] = useState('All');
   const [patternFilter, setPatternFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
-  const [platformFilter, setPlatformFilter] = useState('LC'); // 'LC' | 'CF'
+  const [platformFilter, setPlatformFilter] = useState('ALL'); // 'ALL' | 'LC' | 'CF'
   const [viewMode, setViewMode] = useState('ALL'); // 'ALL' | 'STRIVER' | 'TLE' (kept for future use)
   const [showModal, setShowModal] = useState(false);
   const [notification, setNotification] = useState(null);
@@ -1537,7 +1537,7 @@ function App() {
   // ============================================
   // DUPLICATE PREVENTION
   // ============================================
-  const problemExists = (number) => apiProblems.some(p =>
+  const problemExists = (number) => allProblems.some(p =>
     p.platform === 'CF'
       ? p.number === number || p.number === String(number)
       : p.number === parseInt(number, 10) || p.problemIdNum === parseInt(number, 10)
@@ -2112,7 +2112,7 @@ function App() {
     setPatternFilter('All');
     setStatusFilter('All');
     setSelectedFilter(null);
-    setPlatformFilter('LC');
+    setPlatformFilter('ALL');
     setViewMode('ALL');
 
     showNotification('✨ All filters cleared', 'success');
@@ -2600,8 +2600,9 @@ function App() {
               selectedFilter === 'solved' ? problem.status === 'Done' :
                 false);
 
-      // Platform filter — always active (no ALL option)
-      const matchesPlatform = problem.platform === platformFilter;
+      // Platform filter
+      const matchesPlatform =
+        platformFilter === 'ALL' || problem.platform === platformFilter;
 
       return matchesSearch && matchesDifficulty && matchesPattern && matchesStatus && matchesSelectedFilter && matchesPlatform;
     });
@@ -3707,8 +3708,9 @@ function App() {
           {/* Platform Filter Tabs */}
           <div className="platform-tabs" style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
             {[
-              { key: 'LC', label: '💻 LeetCode',   count: allProblems.filter(p => p.platform === 'LC').length },
-              { key: 'CF', label: '🏆 Codeforces', count: allProblems.filter(p => p.platform === 'CF').length },
+              { key: 'ALL', label: '🌐 All',         count: allProblems.length },
+              { key: 'LC',  label: '💻 LeetCode',    count: allProblems.filter(p => p.platform === 'LC').length },
+              { key: 'CF',  label: '🏆 Codeforces',  count: allProblems.filter(p => p.platform === 'CF').length },
             ].map(tab => (
               <button
                 key={tab.key}
@@ -3797,7 +3799,7 @@ function App() {
                   <option>TLE</option>
                 </select>
               </div>
-              {(searchTerm || difficultyFilter !== 'All' || patternFilter !== 'All' || statusFilter !== 'All' || selectedFilter !== null || platformFilter !== 'LC') && (
+              {(searchTerm || difficultyFilter !== 'All' || patternFilter !== 'All' || statusFilter !== 'All' || selectedFilter !== null || platformFilter !== 'ALL') && (
                 <div className="filter-group filter-clear-group">
                   <label>&nbsp;</label>
                   <button
