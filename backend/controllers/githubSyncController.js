@@ -219,21 +219,30 @@ async function mergeUpsert(source, payload) {
 
 // ─── Keep main Problem collection in sync ────────────────────────────────────
 async function syncToProblemCollection(sub) {
+  const uniqueId = `LC-${sub.problemId}`;
   const nextRevisionAt = new Date(sub.dateSolved);
   nextRevisionAt.setDate(nextRevisionAt.getDate() + 1);
 
   await Problem.findOneAndUpdate(
-    { id: sub.problemId },
+    { uniqueId },
     {
       $set: {
+        uniqueId,
+        id: uniqueId,
+        platform: 'LC',
+        problemIdNum: sub.problemId,
         title:         sub.title,
         difficulty:    sub.difficulty,
         topics:        sub.tags,
         solved:        true,
         solvedDate:    sub.dateSolved,
         submittedAt:   sub.last_updated_at,
+        lastSubmittedAt: sub.last_updated_at || sub.dateSolved,
         nextRevisionAt,
-        ...(sub.slug && { leetcodeLink: `https://leetcode.com/problems/${sub.slug}/` }),
+        ...(sub.slug && {
+          leetcodeLink: `https://leetcode.com/problems/${sub.slug}/`,
+          platformLink: `https://leetcode.com/problems/${sub.slug}/`,
+        }),
         ...(sub.notes && { notes: sub.notes }),
       },
       $setOnInsert: { revisionCount: 0, confidence: 3 },

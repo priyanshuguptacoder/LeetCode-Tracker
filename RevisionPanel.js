@@ -2,7 +2,7 @@
 function RevisionPanel() {
   const [problems, setProblems] = React.useState([]);
   const [loading, setLoading]   = React.useState(true);
-  const [updating, setUpdating] = React.useState(null); // problemId being updated
+  const [updating, setUpdating] = React.useState(null); // uniqueId being updated
 
   const fetchDue = () => {
     setLoading(true);
@@ -18,19 +18,19 @@ function RevisionPanel() {
 
   React.useEffect(fetchDue, []);
 
-  const handleFeedback = async (problemId, feedback) => {
+  const handleFeedback = async (uniqueId, feedback) => {
     if (updating) return;
-    setUpdating(problemId);
+    setUpdating(uniqueId);
     try {
       const res = await fetch('/api/revision/update', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ problemId, feedback }),
+        body:    JSON.stringify({ problemId: uniqueId, feedback }),
       });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
       if (data.success) {
-        setProblems(prev => prev.filter(p => p.id !== problemId));
+        setProblems(prev => prev.filter(p => p.uniqueId !== uniqueId));
       } else {
         console.error('Revision update failed:', data.error);
       }
@@ -53,10 +53,10 @@ function RevisionPanel() {
       'ul', { className: 'rp-list' },
       problems.map(p =>
         React.createElement(
-          'li', { key: p.id, className: 'rp-item' },
+          'li', { key: p.uniqueId, className: 'rp-item' },
           React.createElement(
             'div', { className: 'rp-problem-info' },
-            React.createElement('span', { className: 'rp-num' }, `#${p.id}`),
+            React.createElement('span', { className: 'rp-num' }, p.uniqueId),
             React.createElement('span', { className: 'rp-title-text' }, p.title),
             React.createElement('span', { className: `rp-diff rp-diff-${(p.difficulty||'').toLowerCase()}` }, p.difficulty),
           ),
@@ -67,8 +67,8 @@ function RevisionPanel() {
                 'button', {
                   key: fb,
                   className: `rp-btn rp-btn-${fb}`,
-                  disabled: updating === p.id,
-                  onClick: () => handleFeedback(p.id, fb),
+                  disabled: updating === p.uniqueId,
+                  onClick: () => handleFeedback(p.uniqueId, fb),
                 },
                 fb.charAt(0).toUpperCase() + fb.slice(1),
               )

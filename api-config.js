@@ -20,7 +20,7 @@ const api = {
     const params   = `?platform=${platform}`;
     console.log('[API] getAllProblems', `${API_BASE_URL}/problems${params}`);
     const r = await fetch(`${API_BASE_URL}/problems${params}`);
-    if (!r.ok) throw new Error('Failed to fetch problems');
+    if (!r.ok) { const e = await r.json().catch(() => ({})); console.error("API ERROR:", e); throw new Error(e.error || 'Failed to fetch problems'); }
     return r.json();
   },
   createProblem: async (data) => {
@@ -33,65 +33,65 @@ const api = {
     return r.json();
   },
   updateProblem: async (id, updates) => {
-    const r = await fetch(`${API_BASE_URL}/problems/${id}`, {
+    const r = await fetch(`${API_BASE_URL}/problems/${encodeURIComponent(id)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
     });
-    if (!r.ok) throw new Error('Failed to update problem');
+    if (!r.ok) { const e = await r.json().catch(() => ({})); console.error("API ERROR:", e); throw new Error(e.error || 'Failed to update problem'); }
     return r.json();
   },
   deleteProblem: async (id) => {
-    const r = await fetch(`${API_BASE_URL}/problems/${id}`, { method: 'DELETE' });
-    if (!r.ok) throw new Error('Failed to delete problem');
+    const r = await fetch(`${API_BASE_URL}/problems/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!r.ok) { const e = await r.json().catch(() => ({})); console.error("API ERROR:", e); throw new Error(e.error || 'Failed to delete problem'); }
     return r.json();
   },
   reviseProblem: async (id, data = {}) => {
-    const r = await fetch(`${API_BASE_URL}/problems/${id}/revise`, {
+    const r = await fetch(`${API_BASE_URL}/problems/${encodeURIComponent(id)}/revise`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Failed to record revision'); }
+    if (!r.ok) { const e = await r.json().catch(() => ({})); console.error("API ERROR:", e); throw new Error(e.error || 'Failed to record revision'); }
     return r.json();
   },
   setMistakeType: async (id, mistakeType) => {
-    const r = await fetch(`${API_BASE_URL}/problems/${id}`, {
+    const r = await fetch(`${API_BASE_URL}/problems/${encodeURIComponent(id)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mistakeType, needsRevision: true }),
     });
-    if (!r.ok) throw new Error('Failed to set mistake type');
+    if (!r.ok) { const e = await r.json().catch(() => ({})); console.error("API ERROR:", e); throw new Error(e.error || 'Failed to set mistake type'); }
     return r.json();
   },
   unreviseProblem: async (id) => {
-    const r = await fetch(`${API_BASE_URL}/problems/${id}/unrevise`, { method: 'POST' });
-    if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Failed to unrevise'); }
+    const r = await fetch(`${API_BASE_URL}/problems/${encodeURIComponent(id)}/unrevise`, { method: 'POST' });
+    if (!r.ok) { const e = await r.json().catch(() => ({})); console.error("API ERROR:", e); throw new Error(e.error || 'Failed to unrevise'); }
     return r.json();
   },
   targetProblem: async (id) => {
     const r = await fetch(`${API_BASE_URL}/problems/${encodeURIComponent(id)}/target`, { method: 'POST' });
-    if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Failed to target problem'); }
+    if (!r.ok) { const e = await r.json().catch(() => ({})); console.error("API ERROR:", e); throw new Error(e.error || 'Failed to target problem'); }
     return r.json();
   },
   untargetProblem: async (id) => {
     const r = await fetch(`${API_BASE_URL}/problems/${encodeURIComponent(id)}/untarget`, { method: 'POST' });
-    if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Failed to untarget problem'); }
+    if (!r.ok) { const e = await r.json().catch(() => ({})); console.error("API ERROR:", e); throw new Error(e.error || 'Failed to untarget problem'); }
     return r.json();
   },
   toggleTarget: async (id) => {
     const r = await fetch(`${API_BASE_URL}/problems/${encodeURIComponent(id)}/target`, { method: 'PATCH' });
-    if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Failed to toggle target'); }
+    if (!r.ok) { const e = await r.json().catch(() => ({})); console.error("API ERROR:", e); throw new Error(e.error || 'Failed to toggle target'); }
     return r.json();
   },
   toggleStriver: async (id) => {
     const r = await fetch(`${API_BASE_URL}/problems/${encodeURIComponent(id)}/striver`, { method: 'PATCH' });
-    if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Failed to toggle striver'); }
+    if (!r.ok) { const e = await r.json().catch(() => ({})); console.error("API ERROR:", e); throw new Error(e.error || 'Failed to toggle striver'); }
     return r.json();
   },
   toggleTLE: async (id) => {
     const r = await fetch(`${API_BASE_URL}/problems/${encodeURIComponent(id)}/tle`, { method: 'PATCH' });
-    if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Failed to toggle TLE'); }
+    if (!r.ok) { const e = await r.json().catch(() => ({})); console.error("API ERROR:", e); throw new Error(e.error || 'Failed to toggle TLE'); }
     return r.json();
   },
   getStriverStats: async () => {

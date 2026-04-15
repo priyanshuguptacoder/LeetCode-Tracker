@@ -213,11 +213,10 @@ exports.getAllProblems = async (req, res) => {
     const total = typeof rawTotal === 'number' ? rawTotal : 0;
 
     const data = problems.map(p => {
-      if (!p) return null;
       if (!p.providerTitle) p.providerTitle = p.platform === 'CF' ? 'Codeforces' : 'LeetCode';
       if (!p.leetcodeLink && p.platformLink) p.leetcodeLink = p.platformLink;
       return p;
-    }).filter(Boolean);
+    });
 
     return res.json({
       success: true,
@@ -240,26 +239,35 @@ exports.getAllProblems = async (req, res) => {
   }
 };
 
+function normalizePlatform(platform) {
+  const raw = String(platform || '').trim();
+  if (raw === 'LeetCode') return 'LC';
+  if (raw === 'Codeforces') return 'CF';
+  const upper = raw.toUpperCase();
+  return upper === 'CF' ? 'CF' : 'LC';
+}
+
+function normalizeUniqueId(idParam) {
+  const raw = String(idParam || '').trim();
+  if (!raw) return '';
+  if (/^(LC|CF)-/i.test(raw)) return raw.toUpperCase();
+  if (/^\d+$/.test(raw)) return `LC-${raw}`;
+  return raw.toUpperCase();
+}
+
+async function findProblemByUniqueId(idParam) {
+  const uniqueId = normalizeUniqueId(idParam);
+  if (!uniqueId) return null;
+  return Problem.findOne({ uniqueId, isDeleted: { $ne: true } });
+}
+
 // ─── GET /api/problems/:id ────────────────────────────────────────────────────
-// Supports both old numeric IDs (LC-1 → 1) and new string IDs (CF-123A)
+// Canonical lookup: uniqueId only (examples: LC-1, CF-1772A)
 exports.getProblem = async (req, res) => {
   try {
-    const idParam = req.params.id;
-    let problem;
-    
-    // Try finding by exact ID first (new string format)
-    problem = await Problem.findOne({ $or: [{ uniqueId: idParam }, { id: idParam }], isDeleted: { $ne: true } });
-    
-    // Fallback: try parsing as number for old LeetCode IDs
+    const problem = await findProblemByUniqueId(req.params.id);
     if (!problem) {
-      const numericId = parseInt(idParam, 10);
-      if (!isNaN(numericId)) {
-        problem = await Problem.findOne({ $or: [{ uniqueId: `LC-${numericId}` }, { id: `LC-${numericId}` }], isDeleted: { $ne: true } });
-      }
-    }
-    
-    if (!problem) {
-      return res.status(404).json({ success: false, error: 'Problem not found' });
+      return res.status(404).json({ success: false, error: `Problem not found for uniqueId ${normalizeUniqueId(req.params.id)}` });
     }
     
     const data = problem.toObject();
@@ -278,6 +286,7 @@ exports.createProblem = async (req, res) => {
   try {
     const { id, title, difficulty, topics, solved, notes, leetcodeLink, platformLink, 
             solvedDate, targeted, targetedAt, platform = 'LC' } = req.body;
+    const normalizedPlatform = normalizePlatform(platform);
     
     // Support both new platformLink and legacy leetcodeLink
     const link = platformLink || leetcodeLink;
@@ -286,9 +295,9 @@ exports.createProblem = async (req, res) => {
     }
     
     // Format ID based on platform (e.g., 'LC-1' or 'CF-123A')
-    const formattedId = id.toString().toUpperCase().startsWith(platform.toUpperCase())
-      ? id.toString()
-      : `${platform.toUpperCase()}-${id}`;
+    const formattedId = id.toString().toUpperCase().startsWith(`${normalizedPlatform}-`)
+      ? id.toString().toUpperCase()
+      : `${normalizedPlatform}-${id}`;
     const uniqueId = formattedId;
     
     // Check including soft-deleted — if deleted, block re-creation (user intent lock)
@@ -327,7 +336,7 @@ exports.createProblem = async (req, res) => {
       uniqueId,
       id: uniqueId,
       problemIdNum,
-      platform: platform.toUpperCase(),
+      platform: normalizedPlatform,
       title,
       difficulty,
       rawDifficulty: rawDiff,
@@ -343,7 +352,7 @@ exports.createProblem = async (req, res) => {
       nextRevisionAt,
       targeted: isTargeted,
       targetedAt: resolvedTargetedAt,
-      providerTitle: req.body.providerTitle || (platform === 'CF' ? 'Codeforces' : 'LeetCode'),
+      providerTitle: req.body.providerTitle || (normalizedPlatform === 'CF' ? 'Codeforces' : 'LeetCode'),
       // Revision Intelligence Engine
       solveTime: req.body.solveTime != null ? parseInt(req.body.solveTime) : null,
       hintsUsed: req.body.hintsUsed === true || req.body.hintsUsed === 'true',
@@ -365,12 +374,14 @@ exports.createProblem = async (req, res) => {
 };
 
 // ─── PUT /api/problems/:id ────────────────────────────────────────────────────
-// Supports both old numeric IDs and new string IDs (LC-1, CF-123A)
+// Canonical lookup: uniqueId only
 exports.updateProblem = async (req, res) => {
   try {
-    const idParam = req.params.id;
     const updates = { ...req.body };
     delete updates.id;
+    delete updates._id;
+    delete updates.uniqueId;
+    if (updates.platform !== undefined) updates.platform = normalizePlatform(updates.platform);
     if (updates.solved !== undefined) updates.solved = updates.solved === true || updates.solved === 'true';
     if (updates.solved === true && !updates.solvedDate) updates.solvedDate = new Date();
     if (updates.solved === true) {
@@ -383,22 +394,11 @@ exports.updateProblem = async (req, res) => {
     if (updates.platformLink && !updates.leetcodeLink) updates.leetcodeLink = updates.platformLink;
     if (updates.leetcodeLink && !updates.platformLink) updates.platformLink = updates.leetcodeLink;
 
-    // Find problem by ID (try string first, then numeric fallback)
-    let before = await Problem.findOne({ $or: [{ uniqueId: idParam }, { id: idParam }] });
-    if (!before) {
-      const numericId = parseInt(idParam, 10);
-      if (!isNaN(numericId)) {
-        before = await Problem.findOne({ $or: [{ uniqueId: `LC-${numericId}` }, { id: `LC-${numericId}` }] });
-      }
-    }
-    
-    if (!before) return res.status(404).json({ success: false, error: 'Problem not found' });
-    if (before.isDeleted) return res.status(410).json({ success: false, error: 'Problem was deleted and cannot be modified' });
-
-    const searchUniqueId = before.uniqueId || before.id; // stable key
+    const before = await findProblemByUniqueId(req.params.id);
+    if (!before) return res.status(404).json({ success: false, error: `Problem not found for uniqueId ${normalizeUniqueId(req.params.id)}` });
 
     const problem = await Problem.findOneAndUpdate(
-      { uniqueId: searchUniqueId }, updates, { returnDocument: 'after', runValidators: true }
+      { uniqueId: before.uniqueId, isDeleted: { $ne: true } }, updates, { new: true, runValidators: true }
     );
 
     let streakData = null;
@@ -413,23 +413,11 @@ exports.updateProblem = async (req, res) => {
   }
 };
 
-// Helper: Find problem by ID (supports both string and numeric)
-async function findProblemById(idParam) {
-  let problem = await Problem.findOne({ $or: [{ uniqueId: idParam }, { id: idParam }] });
-  if (!problem) {
-    const numericId = parseInt(idParam, 10);
-    if (!isNaN(numericId)) {
-      problem = await Problem.findOne({ $or: [{ uniqueId: `LC-${numericId}` }, { id: `LC-${numericId}` }] });
-    }
-  }
-  return problem;
-}
-
 // ─── POST /api/problems/:id/revise ───────────────────────────────────────────
 exports.reviseProblem = async (req, res) => {
   try {
-    const current = await findProblemById(req.params.id);
-    if (!current) return res.status(404).json({ success: false, error: 'Problem not found' });
+    const current = await findProblemByUniqueId(req.params.id);
+    if (!current) return res.status(404).json({ success: false, error: `Problem not found for uniqueId ${normalizeUniqueId(req.params.id)}` });
 
     const newCount = (current.revisionCount || 0) + 1;
     const timeTaken = req.body.timeTaken != null ? parseFloat(req.body.timeTaken) : null;
@@ -481,7 +469,7 @@ exports.reviseProblem = async (req, res) => {
     };
 
     const problem = await Problem.findOneAndUpdate(
-      { id: current.id },
+      { uniqueId: current.uniqueId, isDeleted: { $ne: true } },
       { $set: updates },
       { new: true, runValidators: true }
     );
@@ -489,7 +477,7 @@ exports.reviseProblem = async (req, res) => {
       success: true,
       removed: shouldRemove,
       data: {
-        id: problem.id,
+        uniqueId: problem.uniqueId,
         revisionCount: problem.revisionCount,
         lastRevisedAt: problem.lastRevisedAt,
         confidence: problem.confidence,
@@ -507,20 +495,20 @@ exports.reviseProblem = async (req, res) => {
 // ─── POST /api/problems/:id/unrevise ─────────────────────────────────────────
 exports.unreviseProblem = async (req, res) => {
   try {
-    const current = await findProblemById(req.params.id);
-    if (!current) return res.status(404).json({ success: false, error: 'Problem not found' });
+    const current = await findProblemByUniqueId(req.params.id);
+    if (!current) return res.status(404).json({ success: false, error: `Problem not found for uniqueId ${normalizeUniqueId(req.params.id)}` });
     if ((current.revisionCount || 0) === 0) {
       return res.status(400).json({ success: false, error: 'revisionCount is already 0' });
     }
     const newCount = current.revisionCount - 1;
     const problem = await Problem.findOneAndUpdate(
-      { id: current.id },
+      { uniqueId: current.uniqueId, isDeleted: { $ne: true } },
       { $set: { revisionCount: newCount, lastRevisedAt: newCount === 0 ? null : current.lastRevisedAt } },
       { new: true, runValidators: true }
     );
     res.json({
       success: true,
-      data: { id: problem.id, revisionCount: problem.revisionCount, lastRevisedAt: problem.lastRevisedAt },
+      data: { uniqueId: problem.uniqueId, revisionCount: problem.revisionCount, lastRevisedAt: problem.lastRevisedAt },
     });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to unrevise', message: err.message });
@@ -530,15 +518,15 @@ exports.unreviseProblem = async (req, res) => {
 // ─── POST /api/problems/:id/target ───────────────────────────────────────────
 exports.targetProblem = async (req, res) => {
   try {
-    const existing = await findProblemById(req.params.id);
-    if (!existing) return res.status(404).json({ success: false, error: 'Problem not found' });
+    const existing = await findProblemByUniqueId(req.params.id);
+    if (!existing) return res.status(404).json({ success: false, error: `Problem not found for uniqueId ${normalizeUniqueId(req.params.id)}` });
     
     const problem = await Problem.findOneAndUpdate(
-      { id: existing.id },
+      { uniqueId: existing.uniqueId, isDeleted: { $ne: true } },
       { $set: { targeted: true, targetedAt: new Date() } },
       { new: true, runValidators: true }
     );
-    res.json({ success: true, data: { id: problem.id, targeted: problem.targeted, targetedAt: problem.targetedAt } });
+    res.json({ success: true, data: problem });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to target problem', message: err.message });
   }
@@ -547,15 +535,15 @@ exports.targetProblem = async (req, res) => {
 // ─── POST /api/problems/:id/untarget ─────────────────────────────────────────
 exports.untargetProblem = async (req, res) => {
   try {
-    const existing = await findProblemById(req.params.id);
-    if (!existing) return res.status(404).json({ success: false, error: 'Problem not found' });
+    const existing = await findProblemByUniqueId(req.params.id);
+    if (!existing) return res.status(404).json({ success: false, error: `Problem not found for uniqueId ${normalizeUniqueId(req.params.id)}` });
     
     const problem = await Problem.findOneAndUpdate(
-      { id: existing.id },
+      { uniqueId: existing.uniqueId, isDeleted: { $ne: true } },
       { $set: { targeted: false, targetedAt: null } },
       { new: true, runValidators: true }
     );
-    res.json({ success: true, data: { id: problem.id, targeted: problem.targeted, targetedAt: problem.targetedAt } });
+    res.json({ success: true, data: problem });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to untarget problem', message: err.message });
   }
@@ -564,17 +552,17 @@ exports.untargetProblem = async (req, res) => {
 // ─── PATCH /api/problems/:id/target — unified toggle ─────────────────────────
 exports.toggleTarget = async (req, res) => {
   try {
-    const existing = await findProblemById(req.params.id);
-    if (!existing || existing.isDeleted) {
-      return res.status(404).json({ success: false, error: 'Problem not found' });
+    const existing = await findProblemByUniqueId(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ success: false, error: `Problem not found for uniqueId ${normalizeUniqueId(req.params.id)}` });
     }
     const newVal = !existing.targeted;
     const updated = await Problem.findOneAndUpdate(
-      { uniqueId: existing.uniqueId },
+      { uniqueId: existing.uniqueId, isDeleted: { $ne: true } },
       { $set: { targeted: newVal, targetedAt: newVal ? new Date() : null } },
-      { new: true }
+      { new: true, runValidators: true }
     );
-    res.json({ success: true, data: { id: updated.id, uniqueId: updated.uniqueId, targeted: updated.targeted, targetedAt: updated.targetedAt } });
+    res.json({ success: true, data: updated });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to toggle target', message: err.message });
   }
@@ -586,15 +574,14 @@ exports.toggleTarget = async (req, res) => {
 // Rebuilds streak from remaining non-deleted solved problems.
 exports.deleteProblem = async (req, res) => {
   try {
-    const problem = await findProblemById(req.params.id);
-    if (!problem) return res.status(404).json({ success: false, error: 'Problem not found' });
-    if (problem.isDeleted) return res.status(410).json({ success: false, error: 'Problem already deleted' });
+    const problem = await findProblemByUniqueId(req.params.id);
+    if (!problem) return res.status(404).json({ success: false, error: `Problem not found for uniqueId ${normalizeUniqueId(req.params.id)}` });
 
     const now = new Date();
 
     // Soft-delete the Problem document
     await Problem.findOneAndUpdate(
-      { id: problem.id },
+      { uniqueId: problem.uniqueId, isDeleted: { $ne: true } },
       { $set: { isDeleted: true, deletedAt: now } }
     );
 
@@ -614,7 +601,7 @@ exports.deleteProblem = async (req, res) => {
       streakData = streakPayload(await rebuildStreak());
     }
 
-    res.json({ success: true, data: { id: problem.id, title: problem.title }, streak: streakData });
+    res.json({ success: true, data: { uniqueId: problem.uniqueId, title: problem.title }, streak: streakData });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to delete problem', message: err.message });
   }
@@ -702,10 +689,10 @@ exports.getSuggestions = async (req, res) => {
     const used = new Set();
 
     const addSuggestion = (p, reason) => {
-      if (!p || used.has(p.id)) return;
-      used.add(p.id);
+      if (!p || used.has(p.uniqueId)) return;
+      used.add(p.uniqueId);
       suggestions.push({
-        problemId: p.id,
+        problemId: p.uniqueId,
         title: p.title,
         difficulty: p.difficulty,
         topic: (p.topics || [])[0] || 'General',
@@ -715,7 +702,7 @@ exports.getSuggestions = async (req, res) => {
 
     // 70% weak topics (up to 7)
     for (const topic of weakTopics) {
-      const candidates = problems.filter(p => (p.topics || []).includes(topic) && !used.has(p.id));
+      const candidates = problems.filter(p => (p.topics || []).includes(topic) && !used.has(p.uniqueId));
       if (candidates.length > 0) {
         const pick = candidates.sort((a, b) => (a.confidence || 3) - (b.confidence || 3))[0];
         addSuggestion(pick, `Weak in ${topic}`);
@@ -724,7 +711,7 @@ exports.getSuggestions = async (req, res) => {
 
     // 20% revision backlog (up to 2)
     const backlogSorted = revisionBacklog
-      .filter(p => !used.has(p.id))
+      .filter(p => !used.has(p.uniqueId))
       .sort((a, b) => (a.confidence || 3) - (b.confidence || 3));
     for (let i = 0; i < Math.min(2, backlogSorted.length); i++) {
       const p = backlogSorted[i];
@@ -734,7 +721,7 @@ exports.getSuggestions = async (req, res) => {
     }
 
     // 10% random (1 problem)
-    const remaining = problems.filter(p => !used.has(p.id));
+    const remaining = problems.filter(p => !used.has(p.uniqueId));
     if (remaining.length > 0) {
       const pick = remaining[Math.floor(Math.random() * remaining.length)];
       addSuggestion(pick, 'Challenge yourself');
@@ -805,22 +792,29 @@ exports.alignProblems = async (req, res) => {
         ? (p.solvedDate ? new Date(p.solvedDate) : parseDDMMMToDate(p.date))
         : null;
       
-      const probId = p.id ?? p.number;
-      const numMatch = probId.toString().match(/(\d+)/);
+      const platform = normalizePlatform(p.platform);
+      const rawId = p.uniqueId || p.number;
+      const uniqueId = normalizeUniqueId(
+        String(rawId || '').startsWith(`${platform}-`) ? rawId : `${platform}-${rawId}`
+      );
+      const numMatch = uniqueId.match(/(\d+)/);
 
       return {
         updateOne: {
-          filter: { id: parseInt(probId) },
+          filter: { uniqueId },
           update: {
             $set: {
-              id: parseInt(probId),
+              uniqueId,
+              id: uniqueId,
+              platform,
               problemIdNum: numMatch ? parseInt(numMatch[0], 10) : null,
               title: p.title,
               difficulty: p.difficulty || 'Medium',
               topics: Array.isArray(p.topics) ? p.topics : [],
               solved: isSolved,
               notes: p.notes || '',
-              leetcodeLink: p.leetcodeLink || p.link || '',
+              platformLink: p.platformLink || p.leetcodeLink || p.link || '',
+              leetcodeLink: p.leetcodeLink || p.platformLink || p.link || '',
               solvedDate,
             }
           },
@@ -843,19 +837,19 @@ exports.alignProblems = async (req, res) => {
 // ─── PATCH /api/problems/:id/striver — LC only ───────────────────────────────
 exports.toggleStriver = async (req, res) => {
   try {
-    const existing = await findProblemById(req.params.id);
-    if (!existing || existing.isDeleted) {
-      return res.status(404).json({ success: false, error: 'Problem not found' });
+    const existing = await findProblemByUniqueId(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ success: false, error: `Problem not found for uniqueId ${normalizeUniqueId(req.params.id)}` });
     }
     if (existing.platform !== 'LC') {
       return res.status(400).json({ success: false, error: 'Striver is only available for LeetCode problems' });
     }
     const updated = await Problem.findOneAndUpdate(
-      { uniqueId: existing.uniqueId },
+      { uniqueId: existing.uniqueId, isDeleted: { $ne: true } },
       { $set: { isStriver: !existing.isStriver } },
-      { new: true }
+      { new: true, runValidators: true }
     );
-    res.json({ success: true, data: { id: updated.id, uniqueId: updated.uniqueId, isStriver: updated.isStriver } });
+    res.json({ success: true, data: updated });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to toggle striver', message: err.message });
   }
@@ -864,19 +858,19 @@ exports.toggleStriver = async (req, res) => {
 // ─── PATCH /api/problems/:id/tle — CF only ───────────────────────────────────
 exports.toggleTLE = async (req, res) => {
   try {
-    const existing = await findProblemById(req.params.id);
-    if (!existing || existing.isDeleted) {
-      return res.status(404).json({ success: false, error: 'Problem not found' });
+    const existing = await findProblemByUniqueId(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ success: false, error: `Problem not found for uniqueId ${normalizeUniqueId(req.params.id)}` });
     }
     if (existing.platform !== 'CF') {
       return res.status(400).json({ success: false, error: 'TLE sheet is only available for Codeforces problems' });
     }
     const updated = await Problem.findOneAndUpdate(
-      { uniqueId: existing.uniqueId },
+      { uniqueId: existing.uniqueId, isDeleted: { $ne: true } },
       { $set: { isTLE: !existing.isTLE } },
-      { new: true }
+      { new: true, runValidators: true }
     );
-    res.json({ success: true, data: { id: updated.id, uniqueId: updated.uniqueId, isTLE: updated.isTLE } });
+    res.json({ success: true, data: updated });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to toggle TLE', message: err.message });
   }
@@ -900,19 +894,20 @@ const DEFAULT_STRIVER_IDS = [
 exports.markStriverProblems = async (req, res) => {
   try {
     const problemIds = Array.isArray(req.body?.problemIds)
-      ? req.body.problemIds.map(Number)
+      ? req.body.problemIds.map(n => `LC-${Number(n)}`)
       : DEFAULT_STRIVER_IDS;
+    const uniqueIds = problemIds.map(id => typeof id === 'string' && id.startsWith('LC-') ? id : `LC-${id}`);
 
     // Bulk update — only touches isStriver, never creates new docs
     const result = await Problem.updateMany(
-      { id: { $in: problemIds } },
+      { uniqueId: { $in: uniqueIds } },
       { $set: { isStriver: true } }
     );
 
     // Find which IDs don't exist in DB
-    const existing = await Problem.find({ id: { $in: problemIds } }, { id: 1, _id: 0 });
-    const existingIds = new Set(existing.map(p => p.id));
-    const missingIds = problemIds.filter(id => !existingIds.has(id));
+    const existing = await Problem.find({ uniqueId: { $in: uniqueIds } }, { uniqueId: 1, _id: 0 });
+    const existingIds = new Set(existing.map(p => p.uniqueId));
+    const missingIds = uniqueIds.filter(id => !existingIds.has(id));
 
     console.log(`[mark-striver] matched=${result.matchedCount} modified=${result.modifiedCount} missing=${missingIds.length}`);
 

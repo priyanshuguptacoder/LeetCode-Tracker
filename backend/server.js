@@ -220,13 +220,66 @@ mongoose
     // Backfill: set platform='LC' on all docs missing the platform field (pre-multi-platform data)
     try {
       const Problem = require('./models/Problem');
-      const res = await Problem.updateMany(
+      const missingPlatform = await Problem.updateMany(
         { $or: [{ platform: { $exists: false } }, { platform: null }, { platform: '' }] },
         { $set: { platform: 'LC' } }
       );
-      if (res.modifiedCount > 0) console.log(`[BACKFILL] Set platform=LC on ${res.modifiedCount} legacy problems`);
+      const lcLabel = await Problem.updateMany({ platform: 'LeetCode' }, { $set: { platform: 'LC' } });
+      const cfLabel = await Problem.updateMany({ platform: 'Codeforces' }, { $set: { platform: 'CF' } });
+      const invalidPlatform = await Problem.updateMany(
+        { platform: { $nin: ['LC', 'CF'] } },
+        { $set: { platform: 'LC' } }
+      );
+      const modified =
+        missingPlatform.modifiedCount +
+        lcLabel.modifiedCount +
+        cfLabel.modifiedCount +
+        invalidPlatform.modifiedCount;
+      if (modified > 0) console.log(`[BACKFILL] Normalized platform on ${modified} problems`);
     } catch (e) {
       console.warn('[BACKFILL] platform backfill failed:', e.message);
+    }
+
+    // Backfill: ensure every Problem has canonical uniqueId and legacy id mirrors it.
+    try {
+      const Problem = require('./models/Problem');
+      const legacyDocs = await Problem.find({
+        $or: [
+          { uniqueId: { $exists: false } },
+          { uniqueId: null },
+          { uniqueId: '' },
+          { $expr: { $ne: ['$id', '$uniqueId'] } },
+        ],
+      }, { _id: 1, uniqueId: 1, id: 1, platform: 1, problemIdNum: 1, contestId: 1, index: 1 }).lean();
+
+      const ops = legacyDocs.map(doc => {
+        let uniqueId = doc.uniqueId;
+        if (!uniqueId) {
+          if (doc.platform === 'CF') {
+            const idx = doc.index ? String(doc.index).trim().toUpperCase() : '';
+            uniqueId = doc.contestId && idx ? `CF-${doc.contestId}${idx}` : null;
+          } else {
+            const raw = doc.problemIdNum || doc.id;
+            const match = raw != null ? String(raw).match(/(\d+)/) : null;
+            uniqueId = match ? `LC-${parseInt(match[1], 10)}` : null;
+          }
+        }
+        if (!uniqueId) return null;
+        uniqueId = String(uniqueId).toUpperCase();
+        return {
+          updateOne: {
+            filter: { _id: doc._id },
+            update: { $set: { uniqueId, id: uniqueId } },
+          },
+        };
+      }).filter(Boolean);
+
+      if (ops.length > 0) {
+        await Problem.bulkWrite(ops);
+        console.log(`[BACKFILL] Normalized uniqueId/id on ${ops.length} legacy problems`);
+      }
+    } catch (e) {
+      console.warn('[BACKFILL] uniqueId backfill failed:', e.message);
     }
 
     // Backfill: strip leading "#N " from LC problem titles and ensure problemIdNum is set
@@ -236,7 +289,7 @@ mongoose
       const hashTitles = await Problem.find({
         platform: 'LC',
         title: /^#/,
-      }, { _id: 1, title: 1, uniqueId: 1, id: 1, problemIdNum: 1 }).lean();
+      }, { _id: 1, title: 1, uniqueId: 1, problemIdNum: 1 }).lean();
 
       if (hashTitles.length > 0) {
         await Problem.bulkWrite(hashTitles.map(doc => {
@@ -245,7 +298,7 @@ mongoose
           const cleanTitle = m ? m[2].trim() : doc.title.replace(/^#+\s*/, '').trim();
           const numFromTitle = m ? parseInt(m[1], 10) : null;
           // Prefer existing problemIdNum, then extracted from title, then from uniqueId
-          const idMatch = (doc.uniqueId || doc.id || '').match(/(\d+)/);
+          const idMatch = (doc.uniqueId || '').match(/(\d+)/);
           const problemIdNum = doc.problemIdNum || numFromTitle || (idMatch ? parseInt(idMatch[1], 10) : 999999);
           return {
             updateOne: {
@@ -264,10 +317,10 @@ mongoose
       const lcMissing = await Problem.find({
         platform: 'LC',
         $or: [{ problemIdNum: null }, { problemIdNum: { $exists: false } }, { problemIdNum: 0 }],
-      }, { _id: 1, uniqueId: 1, id: 1 }).lean();
+      }, { _id: 1, uniqueId: 1 }).lean();
       if (lcMissing.length > 0) {
         const ops = lcMissing.map(doc => {
-          const m = (doc.uniqueId || doc.id || '').match(/^LC-(\d+)$/);
+          const m = (doc.uniqueId || '').match(/^LC-(\d+)$/);
           const num = m ? parseInt(m[1], 10) : null;
           if (!num) return null;
           return { updateOne: { filter: { _id: doc._id }, update: { $set: { problemIdNum: num } } } };
@@ -335,26 +388,6 @@ mongoose
       }
     } catch (e) {
       console.warn('[BACKFILL] isTLE backfill failed:', e.message);
-    }
-
-    // ONE-TIME: Hard-reset all CF problems and re-sync from scratch
-    // Guarded by Settings flag 'cfHardResetDone' — runs exactly once per deployment cycle
-    try {
-      const Problem  = require('./models/Problem');
-      const Settings = require('./models/Settings');
-      const flag = await Settings.findOne({ key: 'global' }, { cfHardResetDone: 1 }).lean();
-      if (!flag?.cfHardResetDone) {
-        const del = await Problem.deleteMany({ platform: 'CF' });
-        console.log(`[CF RESET] Deleted ${del.deletedCount} CF problems for clean re-sync`);
-        await Settings.findOneAndUpdate(
-          { key: 'global' },
-          { $set: { cfHardResetDone: true } },
-          { upsert: true }
-        );
-        console.log('[CF RESET] Flag set — will not run again');
-      }
-    } catch (e) {
-      console.warn('[CF RESET] Failed:', e.message);
     }
 
     // Assertion: verify no LC problems are still missing problemIdNum after backfill

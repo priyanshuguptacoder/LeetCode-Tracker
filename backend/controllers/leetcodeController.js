@@ -871,10 +871,10 @@ exports.getRecentProblems = async (req, res) => {
     const problems = await Problem.find({
       solved: true,
       isDeleted: { $ne: true },
-      solvedDate: { $ne: null },
+      $or: [{ lastSubmittedAt: { $ne: null } }, { solvedDate: { $ne: null } }],
     })
-      .sort({ solvedDate: -1, _id: -1 })
-      .limit(15)
+      .sort({ lastSubmittedAt: -1, solvedDate: -1 })
+      .limit(9)
       .select('uniqueId id title difficulty topics platform leetcodeLink platformLink lastSubmittedAt solvedDate')
       .lean();
     res.json({ success: true, data: Array.isArray(problems) ? problems : [] });
@@ -894,7 +894,7 @@ exports.getTodayProblems = async (req, res) => {
       lastSubmittedAt: { $gte: start, $lte: end },
     })
       .sort({ lastSubmittedAt: -1 })
-      .select('id title difficulty topics leetcodeLink lastSubmittedAt solvedDate')
+      .select('uniqueId id title difficulty topics platform leetcodeLink platformLink lastSubmittedAt solvedDate revisionCount lastRevisedAt isStriver targeted targetedAt needsRevision')
       .lean();
     res.json({ success: true, data: problems });
   } catch (err) {
@@ -930,7 +930,7 @@ exports.getRecentAndToday = async (req, res) => {
           { lastSubmittedAt: { $gte: startOfDayUTC, $lte: endOfDayUTC } },
         ],
       })
-        .sort({ solvedDate: -1, lastSubmittedAt: -1 })
+        .sort({ lastSubmittedAt: -1, solvedDate: -1 })
         .select(SELECT)
         .lean(),
     ]);

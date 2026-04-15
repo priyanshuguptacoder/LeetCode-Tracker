@@ -80,7 +80,7 @@ exports.getRecentlySolved = async (req, res) => {
       ],
       ...platformFilter
     })
-      .sort({ solvedDate: -1 })
+      .sort({ lastSubmittedAt: -1, solvedDate: -1 })
       .limit(parseInt(limit, 10))
       .lean();
 

@@ -108,6 +108,7 @@ async function upsertSolvedProblem(incoming) {
     contestId: resolvedContestId,
     index: resolvedIndex,
     rating,
+    rawDifficulty: rating || null,
     problemIdNum: resolvedProblemIdNum,
     isTLE,
     providerTitle: platform === 'CF' ? 'Codeforces' : 'LeetCode',
@@ -136,4 +137,3 @@ async function upsertSolvedProblem(incoming) {
 }
 
 module.exports = { upsertSolvedProblem };
-
