@@ -14,8 +14,9 @@ const API_BASE_URL = isLocalhost ? LOCAL_API_URL : PRODUCTION_API_URL;
 
 // ─── API ─────────────────────────────────────────────────────────────────────
 const api = {
-  getAllProblems: async () => {
-    const r = await fetch(`${API_BASE_URL}/problems`);
+  getAllProblems: async (platform = 'ALL') => {
+    const params = `?platform=${platform}`;
+    const r = await fetch(`${API_BASE_URL}/problems${params}`);
     if (!r.ok) throw new Error('Failed to fetch problems');
     return r.json();
   },
@@ -131,6 +132,21 @@ const api = {
   getTodayProblems: async () => {
     const r = await fetch(`${API_BASE_URL}/problem/today`);
     if (!r.ok) throw new Error('Failed to fetch today\'s problems');
+    return r.json();
+  },
+  // ── Codeforces ────────────────────────────────────────────────────────────
+  syncCodeforces: async (handle) => {
+    const r = await fetch(`${API_BASE_URL.replace('/api', '')}/api/codeforces/sync`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(handle ? { handle } : {}),
+    });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'CF sync failed'); }
+    return r.json();
+  },
+  getCodeforcesStats: async () => {
+    const r = await fetch(`${API_BASE_URL.replace('/api', '')}/api/codeforces/stats`);
+    if (!r.ok) throw new Error('Failed to fetch CF stats');
     return r.json();
   },
 };

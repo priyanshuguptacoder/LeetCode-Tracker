@@ -101,27 +101,77 @@ exports.getStreak = async (req, res) => {
 };
 
 // ─── GET /api/problems ────────────────────────────────────────────────────────
+// Query params: ?platform=LC | ?platform=CF | ?platform=ALL (default: ALL)
 exports.getAllProblems = async (req, res) => {
   try {
-    const problems = await Problem.find({ isDeleted: { $ne: true } }).sort({ id: 1 });
+    const { platform = 'LC', page, limit } = req.query;
+    const p = page ? parseInt(page, 10) || 1 : 1;
+    const l = page ? (parseInt(limit, 10) || 50) : 0; // 0 disables limit, returning all items
+    
+    // Build query filter
+    const platformFilter = platform !== 'ALL' ? { platform: platform.toUpperCase() } : {};
+    
+    const [problems, total] = await Promise.all([
+      Problem.find(platformFilter)
+        .sort({ lastSubmittedAt: -1, _id: -1 })
+        .skip((p - 1) * l)
+        .limit(l),
+      Problem.countDocuments(platformFilter)
+    ]);
+
     const data = problems.map(p => {
       const obj = p.toObject();
-      if (!obj.providerTitle) obj.providerTitle = 'LeetCode';
+      // Backward compatibility: ensure providerTitle and legacy fields
+      if (!obj.providerTitle) {
+        obj.providerTitle = obj.platform === 'CF' ? 'Codeforces' : 'LeetCode';
+      }
+      // Ensure legacy leetcodeLink exists for old frontend compatibility
+      if (!obj.leetcodeLink && obj.platformLink) {
+        obj.leetcodeLink = obj.platformLink;
+      }
       return obj;
     });
-    res.json({ success: true, count: data.length, data });
+    
+    res.json({ 
+      success: true, 
+      total,
+      page: p,
+      limit: l,
+      count: data.length, 
+      platform: platform.toUpperCase(),
+      data 
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to fetch problems', message: err.message });
   }
 };
 
 // ─── GET /api/problems/:id ────────────────────────────────────────────────────
+// Supports both old numeric IDs (LC-1 → 1) and new string IDs (CF-123A)
 exports.getProblem = async (req, res) => {
   try {
-    const problem = await Problem.findOne({ id: parseInt(req.params.id), isDeleted: { $ne: true } });
-    if (!problem) return res.status(404).json({ success: false, error: 'Problem not found' });
+    const idParam = req.params.id;
+    let problem;
+    
+    // Try finding by exact ID first (new string format)
+    problem = await Problem.findOne({ id: idParam, isDeleted: { $ne: true } });
+    
+    // Fallback: try parsing as number for old LeetCode IDs
+    if (!problem) {
+      const numericId = parseInt(idParam, 10);
+      if (!isNaN(numericId)) {
+        problem = await Problem.findOne({ id: numericId, isDeleted: { $ne: true } });
+      }
+    }
+    
+    if (!problem) {
+      return res.status(404).json({ success: false, error: 'Problem not found' });
+    }
+    
     const data = problem.toObject();
-    if (!data.providerTitle) data.providerTitle = 'LeetCode';
+    if (!data.providerTitle) data.providerTitle = data.platform === 'CF' ? 'Codeforces' : 'LeetCode';
+    if (!data.leetcodeLink && data.platformLink) data.leetcodeLink = data.platformLink;
+    
     res.json({ success: true, data });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to fetch problem', message: err.message });
@@ -129,24 +179,41 @@ exports.getProblem = async (req, res) => {
 };
 
 // ─── POST /api/problems ───────────────────────────────────────────────────────
+// Supports multi-platform: platform='LC'|'CF', id='LC-1'|'CF-123A'
 exports.createProblem = async (req, res) => {
   try {
-    const { id, title, difficulty, topics, solved, notes, leetcodeLink, solvedDate, targeted, targetedAt } = req.body;
-    if (!id || !title || !difficulty || !leetcodeLink) {
-      return res.status(400).json({ success: false, error: 'id, title, difficulty, and leetcodeLink are required' });
+    const { id, title, difficulty, topics, solved, notes, leetcodeLink, platformLink, 
+            solvedDate, targeted, targetedAt, platform = 'LC' } = req.body;
+    
+    // Support both new platformLink and legacy leetcodeLink
+    const link = platformLink || leetcodeLink;
+    if (!id || !title || !difficulty || !link) {
+      return res.status(400).json({ success: false, error: 'id, title, difficulty, and platformLink (or leetcodeLink) are required' });
     }
+    
+    // Format ID based on platform (e.g., 'LC-1' or 'CF-123A')
+    const formattedId = id.toString().startsWith(platform) ? id : `${platform}-${id}`;
+    
     // Check including soft-deleted — if deleted, block re-creation (user intent lock)
-    const exists = await Problem.findOne({ id: parseInt(id) });
+    const exists = await Problem.findOne({ id: formattedId });
     if (exists && exists.isDeleted) {
-      return res.status(409).json({ success: false, error: `Problem #${id} was previously deleted. Deletion is permanent.` });
+      return res.status(409).json({ success: false, error: `Problem ${formattedId} was previously deleted. Deletion is permanent.` });
     }
-    if (exists) return res.status(400).json({ success: false, error: 'Problem #' + id + ' already exists' });
+    if (exists) return res.status(400).json({ success: false, error: `Problem ${formattedId} already exists` });
 
     const isSolved = solved === true || solved === 'true';
     const isTargeted = targeted === true || targeted === 'true';
     const now = new Date();
     const resolvedSolvedDate = isSolved ? (solvedDate ? new Date(solvedDate) : now) : null;
     const resolvedTargetedAt = isTargeted ? (targetedAt ? new Date(targetedAt) : now) : null;
+
+    // Calculate normalized difficulty rating
+    const rawDiff = req.body.rawDifficulty || difficulty;
+    let difficultyRating = req.body.difficultyRating;
+    if (!difficultyRating && typeof rawDiff === 'number') {
+      difficultyRating = Math.ceil(rawDiff / 400);
+      difficultyRating = Math.min(difficultyRating, 5);
+    }
 
     // nextRevisionAt = solvedDate + 1 day (first revision due after 1 day)
     let nextRevisionAt = null;
@@ -156,17 +223,25 @@ exports.createProblem = async (req, res) => {
     }
 
     const problem = await Problem.create({
-      id: parseInt(id), title, difficulty,
+      id: formattedId,
+      platform: platform.toUpperCase(),
+      title,
+      difficulty,
+      rawDifficulty: rawDiff,
+      difficultyRating,
       topics: Array.isArray(topics) ? topics : [],
-      solved: isSolved, notes: notes || '', leetcodeLink,
+      solved: isSolved,
+      notes: notes || '',
+      platformLink: link,
+      leetcodeLink: link, // legacy compatibility
       solvedDate: resolvedSolvedDate,
-      submittedAt: isSolved ? now : null,  // always use current time as submittedAt
-      lastSubmittedAt: isSolved ? resolvedSolvedDate : null, // used by recent/today queries
+      submittedAt: isSolved ? now : null,
+      lastSubmittedAt: isSolved ? resolvedSolvedDate : null,
       nextRevisionAt,
       targeted: isTargeted,
       targetedAt: resolvedTargetedAt,
-      providerTitle: req.body.providerTitle || 'LeetCode',
-      // Revision Intelligence Engine — auto-detection
+      providerTitle: req.body.providerTitle || (platform === 'CF' ? 'Codeforces' : 'LeetCode'),
+      // Revision Intelligence Engine
       solveTime: req.body.solveTime != null ? parseInt(req.body.solveTime) : null,
       hintsUsed: req.body.hintsUsed === true || req.body.hintsUsed === 'true',
       wrongAttempts: req.body.wrongAttempts != null ? parseInt(req.body.wrongAttempts) : 0,
@@ -187,8 +262,10 @@ exports.createProblem = async (req, res) => {
 };
 
 // ─── PUT /api/problems/:id ────────────────────────────────────────────────────
+// Supports both old numeric IDs and new string IDs (LC-1, CF-123A)
 exports.updateProblem = async (req, res) => {
   try {
+    const idParam = req.params.id;
     const updates = { ...req.body };
     delete updates.id;
     if (updates.solved !== undefined) updates.solved = updates.solved === true || updates.solved === 'true';
@@ -199,13 +276,26 @@ exports.updateProblem = async (req, res) => {
     }
     if (updates.solved === false) { updates.solvedDate = null; updates.submittedAt = null; updates.lastSubmittedAt = null; }
 
-    // Fetch BEFORE updating — block if soft-deleted
-    const before = await Problem.findOne({ id: parseInt(req.params.id) });
+    // Handle platformLink / leetcodeLink sync
+    if (updates.platformLink && !updates.leetcodeLink) updates.leetcodeLink = updates.platformLink;
+    if (updates.leetcodeLink && !updates.platformLink) updates.platformLink = updates.leetcodeLink;
+
+    // Find problem by ID (try string first, then numeric fallback)
+    let before = await Problem.findOne({ id: idParam });
+    if (!before) {
+      const numericId = parseInt(idParam, 10);
+      if (!isNaN(numericId)) {
+        before = await Problem.findOne({ id: numericId });
+      }
+    }
+    
     if (!before) return res.status(404).json({ success: false, error: 'Problem not found' });
     if (before.isDeleted) return res.status(410).json({ success: false, error: 'Problem was deleted and cannot be modified' });
 
+    const searchId = before.id; // Use the actual ID from the found document
+
     const problem = await Problem.findOneAndUpdate(
-      { id: parseInt(req.params.id) }, updates, { returnDocument: 'after', runValidators: true }
+      { id: searchId }, updates, { returnDocument: 'after', runValidators: true }
     );
 
     let streakData = null;

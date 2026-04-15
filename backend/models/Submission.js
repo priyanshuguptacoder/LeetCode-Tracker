@@ -4,12 +4,13 @@ const mongoose = require('mongoose');
 const submissionSchema = new mongoose.Schema(
   {
     // ── Identity ─────────────────────────────────────────────────────────────
-    problemId:  { type: Number, required: true },         // LeetCode numeric ID
-    slug:       { type: String, required: true },         // e.g. "two-sum" — unique key
+    problemId:  { type: mongoose.Schema.Types.Mixed, required: true }, // Legacy LC (Number) + CF (String)
+    platform:   { type: String, enum: ['LC', 'CF'], default: 'LC' },
+    slug:       { type: String, required: true },         // e.g. "two-sum" or "cf-123-a"
     title:      { type: String, required: true },
     difficulty: { type: String, enum: ['Easy', 'Medium', 'Hard'], default: 'Medium' },
     tags:       { type: [String], default: [] },
-    link:       { type: String, default: '' },            // https://leetcode.com/problems/{slug}/
+    link:       { type: String, default: '' },            // platform link
 
     // ── Solve metadata ────────────────────────────────────────────────────────
     dateSolved:      { type: Date, required: true },
@@ -42,5 +43,16 @@ submissionSchema.index({ problemId: 1 }, { unique: true });
 submissionSchema.index({ slug: 1 },       { unique: true });   // prevent slug duplicates
 submissionSchema.index({ dateSolved: -1 });
 submissionSchema.index({ nextReviewAt: 1 });
+
+// ── Global Filters ───────────────────────────────────────────────────────────
+submissionSchema.pre(/^find/, function(next) {
+  this.where({ isDeleted: { $ne: true } });
+  next();
+});
+
+submissionSchema.pre('countDocuments', function(next) {
+  this.where({ isDeleted: { $ne: true } });
+  next();
+});
 
 module.exports = mongoose.model('Submission', submissionSchema);

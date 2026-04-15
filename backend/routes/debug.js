@@ -2,6 +2,7 @@ const express = require('express');
 const router  = express.Router();
 const {
   health,
+  stats,
   testLeetCode,
   dbCheck,
   countCheck,
@@ -13,6 +14,7 @@ const {
 } = require('../controllers/debugController');
 
 router.get('/health',               health);
+router.get('/stats',                stats);
 router.get('/test/leetcode',        testLeetCode);
 router.get('/debug/db-check',       dbCheck);
 router.get('/debug/count-check',    countCheck);

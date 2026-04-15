@@ -196,10 +196,10 @@ function ProblemSection({ title, items, variant, emptyIcon, emptyMsg, emptyHint,
 // ============================================
 function DifficultyNavbar({ easy, medium, hard, total, selectedFilter, onFilterChange }) {
   const tabs = [
-    { key: 'easy',   label: 'Easy',   count: easy,   color: '#22c55e' },
+    { key: 'easy', label: 'Easy', count: easy, color: '#22c55e' },
     { key: 'medium', label: 'Medium', count: medium, color: '#f59e0b' },
-    { key: 'hard',   label: 'Hard',   count: hard,   color: '#ef4444' },
-    { key: 'solved', label: 'Total',  count: total,  color: '#6366f1' },
+    { key: 'hard', label: 'Hard', count: hard, color: '#ef4444' },
+    { key: 'solved', label: 'Total', count: total, color: '#6366f1' },
   ];
   return (
     <div className="diff-navbar">
@@ -245,7 +245,7 @@ function SuggestionsSection({ suggestions, onClickSuggestion }) {
   if (!suggestions || suggestions.length === 0) return null;
 
   // Categorize by reason keywords — must match backend reason strings exactly
-  const weakTopics   = suggestions.filter(s => s.reason.startsWith('Weak in'));
+  const weakTopics = suggestions.filter(s => s.reason.startsWith('Weak in'));
   const continueList = suggestions.filter(s =>
     s.reason === 'Never revised' ||
     s.reason === 'Overdue revision' ||
@@ -254,7 +254,7 @@ function SuggestionsSection({ suggestions, onClickSuggestion }) {
     s.reason.includes('revised') ||
     s.reason.includes('confidence')
   );
-  const challenge    = suggestions.filter(s => s.reason === 'Challenge yourself');
+  const challenge = suggestions.filter(s => s.reason === 'Challenge yourself');
 
   // Fallback: if categorization leaves some uncategorized, put them in weakTopics
   const categorized = new Set([...weakTopics, ...continueList, ...challenge].map(s => s.problemId));
@@ -294,11 +294,11 @@ function MistakeTypeModal({ problemTitle, onConfirm, onClose }) {
   const [selected, setSelected] = React.useState('');
   const options = [
     { value: 'pattern_not_recognized', label: '🧩 Pattern not recognized' },
-    { value: 'logic_error',            label: '🐛 Logic error' },
-    { value: 'edge_case_missed',       label: '⚠️ Edge case missed' },
-    { value: 'optimization_issue',     label: '⚡ Optimization issue' },
-    { value: 'forgot_approach',        label: '🧠 Forgot approach' },
-    { value: 'slow_execution',         label: '🐢 Slow execution' },
+    { value: 'logic_error', label: '🐛 Logic error' },
+    { value: 'edge_case_missed', label: '⚠️ Edge case missed' },
+    { value: 'optimization_issue', label: '⚡ Optimization issue' },
+    { value: 'forgot_approach', label: '🧠 Forgot approach' },
+    { value: 'slow_execution', label: '🐢 Slow execution' },
   ];
   return (
     <div className="pw-modal-overlay">
@@ -463,7 +463,7 @@ function RevisionModeModal({ problem, onComplete, onClose }) {
             <h3 style={{ color: isOverTime ? 'var(--danger)' : 'var(--text-primary)' }}>
               {isOverTime
                 ? 'Time Up!'
-                : `${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`}
+                : `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`}
             </h3>
 
             <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
@@ -614,7 +614,7 @@ function PwModal({ modal, adminPassword, onClose }) {
 // Recompute streak/activeDays from an array of YYYY-MM-DD UTC date strings.
 // Used after delete to keep dbStreak display in sync without a DB round-trip.
 function computeStreakFromDates(dateStrings) {
-  const now      = new Date();
+  const now = new Date();
   const todayKey = now.toISOString().split('T')[0];
 
   const daySet = new Set(dateStrings.filter(Boolean).filter(k => k <= todayKey));
@@ -654,10 +654,10 @@ function computeStreakFromDates(dateStrings) {
 function computeStriverStats(problems) {
   const solved = problems.filter(p => p.isStriver && p.status === 'Done');
   return {
-    easy:   solved.filter(p => p.difficulty === 'Easy').length,
+    easy: solved.filter(p => p.difficulty === 'Easy').length,
     medium: solved.filter(p => p.difficulty === 'Medium').length,
-    hard:   solved.filter(p => p.difficulty === 'Hard').length,
-    total:  solved.length,
+    hard: solved.filter(p => p.difficulty === 'Hard').length,
+    total: solved.length,
   };
 }
 
@@ -713,7 +713,7 @@ function App() {
   // Backend is the SINGLE SOURCE OF TRUTH for all problem data.
   // All streak/activeDays/consistency are computed from problem dates.
   // ============================================
-  
+
   const [apiProblems, setApiProblems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState(null);
@@ -770,75 +770,75 @@ function App() {
 
   // Parse "DD-MMM" → local date string "YYYY-MM-DD"
   const MONTH_MAP = {
-    Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',
-    Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'
+    Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06',
+    Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12'
   };
   const parseDDMMM = (str) => {
     if (!str) return null;
     const [day, mon] = str.split('-');
     if (!MONTH_MAP[mon]) return null;
     const year = new Date().getFullYear();
-    return `${year}-${MONTH_MAP[mon]}-${day.padStart(2,'0')}`;
+    return `${year}-${MONTH_MAP[mon]}-${day.padStart(2, '0')}`;
   };
 
   // ============================================
   // TOPIC MAP — Curated LeetCode tags per problem ID
   // ============================================
   const TOPIC_MAP = {
-    1:["Array","Hash Table"],2:["Linked List","Math"],3:["Sliding Window","Hash Table"],5:["Dynamic Programming","String"],
-    7:["Math"],8:["String"],9:["Math"],11:["Two Pointers","Greedy"],13:["Math","String"],14:["String"],
-    15:["Two Pointers","Sorting"],16:["Two Pointers","Sorting"],17:["Backtracking","String"],18:["Two Pointers","Sorting"],
-    19:["Linked List","Two Pointers"],20:["Stack","String"],21:["Linked List"],22:["Backtracking","Dynamic Programming"],
-    24:["Linked List"],25:["Linked List"],26:["Array","Two Pointers"],27:["Array","Two Pointers"],
-    29:["Math","Bit Manipulation"],30:["Sliding Window","Hash Table","String"],31:["Array","Two Pointers"],
-    33:["Binary Search","Array"],34:["Binary Search","Array"],35:["Binary Search"],36:["Matrix","Hash Table"],
-    37:["Backtracking","Matrix"],39:["Backtracking","Array"],40:["Backtracking","Array"],42:["Two Pointers","Stack","Dynamic Programming"],
-    46:["Backtracking","Array"],48:["Matrix","Array"],49:["Hash Table","String","Sorting"],50:["Math","Recursion"],
-    51:["Backtracking"],53:["Dynamic Programming","Array"],54:["Matrix","Array"],56:["Array","Sorting"],
-    57:["Array","Sorting"],58:["String"],61:["Linked List"],66:["Array","Math"],69:["Binary Search","Math"],
-    70:["Dynamic Programming","Math"],71:["Stack","String"],73:["Matrix","Array"],74:["Binary Search","Matrix"],
-    75:["Two Pointers","Array","Sorting"],76:["Sliding Window","Hash Table","String"],77:["Backtracking"],
-    78:["Backtracking","Bit Manipulation","Array"],81:["Binary Search","Array"],82:["Linked List"],
-    83:["Linked List"],84:["Stack","Array"],85:["Stack","Dynamic Programming","Matrix"],86:["Linked List","Two Pointers"],
-    88:["Array","Two Pointers","Sorting"],90:["Backtracking","Array"],92:["Linked List"],118:["Array","Dynamic Programming"],
-    121:["Array","Dynamic Programming"],125:["Two Pointers","String"],128:["Array","Hash Table"],131:["Backtracking","Dynamic Programming","String"],
-    136:["Bit Manipulation","Array"],137:["Bit Manipulation","Array"],138:["Linked List","Hash Table"],
-    141:["Linked List","Two Pointers"],142:["Linked List","Two Pointers"],143:["Linked List"],146:["Design","Hash Table","Linked List"],
-    148:["Linked List","Sorting"],150:["Stack","Math"],151:["String","Two Pointers"],152:["Array","Dynamic Programming"],
-    153:["Binary Search","Array"],154:["Binary Search","Array"],155:["Stack","Design"],160:["Linked List","Two Pointers"],
-    162:["Binary Search","Array"],167:["Two Pointers","Array","Binary Search"],169:["Array","Hash Table"],189:["Array","Two Pointers"],
-    204:["Math"],205:["Hash Table","String"],206:["Linked List"],209:["Sliding Window","Array","Binary Search","Prefix Sum"],
-    216:["Backtracking","Array"],217:["Array","Hash Table","Sorting"],219:["Array","Hash Table","Sliding Window"],
-    225:["Stack","Design","Queue"],231:["Bit Manipulation","Math"],232:["Stack","Design","Queue"],234:["Linked List","Two Pointers"],
-    237:["Linked List"],238:["Array","Prefix Sum"],239:["Sliding Window","Queue","Heap"],240:["Binary Search","Matrix"],
-    242:["Hash Table","String","Sorting"],258:["Math"],268:["Array","Math","Bit Manipulation"],278:["Binary Search"],
-    287:["Two Pointers","Binary Search","Array"],326:["Math"],328:["Linked List"],344:["Two Pointers","String"],
-    349:["Array","Hash Table","Sorting"],367:["Binary Search","Math"],374:["Binary Search"],387:["Hash Table","String","Queue"],
-    394:["Stack","String"],395:["Sliding Window","Hash Table","String"],402:["Stack","Greedy","String"],
-    409:["Hash Table","String","Greedy"],410:["Binary Search","Array","Dynamic Programming","Greedy"],412:["Math","String"],
-    415:["Math","String"],424:["Sliding Window","Hash Table","String"],430:["Linked List"],
-    438:["Sliding Window","Hash Table","String"],442:["Array","Hash Table"],443:["Two Pointers","String"],
-    451:["Hash Table","String","Sorting","Heap"],485:["Array"],496:["Stack","Array"],503:["Stack","Array"],
-    509:["Dynamic Programming","Math"],523:["Array","Hash Table","Math","Prefix Sum"],525:["Array","Hash Table","Prefix Sum"],
-    540:["Binary Search","Array"],560:["Array","Hash Table","Prefix Sum"],567:["Sliding Window","Hash Table","String"],
-    581:["Array","Sorting","Stack"],622:["Design","Queue","Array"],628:["Array","Math","Sorting"],633:["Two Pointers","Binary Search","Math"],
-    682:["Stack","Array"],704:["Binary Search","Array"],713:["Sliding Window","Array"],724:["Array","Prefix Sum"],
-    728:["Math"],735:["Stack","Array"],739:["Stack","Array"],796:["String"],844:["Two Pointers","String","Stack"],
-    852:["Binary Search","Array"],853:["Stack","Sorting"],875:["Binary Search","Array"],876:["Linked List","Two Pointers"],
-    901:["Stack"],907:["Stack","Array","Dynamic Programming"],912:["Array","Sorting"],930:["Sliding Window","Array","Hash Table","Prefix Sum"],
-    933:["Design","Queue"],974:["Array","Hash Table","Prefix Sum"],992:["Sliding Window","Hash Table"],
-    1004:["Sliding Window","Array","Binary Search","Prefix Sum"],1009:["Bit Manipulation"],1011:["Binary Search","Array","Greedy"],
-    1021:["Stack","String"],1047:["Stack","String"],1089:["Array"],1248:["Sliding Window","Math","Hash Table"],
-    1281:["Math"],1283:["Binary Search","Array"],1290:["Linked List","Math"],1358:["Sliding Window","Hash Table","String"],
-    1423:["Sliding Window","Array","Greedy","Prefix Sum"],1482:["Binary Search","Array"],1486:["Bit Manipulation","Math","Array"],
-    1492:["Math"],1512:["Array","Hash Table","Math"],1523:["Math"],1539:["Binary Search","Array"],
-    1572:["Matrix","Array"],1614:["Stack","String"],1657:["Hash Table","String","Sorting"],1672:["Array","Matrix"],
-    1700:["Queue","Stack"],1752:["Array"],1781:["Hash Table","String"],1901:["Binary Search","Matrix"],
-    1903:["Math","String","Greedy"],1910:["String"],1920:["Array"],1922:["Math"],1929:["Array"],
-    2011:["String"],2073:["Queue"],2095:["Linked List","Two Pointers"],2104:["Stack","Array"],
-    2149:["Array","Two Pointers","Sorting"],2220:["Bit Manipulation"],2235:["Math"],2427:["Math"],
-    2469:["Math"],2520:["Math"],2596:["Matrix"],2894:["Math"],2965:["Array","Matrix","Hash Table"],
-    3467:["Array","Sorting"],3701:["Sliding Window","Hash Table","String"]
+    1: ["Array", "Hash Table"], 2: ["Linked List", "Math"], 3: ["Sliding Window", "Hash Table"], 5: ["Dynamic Programming", "String"],
+    7: ["Math"], 8: ["String"], 9: ["Math"], 11: ["Two Pointers", "Greedy"], 13: ["Math", "String"], 14: ["String"],
+    15: ["Two Pointers", "Sorting"], 16: ["Two Pointers", "Sorting"], 17: ["Backtracking", "String"], 18: ["Two Pointers", "Sorting"],
+    19: ["Linked List", "Two Pointers"], 20: ["Stack", "String"], 21: ["Linked List"], 22: ["Backtracking", "Dynamic Programming"],
+    24: ["Linked List"], 25: ["Linked List"], 26: ["Array", "Two Pointers"], 27: ["Array", "Two Pointers"],
+    29: ["Math", "Bit Manipulation"], 30: ["Sliding Window", "Hash Table", "String"], 31: ["Array", "Two Pointers"],
+    33: ["Binary Search", "Array"], 34: ["Binary Search", "Array"], 35: ["Binary Search"], 36: ["Matrix", "Hash Table"],
+    37: ["Backtracking", "Matrix"], 39: ["Backtracking", "Array"], 40: ["Backtracking", "Array"], 42: ["Two Pointers", "Stack", "Dynamic Programming"],
+    46: ["Backtracking", "Array"], 48: ["Matrix", "Array"], 49: ["Hash Table", "String", "Sorting"], 50: ["Math", "Recursion"],
+    51: ["Backtracking"], 53: ["Dynamic Programming", "Array"], 54: ["Matrix", "Array"], 56: ["Array", "Sorting"],
+    57: ["Array", "Sorting"], 58: ["String"], 61: ["Linked List"], 66: ["Array", "Math"], 69: ["Binary Search", "Math"],
+    70: ["Dynamic Programming", "Math"], 71: ["Stack", "String"], 73: ["Matrix", "Array"], 74: ["Binary Search", "Matrix"],
+    75: ["Two Pointers", "Array", "Sorting"], 76: ["Sliding Window", "Hash Table", "String"], 77: ["Backtracking"],
+    78: ["Backtracking", "Bit Manipulation", "Array"], 81: ["Binary Search", "Array"], 82: ["Linked List"],
+    83: ["Linked List"], 84: ["Stack", "Array"], 85: ["Stack", "Dynamic Programming", "Matrix"], 86: ["Linked List", "Two Pointers"],
+    88: ["Array", "Two Pointers", "Sorting"], 90: ["Backtracking", "Array"], 92: ["Linked List"], 118: ["Array", "Dynamic Programming"],
+    121: ["Array", "Dynamic Programming"], 125: ["Two Pointers", "String"], 128: ["Array", "Hash Table"], 131: ["Backtracking", "Dynamic Programming", "String"],
+    136: ["Bit Manipulation", "Array"], 137: ["Bit Manipulation", "Array"], 138: ["Linked List", "Hash Table"],
+    141: ["Linked List", "Two Pointers"], 142: ["Linked List", "Two Pointers"], 143: ["Linked List"], 146: ["Design", "Hash Table", "Linked List"],
+    148: ["Linked List", "Sorting"], 150: ["Stack", "Math"], 151: ["String", "Two Pointers"], 152: ["Array", "Dynamic Programming"],
+    153: ["Binary Search", "Array"], 154: ["Binary Search", "Array"], 155: ["Stack", "Design"], 160: ["Linked List", "Two Pointers"],
+    162: ["Binary Search", "Array"], 167: ["Two Pointers", "Array", "Binary Search"], 169: ["Array", "Hash Table"], 189: ["Array", "Two Pointers"],
+    204: ["Math"], 205: ["Hash Table", "String"], 206: ["Linked List"], 209: ["Sliding Window", "Array", "Binary Search", "Prefix Sum"],
+    216: ["Backtracking", "Array"], 217: ["Array", "Hash Table", "Sorting"], 219: ["Array", "Hash Table", "Sliding Window"],
+    225: ["Stack", "Design", "Queue"], 231: ["Bit Manipulation", "Math"], 232: ["Stack", "Design", "Queue"], 234: ["Linked List", "Two Pointers"],
+    237: ["Linked List"], 238: ["Array", "Prefix Sum"], 239: ["Sliding Window", "Queue", "Heap"], 240: ["Binary Search", "Matrix"],
+    242: ["Hash Table", "String", "Sorting"], 258: ["Math"], 268: ["Array", "Math", "Bit Manipulation"], 278: ["Binary Search"],
+    287: ["Two Pointers", "Binary Search", "Array"], 326: ["Math"], 328: ["Linked List"], 344: ["Two Pointers", "String"],
+    349: ["Array", "Hash Table", "Sorting"], 367: ["Binary Search", "Math"], 374: ["Binary Search"], 387: ["Hash Table", "String", "Queue"],
+    394: ["Stack", "String"], 395: ["Sliding Window", "Hash Table", "String"], 402: ["Stack", "Greedy", "String"],
+    409: ["Hash Table", "String", "Greedy"], 410: ["Binary Search", "Array", "Dynamic Programming", "Greedy"], 412: ["Math", "String"],
+    415: ["Math", "String"], 424: ["Sliding Window", "Hash Table", "String"], 430: ["Linked List"],
+    438: ["Sliding Window", "Hash Table", "String"], 442: ["Array", "Hash Table"], 443: ["Two Pointers", "String"],
+    451: ["Hash Table", "String", "Sorting", "Heap"], 485: ["Array"], 496: ["Stack", "Array"], 503: ["Stack", "Array"],
+    509: ["Dynamic Programming", "Math"], 523: ["Array", "Hash Table", "Math", "Prefix Sum"], 525: ["Array", "Hash Table", "Prefix Sum"],
+    540: ["Binary Search", "Array"], 560: ["Array", "Hash Table", "Prefix Sum"], 567: ["Sliding Window", "Hash Table", "String"],
+    581: ["Array", "Sorting", "Stack"], 622: ["Design", "Queue", "Array"], 628: ["Array", "Math", "Sorting"], 633: ["Two Pointers", "Binary Search", "Math"],
+    682: ["Stack", "Array"], 704: ["Binary Search", "Array"], 713: ["Sliding Window", "Array"], 724: ["Array", "Prefix Sum"],
+    728: ["Math"], 735: ["Stack", "Array"], 739: ["Stack", "Array"], 796: ["String"], 844: ["Two Pointers", "String", "Stack"],
+    852: ["Binary Search", "Array"], 853: ["Stack", "Sorting"], 875: ["Binary Search", "Array"], 876: ["Linked List", "Two Pointers"],
+    901: ["Stack"], 907: ["Stack", "Array", "Dynamic Programming"], 912: ["Array", "Sorting"], 930: ["Sliding Window", "Array", "Hash Table", "Prefix Sum"],
+    933: ["Design", "Queue"], 974: ["Array", "Hash Table", "Prefix Sum"], 992: ["Sliding Window", "Hash Table"],
+    1004: ["Sliding Window", "Array", "Binary Search", "Prefix Sum"], 1009: ["Bit Manipulation"], 1011: ["Binary Search", "Array", "Greedy"],
+    1021: ["Stack", "String"], 1047: ["Stack", "String"], 1089: ["Array"], 1248: ["Sliding Window", "Math", "Hash Table"],
+    1281: ["Math"], 1283: ["Binary Search", "Array"], 1290: ["Linked List", "Math"], 1358: ["Sliding Window", "Hash Table", "String"],
+    1423: ["Sliding Window", "Array", "Greedy", "Prefix Sum"], 1482: ["Binary Search", "Array"], 1486: ["Bit Manipulation", "Math", "Array"],
+    1492: ["Math"], 1512: ["Array", "Hash Table", "Math"], 1523: ["Math"], 1539: ["Binary Search", "Array"],
+    1572: ["Matrix", "Array"], 1614: ["Stack", "String"], 1657: ["Hash Table", "String", "Sorting"], 1672: ["Array", "Matrix"],
+    1700: ["Queue", "Stack"], 1752: ["Array"], 1781: ["Hash Table", "String"], 1901: ["Binary Search", "Matrix"],
+    1903: ["Math", "String", "Greedy"], 1910: ["String"], 1920: ["Array"], 1922: ["Math"], 1929: ["Array"],
+    2011: ["String"], 2073: ["Queue"], 2095: ["Linked List", "Two Pointers"], 2104: ["Stack", "Array"],
+    2149: ["Array", "Two Pointers", "Sorting"], 2220: ["Bit Manipulation"], 2235: ["Math"], 2427: ["Math"],
+    2469: ["Math"], 2520: ["Math"], 2596: ["Matrix"], 2894: ["Math"], 2965: ["Array", "Matrix", "Hash Table"],
+    3467: ["Array", "Sorting"], 3701: ["Sliding Window", "Hash Table", "String"]
   };
 
   const getTopicsForProblem = (p) => {
@@ -860,12 +860,13 @@ function App() {
     return {
       ...p,
       number: p.id ?? p.number,
+      platform: p.platform || 'LC',
       status,
       userDifficulty: p.userDifficulty || p.difficulty || 'Medium',
       topics: topics,
       pattern: topics[0] || (p.pattern || 'Miscellaneous'),
-      link: p.leetcodeLink || p.link || '',
-      providerTitle: p?.providerTitle || 'LeetCode',
+      link: p.platformLink || p.leetcodeLink || p.link || '',
+      providerTitle: p?.providerTitle || (p.platform === 'CF' ? 'Codeforces' : 'LeetCode'),
       _solvedDateISO: solvedDateISO,
       submittedAt: p.submittedAt || p.solvedDate || null, // timestamp for sorting Recently Solved
       targeted: p.targeted || false,
@@ -913,7 +914,7 @@ function App() {
             setRecentProblems(recentTodayRes.value.recentSolved || []);
             setTodayProblems(recentTodayRes.value.todaySolved || []);
           }
-        } catch (_) {}
+        } catch (_) { }
       } catch (error) {
         console.error('Failed to fetch data:', error);
         setApiError(error.message);
@@ -954,6 +955,8 @@ function App() {
   const [difficultyFilter, setDifficultyFilter] = useState('All');
   const [patternFilter, setPatternFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [platformFilter, setPlatformFilter] = useState('ALL'); // 'ALL' | 'LC' | 'CF'
+  const [cfSyncing, setCfSyncing] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [notification, setNotification] = useState(null);
   const [syncing, setSyncing] = useState(false);
@@ -1047,10 +1050,10 @@ function App() {
   // ============================================
   // SMART PATTERN DETECTION ENGINE
   // ============================================
-  
+
   const detectPattern = (title) => {
     const titleLower = title.toLowerCase();
-    
+
     const patterns = {
       'Matrix': ['matrix', 'grid', '2d array', 'board'],
       'Tree': ['tree', 'binary tree', 'bst', 'binary search tree', 'inorder', 'preorder', 'postorder', 'level order'],
@@ -1079,7 +1082,7 @@ function App() {
         return pattern;
       }
     }
-    
+
     return 'Miscellaneous';
   };
 
@@ -1091,7 +1094,7 @@ function App() {
   // ============================================
   // MONTHLY ANALYTICS
   // ============================================
-  
+
   const getMonthlyStats = (problems, solvedDates) => {
     try {
       // Guard against invalid inputs
@@ -1099,33 +1102,33 @@ function App() {
         console.error('getMonthlyStats: problems is not an array');
         return {};
       }
-      
+
       if (!solvedDates || typeof solvedDates !== 'object') {
         console.error('getMonthlyStats: solvedDates is not an object');
         return {};
       }
-      
+
       const monthlyData = {};
-      
+
       problems.forEach(problem => {
         // Validate problem object
         if (!problem || typeof problem !== 'object') return;
         if (!problem.number) return;
         if (problem.status !== 'Done') return;
-        
+
         // Check if solved date exists
         const dateStr = solvedDates[problem.number];
         if (!dateStr) return;
-        
+
         // Validate date
         const date = parseLocalDate(dateStr);
         if (isNaN(date.getTime())) {
           console.warn(`Invalid date for problem ${problem.number}: ${dateStr}`);
           return;
         }
-        
+
         const yearMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-        
+
         if (!monthlyData[yearMonth]) {
           monthlyData[yearMonth] = {
             count: 0,
@@ -1134,11 +1137,11 @@ function App() {
             problems: []
           };
         }
-        
+
         monthlyData[yearMonth].count++;
         monthlyData[yearMonth].problems.push(problem);
       });
-      
+
       return monthlyData;
     } catch (error) {
       console.error('Error in getMonthlyStats:', error);
@@ -1151,7 +1154,7 @@ function App() {
       if (!monthlyData || typeof monthlyData !== 'object') {
         return { count: 0, problems: [] };
       }
-      
+
       const now = new Date();
       const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
       return monthlyData[currentYearMonth] || { count: 0, problems: [] };
@@ -1166,17 +1169,17 @@ function App() {
       if (!monthlyData || typeof monthlyData !== 'object') {
         return null;
       }
-      
+
       let bestMonth = null;
       let maxCount = 0;
-      
+
       Object.entries(monthlyData).forEach(([yearMonth, data]) => {
         if (data && data.count > maxCount) {
           maxCount = data.count;
           bestMonth = { yearMonth, ...data };
         }
       });
-      
+
       return bestMonth;
     } catch (error) {
       console.error('Error in getBestMonth:', error);
@@ -1187,7 +1190,7 @@ function App() {
   // ============================================
   // ADVANCED ANALYTICS
   // ============================================
-  
+
   // 1️⃣ CONSISTENCY SCORE - REMOVED (Handled in useMemo later)
 
   // 2️⃣ WEEKLY PERFORMANCE
@@ -1254,25 +1257,25 @@ function App() {
         arrow: '➡️'
       };
     }
-    
+
     const activeDays = new Set(Object.values(solvedDates).filter(d => d)).size;
     const totalSolved = problems.filter(p => p && p.status === 'Done').length;
     const overallAvg = activeDays > 0 ? (totalSolved / activeDays).toFixed(2) : 0;
-    
+
     // Last 7 days
     const today = new Date();
     const last7Start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - 7));
     const prev7Start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - 14));
-    
+
     let last7Count = 0;
     let prev7Count = 0;
     const last7Days = new Set();
     const prev7Days = new Set();
-    
+
     problems.forEach(problem => {
       if (problem && problem.status === 'Done' && problem.number && solvedDates[problem.number]) {
         const solvedDate = parseLocalDate(solvedDates[problem.number]);
-        
+
         if (solvedDate >= last7Start) {
           last7Count++;
           last7Days.add(solvedDates[problem.number]);
@@ -1282,7 +1285,7 @@ function App() {
         }
       }
     });
-    
+
     const last7Avg = last7Days.size > 0 ? (last7Count / last7Days.size).toFixed(2) : 0;
     const prev7Avg = prev7Days.size > 0 ? (prev7Count / prev7Days.size).toFixed(2) : 0;
 
@@ -1300,11 +1303,11 @@ function App() {
       }
     });
     const last30Avg = last30Days.size > 0 ? (last30Count / last30Days.size).toFixed(2) : 0;
-    
+
     let trend = 'Stable';
     if (last7Avg > prev7Avg) trend = 'Improving';
     else if (last7Avg < prev7Avg) trend = 'Declining';
-    
+
     return {
       overallAvg,
       last7Avg,
@@ -1345,12 +1348,12 @@ function App() {
   const calculateTargetSuggestion = (problems, solvedDates) => {
     const dates = Object.values(solvedDates || {}).filter(d => d);
     if (dates.length === 0) return { hasData: false };
-    
+
     const sortedDates = dates.sort();
     const firstDate = parseLocalDate(sortedDates[0]);
     const today = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
     const totalDaysTracked = Math.max(1, Math.ceil((today - firstDate) / 86400000) + 1);
-    
+
     // Hide section entirely if less than 7 days of data
     if (totalDaysTracked < 7) {
       return { hasData: false };
@@ -1358,7 +1361,7 @@ function App() {
 
     const last30Start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - 30));
     const currentMonthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
-    const lastMonthStart    = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1));
+    const lastMonthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1));
 
     let last30Count = 0;
     let currentMonthCount = 0;
@@ -1374,12 +1377,12 @@ function App() {
     });
 
     const avgLast30 = last30Count / 30;
-    const moderate   = (avgLast30 * 1.2).toFixed(1);
+    const moderate = (avgLast30 * 1.2).toFixed(1);
     const aggressive = (avgLast30 * 1.5).toFixed(1);
 
     // Phase 8: daily required to hit moderate monthly target
     const daysInMonth = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 0)).getUTCDate();
-    const dayOfMonth  = today.getUTCDate();
+    const dayOfMonth = today.getUTCDate();
     const remainingDays = Math.max(1, daysInMonth - dayOfMonth + 1); // include today
     const moderateMonthlyTarget = Math.round(parseFloat(moderate) * daysInMonth);
     const dailyRequired = Math.max(0, ((moderateMonthlyTarget - currentMonthCount) / remainingDays)).toFixed(1);
@@ -1409,7 +1412,7 @@ function App() {
   // ============================================
   // HISTORICAL DATE GENERATION (ONE-TIME)
   // ============================================
-  
+
   // Historical date generation removed — real dates come from MongoDB.
 
   // ============================================
@@ -1418,17 +1421,17 @@ function App() {
 
   // ── Debug: log computed vs manual stats ──
   // (removed — was referencing displayActiveDays before declaration)
-  
+
   const monthlyData = React.useMemo(
     () => getMonthlyStats(allProblems, solvedDates),
     [allProblems, solvedDates]
   );
-  
+
   const currentMonthStats = React.useMemo(
     () => getCurrentMonthStats(monthlyData),
     [monthlyData]
   );
-  
+
   const bestMonth = React.useMemo(
     () => getBestMonth(monthlyData),
     [monthlyData]
@@ -1438,13 +1441,13 @@ function App() {
   // DUPLICATE PREVENTION
   // ============================================
   const problemExists = (number) => apiProblems.some(p => p.number === parseInt(number));
-  
+
   // verifyPassword removed — replaced by requireAdmin() session-based system
 
   // ============================================
   // NOTIFICATION SYSTEM
   // ============================================
-  
+
   const showNotification = (message, type = 'success') => {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 3000);
@@ -1494,7 +1497,7 @@ function App() {
   // ============================================
   // SMART ADD PROBLEM HANDLER
   // ============================================
-  
+
   const handleAddProblem = async (e) => {
     e.preventDefault();
 
@@ -1523,10 +1526,10 @@ function App() {
       const detectedPattern = hasPattern ? formData.pattern : detectPattern(formData.title);
 
       // ── Auto-detection: should this go to Needs Revision? ──────────────
-      const solveTime     = formData.solveTime ? parseFloat(formData.solveTime) : null;
-      const hintsUsed     = formData.hintsUsed || false;
+      const solveTime = formData.solveTime ? parseFloat(formData.solveTime) : null;
+      const hintsUsed = formData.hintsUsed || false;
       const wrongAttempts = formData.wrongAttempts ? parseInt(formData.wrongAttempts) : 0;
-      const autoRevision  = formData.type === 'Solved' && (
+      const autoRevision = formData.type === 'Solved' && (
         (solveTime != null && solveTime > 25) ||
         hintsUsed === true ||
         wrongAttempts >= 2
@@ -1561,7 +1564,7 @@ function App() {
                 setRecentProblems(recentTodayRes.recentSolved || []);
                 setTodayProblems(recentTodayRes.todaySolved || []);
               }
-            } catch (_) {}
+            } catch (_) { }
           }
           showNotification(`✅ Problem #${problemNumber} added!${formData.type === 'Solved' ? ' — Streak updated!' : ''}${autoRevision ? ' Added to Needs Revision.' : ''}`, 'success');
           setShowModal(false);
@@ -1602,7 +1605,7 @@ function App() {
   // ============================================
   // OTHER HANDLERS
   // ============================================
-  
+
   const handleStatusChange = async (number, newStatus) => {
     requireAdmin(async () => {
       try {
@@ -1625,7 +1628,7 @@ function App() {
                 setRecentProblems(recentTodayRes.recentSolved || []);
                 setTodayProblems(recentTodayRes.todaySolved || []);
               }
-            } catch (_) {}
+            } catch (_) { }
           }
           showNotification(newStatus === 'Done' ? '✓ Marked done — streak updated!' : `✓ Status → ${newStatus}`, 'success');
         }
@@ -1669,7 +1672,7 @@ function App() {
             try {
               const streakRes = await window.API.getStreak();
               if (streakRes.success) setDbStreak(streakRes.data);
-            } catch (_) {}
+            } catch (_) { }
           }
           showNotification(`✅ Problem #${number} deleted`, 'success');
         }
@@ -1696,7 +1699,7 @@ function App() {
 
   // ── Revision Intelligence Engine state ───────────────────────────────────
   const [revisionModal, setRevisionModal] = React.useState(null);   // problem being revised
-  const [mistakeModal, setMistakeModal]   = React.useState(null);   // { number, title } after add
+  const [mistakeModal, setMistakeModal] = React.useState(null);   // { number, title } after add
   const [dailyRevisionCount, setDailyRevisionCount] = React.useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('dailyRevision') || '{}');
@@ -1734,15 +1737,15 @@ function App() {
         setApiProblems(prev => prev.map(p =>
           p.number === problem.number
             ? {
-                ...p,
-                revisionCount: res.data.revisionCount,
-                lastRevisedAt: res.data.lastRevisedAt,
-                nextRevisionAt: res.data.nextRevisionAt,
-                confidence: res.data.confidence,
-                needsRevision: res.data.needsRevision,
-                consecutiveSuccess: res.data.consecutiveSuccess,
-                failureLoopFlagged: res.data.failureLoopFlagged,
-              }
+              ...p,
+              revisionCount: res.data.revisionCount,
+              lastRevisedAt: res.data.lastRevisedAt,
+              nextRevisionAt: res.data.nextRevisionAt,
+              confidence: res.data.confidence,
+              needsRevision: res.data.needsRevision,
+              consecutiveSuccess: res.data.consecutiveSuccess,
+              failureLoopFlagged: res.data.failureLoopFlagged,
+            }
             : p
         ));
         incrementDailyRevision();
@@ -1773,13 +1776,13 @@ function App() {
           setApiProblems(prev => prev.map(p =>
             p.number === number
               ? {
-                  ...p,
-                  revisionCount: res.data.revisionCount,
-                  lastRevisedAt: res.data.lastRevisedAt,
-                  // Reset nextRevisionAt and confidence when count drops to 0
-                  nextRevisionAt: res.data.revisionCount === 0 ? null : p.nextRevisionAt,
-                  confidence: res.data.revisionCount === 0 ? 3 : p.confidence,
-                }
+                ...p,
+                revisionCount: res.data.revisionCount,
+                lastRevisedAt: res.data.lastRevisedAt,
+                // Reset nextRevisionAt and confidence when count drops to 0
+                nextRevisionAt: res.data.revisionCount === 0 ? null : p.nextRevisionAt,
+                confidence: res.data.revisionCount === 0 ? 3 : p.confidence,
+              }
               : p
           ));
           showNotification('Revision removed ✅', 'success');
@@ -1921,6 +1924,28 @@ function App() {
     }
   };
 
+  // ── Codeforces Sync Handler ──────────────────────────────────────────────
+  const handleCFSync = async () => {
+    if (cfSyncing) return;
+    requireAdmin(async () => {
+      setCfSyncing(true);
+      try {
+        const result = await window.API.syncCodeforces();
+        showNotification(
+          `✅ CF Sync: ${result.inserted} new, ${result.totalCFInDB} total CF problems`,
+          'success'
+        );
+        // Refresh problem list
+        const probRes = await window.API.getAllProblems();
+        if (probRes.success) setApiProblems(transformProblems(probRes.data));
+      } catch (err) {
+        showNotification(`❌ CF Sync failed: ${err.message}`, 'error');
+      } finally {
+        setCfSyncing(false);
+      }
+    });
+  };
+
   const handleClearAllFilters = () => {
     const filterInputs = document.querySelectorAll('.filter-input, .filter-select');
     filterInputs.forEach(input => {
@@ -1938,6 +1963,7 @@ function App() {
     setPatternFilter('All');
     setStatusFilter('All');
     setSelectedFilter(null); // also clear DifficultyNavbar filter
+    setPlatformFilter('ALL'); // also clear platform filter
 
     showNotification('✨ All filters cleared', 'success');
   };
@@ -1958,7 +1984,7 @@ function App() {
   // ============================================
   // DYNAMIC ANALYTICS CALCULATIONS
   // ============================================
-  
+
   // ── Derived: striver stats — always computed from apiProblems, never stored in state ──
   const striverStats = React.useMemo(() => computeStriverStats(apiProblems), [apiProblems]);
 
@@ -2003,7 +2029,7 @@ function App() {
         const r = new Date(new Date(p.lastRevisedAt).toISOString().split('T')[0] + 'T00:00:00Z');
         return Math.max(0, Math.round((r - s) / 86400000));
       });
-    const avgGap = gaps.length > 0 ? gaps.reduce((a,b) => a+b, 0) / gaps.length : 0;
+    const avgGap = gaps.length > 0 ? gaps.reduce((a, b) => a + b, 0) / gaps.length : 0;
 
     // forgottenCount: solved problems not revised in > 7 days (or never revised)
     const forgottenCount = solved.filter(p => {
@@ -2021,7 +2047,7 @@ function App() {
     });
     const topicDist = Object.entries(topicCounts)
       .map(([t, c]) => ({ topic: t, count: c, pct: solved.length > 0 ? Math.round((c / solved.length) * 100) : 0 }))
-      .sort((a,b) => b.count - a.count);
+      .sort((a, b) => b.count - a.count);
 
     // lastSolvedByTopic: most recent solve date per topic
     const lastSolvedByTopic = {};
@@ -2041,7 +2067,7 @@ function App() {
 
     // difficultyTrend: last 20 solved problems difficulty
     const last20 = [...solved]
-      .sort((a,b) => (b._solvedDateISO||'') > (a._solvedDateISO||'') ? 1 : -1)
+      .sort((a, b) => (b._solvedDateISO || '') > (a._solvedDateISO || '') ? 1 : -1)
       .slice(0, 20);
     const hardPct20 = last20.length > 0 ? last20.filter(p => p.difficulty === 'Hard').length / last20.length : 0;
 
@@ -2066,13 +2092,13 @@ function App() {
     if (forgottenCount > 40)
       insights.push({ sev: 'critical', icon: '🧠', msg: `${forgottenCount} problems forgotten`, action: 'Revise 5 today' });
     if (revisionRate < 0.3 && totalSolved > 10)
-      insights.push({ sev: 'critical', icon: '⚠️', msg: 'Revising too slowly', action: `Only ${Math.round(revisionRate*100)}% of solved problems revised` });
+      insights.push({ sev: 'critical', icon: '⚠️', msg: 'Revising too slowly', action: `Only ${Math.round(revisionRate * 100)}% of solved problems revised` });
 
     // Warning
     if (avgGap > 5 && coachingMetrics.revisedSolvedCount > 0)
       insights.push({ sev: 'warning', icon: '📉', msg: `Large revision gap: avg ${avgGap}d`, action: 'Revise sooner after solving' });
     if (totalD > 0 && hardCount / totalD < 0.1)
-      insights.push({ sev: 'warning', icon: '⚠️', msg: `Only ${Math.round((hardCount/totalD)*100)}% Hard problems`, action: 'Attempt 1 Hard today' });
+      insights.push({ sev: 'warning', icon: '⚠️', msg: `Only ${Math.round((hardCount / totalD) * 100)}% Hard problems`, action: 'Attempt 1 Hard today' });
     if (topicDist.length > 0 && topicDist[0].pct > 40)
       insights.push({ sev: 'warning', icon: '⚖️', msg: `Over-focused on ${topicDist[0].topic} (${topicDist[0].pct}%)`, action: 'Diversify topics' });
     inactiveTopics.slice(0, 2).forEach(t =>
@@ -2081,7 +2107,7 @@ function App() {
 
     // Positive
     if (revisionRate >= 0.5)
-      insights.push({ sev: 'positive', icon: '🟢', msg: `Strong revision habit: ${Math.round(revisionRate*100)}%`, action: 'Keep it up' });
+      insights.push({ sev: 'positive', icon: '🟢', msg: `Strong revision habit: ${Math.round(revisionRate * 100)}%`, action: 'Keep it up' });
     if (thisWeekCount >= 7)
       insights.push({ sev: 'positive', icon: '🔥', msg: `${thisWeekCount} problems this week`, action: 'Great pace' });
 
@@ -2110,13 +2136,13 @@ function App() {
 
   // Streak display — always from dbStreak (computed from problem dates on backend)
   const displayCurrentStreak = dbStreak.currentStreak ?? 0;
-  const displayMaxStreak     = dbStreak.maxStreak     ?? 0;
-  const displayActiveDays    = dbStreak.activeDays    ?? 0;
+  const displayMaxStreak = dbStreak.maxStreak ?? 0;
+  const displayActiveDays = dbStreak.activeDays ?? 0;
 
   // Advanced Analytics
   const consistencyScore = React.useMemo(() => {
     const dates = Object.values(solvedDates).filter(d => d);
-    
+
     const sortedDates = [...dates].sort();
     const firstDate = sortedDates.length > 0 ? parseLocalDate(sortedDates[0]) : new Date();
     const today = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
@@ -2125,15 +2151,15 @@ function App() {
 
     const activeDays = new Set(dates).size;
     const averageProblemsPerActiveDay = activeDays > 0 ? totalSolved / activeDays : 0;
-    
+
     const safeActiveDays = Math.min(activeDays, totalDaysTracked);
     const consistency = totalDaysTracked > 0 ? (safeActiveDays / totalDaysTracked) * 100 : 0;
-    
+
     let status, label;
     if (consistency < 40) { status = '🔴 Low'; label = 'Low'; }
     else if (consistency < 70) { status = '🟡 Improving'; label = 'Improving'; }
     else { status = '🟢 Strong Discipline'; label = 'Strong Discipline'; }
-    
+
     return {
       score: Math.round(consistency),
       status, label,
@@ -2157,7 +2183,7 @@ function App() {
   const userEasyCount = allProblems.filter(p => p.userDifficulty === 'Easy' && p.status === 'Done').length;
   const userMediumCount = allProblems.filter(p => p.userDifficulty === 'Medium' && p.status === 'Done').length;
   const userHardCount = allProblems.filter(p => p.userDifficulty === 'Hard' && p.status === 'Done').length;
-  
+
   const totalUserEasy = allProblems.filter(p => p.userDifficulty === 'Easy').length;
   const totalUserMedium = allProblems.filter(p => p.userDifficulty === 'Medium').length;
   const totalUserHard = allProblems.filter(p => p.userDifficulty === 'Hard').length;
@@ -2389,30 +2415,38 @@ function App() {
           (Array.isArray(problem.topics) ? problem.topics : []).some(t => t.toLowerCase().includes(q));
       }
 
+      const dRating = problem.difficultyRating || (problem.difficulty === 'Easy' ? 1 : problem.difficulty === 'Medium' ? 3 : 5);
       const matchesDifficulty =
-        difficultyFilter === 'All' || problem.difficulty === difficultyFilter;
+        difficultyFilter === 'All' || 
+        (difficultyFilter === 'Easy' && dRating <= 2) ||
+        (difficultyFilter === 'Medium' && dRating === 3) ||
+        (difficultyFilter === 'Hard' && dRating >= 4);
 
       const matchesPattern =
         patternFilter === 'All' || problem.pattern === patternFilter;
 
       const matchesStatus =
-        statusFilter === 'All' || 
+        statusFilter === 'All' ||
         (statusFilter === 'Targeted' ? problem.targeted === true :
-         statusFilter === 'Striver'  ? problem.isStriver === true :
-         problem.status === statusFilter);
+          statusFilter === 'Striver' ? problem.isStriver === true :
+            problem.status === statusFilter);
 
       // selectedFilter from DifficultyNavbar
       const matchesSelectedFilter =
         selectedFilter === null ||
-        (selectedFilter === 'easy'   ? problem.difficulty === 'Easy'   && problem.status === 'Done' :
-         selectedFilter === 'medium' ? problem.difficulty === 'Medium' && problem.status === 'Done' :
-         selectedFilter === 'hard'   ? problem.difficulty === 'Hard'   && problem.status === 'Done' :
-         selectedFilter === 'solved' ? problem.status === 'Done' :
-         true);
+        (selectedFilter === 'easy' ? dRating <= 2 && problem.status === 'Done' :
+          selectedFilter === 'medium' ? dRating === 3 && problem.status === 'Done' :
+            selectedFilter === 'hard' ? dRating >= 4 && problem.status === 'Done' :
+              selectedFilter === 'solved' ? problem.status === 'Done' :
+                false);
 
-      return matchesSearch && matchesDifficulty && matchesPattern && matchesStatus && matchesSelectedFilter;
+      // Platform filter
+      const matchesPlatform =
+        platformFilter === 'ALL' || problem.platform === platformFilter;
+
+      return matchesSearch && matchesDifficulty && matchesPattern && matchesStatus && matchesSelectedFilter && matchesPlatform;
     });
-  }, [allProblems, debouncedSearch, difficultyFilter, patternFilter, statusFilter, selectedFilter]);
+  }, [allProblems, debouncedSearch, difficultyFilter, patternFilter, statusFilter, selectedFilter, platformFilter]);
 
   // Animate table count when filtered problems change
   useEffect(() => {
@@ -2428,7 +2462,7 @@ function App() {
   // ============================================
   // EFFECTS
   // ============================================
-  
+
   useEffect(() => {
     localStorage.setItem('priyanshu-leetcode-state', JSON.stringify(state));
   }, [state]);
@@ -2464,7 +2498,7 @@ function App() {
         try {
           const sugRes = await window.API.getSuggestions();
           if (sugRes.success) setSuggestions(sugRes.data || []);
-        } catch (_) {}
+        } catch (_) { }
         console.log('✅ Synced with backend');
       } catch (error) {
         console.error('Background sync failed:', error);
@@ -2477,7 +2511,7 @@ function App() {
   // ============================================
   // RENDER
   // ============================================
-  
+
   try {
     // Show loading state while fetching from API
     if (loading) {
@@ -2502,7 +2536,7 @@ function App() {
                 <a href="https://leetcode.com/u/invisiblemanfromheart/" target="_blank" rel="noopener noreferrer" className="btn-profile">
                   <span>LeetCode Profile</span>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/>
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
                   </svg>
                 </a>
                 <button className="theme-toggle">{darkMode ? '☀️' : '🌙'}</button>
@@ -2516,7 +2550,7 @@ function App() {
 
             {/* Stats bar skeleton */}
             <div className="sk-stats-bar" style={{ marginBottom: 16 }}>
-              {[1,2,3,4].map(i => (
+              {[1, 2, 3, 4].map(i => (
                 <div key={i} className="sk-stat-pill">
                   <Sk w={44} h={20} />
                   <Sk w={68} h={9} style={{ marginTop: 6 }} />
@@ -2529,7 +2563,7 @@ function App() {
               <div className="sk-card">
                 <Sk w={130} h={13} style={{ marginBottom: 18 }} />
                 <div style={{ display: 'flex', justifyContent: 'space-around', marginBottom: 18 }}>
-                  {[1,2,3].map(i => (
+                  {[1, 2, 3].map(i => (
                     <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
                       <Sk w={44} h={28} />
                       <Sk w={60} h={9} />
@@ -2543,7 +2577,7 @@ function App() {
                 <Sk w="100%" h={7} style={{ marginBottom: 8 }} />
                 <Sk w="55%" h={9} style={{ marginBottom: 14 }} />
                 <div style={{ display: 'flex', justifyContent: 'space-around' }}>
-                  {[1,2,3].map(i => (
+                  {[1, 2, 3].map(i => (
                     <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
                       <Sk w={32} h={20} />
                       <Sk w={48} h={8} />
@@ -2555,7 +2589,7 @@ function App() {
 
             {/* Analytics cards skeleton */}
             <div className="sk-grid-4" style={{ marginBottom: 16 }}>
-              {[1,2,3,4].map(i => (
+              {[1, 2, 3, 4].map(i => (
                 <div key={i} className="sk-card">
                   <Sk w={90} h={12} style={{ marginBottom: 12 }} />
                   <Sk w={52} h={28} style={{ marginBottom: 10 }} />
@@ -2577,8 +2611,8 @@ function App() {
             <div className="error-icon">⚠️</div>
             <div className="error-title">Connection Error</div>
             <div className="error-message">{apiError}</div>
-            <button 
-              onClick={() => window.location.reload()} 
+            <button
+              onClick={() => window.location.reload()}
               className="retry-button"
             >
               🔄 Retry Connection
@@ -2590,608 +2624,672 @@ function App() {
 
     return (
       <div className="app app-ready">
-      {/* Notification */}
-      {notification && (
-        <div className={`notification notification-${notification.type}`}>
-          {notification.message}
-        </div>
-      )}
-
-      {/* Header — Mobile-First */}
-      <header className="header">
-        <div className="header-content">
-          <div className="header-main">
-            <div className="header-title">
-              <h1>Priyanshu Gupta</h1>
-              <p className="subtitle">Your Personal DSA Growth Engine</p>
-            </div>
-            <span className={`sync-status ${syncStatus}`}>
-              {syncStatus === 'checking' ? '⏳ Checking' : syncStatus === 'ok' ? '🟢 Active' : '🔴 Expired'}
-            </span>
+        {/* Notification */}
+        {notification && (
+          <div className={`notification notification-${notification.type}`}>
+            {notification.message}
           </div>
-          <div className="header-actions">
-            <button
-              className="btn-sync-lc"
-              onClick={handleSyncLeetCode}
-              disabled={syncing}
-              title="Sync recent accepted submissions from LeetCode"
-            >
-              {syncing ? (
-                <><span className="sync-spinner">⟳</span> Syncing...</>
-              ) : (
-                <>🔄 Sync LeetCode</>
-              )}
-            </button>
-            <a 
-              href="https://leetcode.com/u/invisiblemanfromheart/" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="btn-profile"
-            >
-              <span>LeetCode Profile</span>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/>
-              </svg>
-            </a>
-            <button
-              className={`btn-admin-lock ${isAdminUnlocked ? 'unlocked' : 'locked'}`}
-              onClick={() => isAdminUnlocked ? lockAdmin() : setShowAdminModal(true)}
-              title={isAdminUnlocked ? 'Admin mode active — click to lock' : 'Click to unlock admin mode'}
-            >
-              {isAdminUnlocked ? '🔓' : '🔒'}
-            </button>
-            <button 
-              className="theme-toggle"
-              onClick={() => setDarkMode(prev => !prev)}
-              title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-            >
-              {darkMode ? '☀️' : '🌙'}
-            </button>
-          </div>
-        </div>
-      </header>
+        )}
 
-      <div className="container">
-        {/* Navbar Stats Bar */}
-        <div className="navbar-stats">
-          <StatCard value={totalSolved}   label="Problems Solved" icon="✅" delay={0.05} isReady={statsReady} />
-          <div className="navbar-stat-divider" />
-          <StatCard value={displayActiveDays} label="Active Days"     icon="📅" delay={0.10} isReady={statsReady} />
-          <div className="navbar-stat-divider" />
-          <div className="navbar-stat navbar-stat-targeted">
-            <span className="navbar-stat-value">{targetedProblems.list.length}</span>
-            <span className="navbar-stat-label">🎯 Targeted</span>
-          </div>
-          <div className="navbar-stat-divider" />
-          <StatCard value={totalProblems} label="Total Problems"  icon="📚" delay={0.20} isReady={statsReady} />
-        </div>
-
-        {/* Difficulty Navbar — filter by Easy/Medium/Hard */}
-        <DifficultyNavbar
-          easy={easyCount}
-          medium={mediumCount}
-          hard={hardCount}
-          total={totalSolved}
-          selectedFilter={selectedFilter}
-          onFilterChange={setSelectedFilter}
-        />
-
-        {/* Streak & Monthly Stats */}
-        <div className="streak-monthly-grid fade-up fade-up-2">
-          <div className="streak-card">
-            <div className="streak-header">
-              <h3 className="card-title">🔥 Streak Stats</h3>
+        {/* Header — Mobile-First */}
+        <header className="header">
+          <div className="header-content">
+            <div className="header-main">
+              <div className="header-title">
+                <h1>Priyanshu Gupta</h1>
+                <p className="subtitle">Your Personal DSA Growth Engine</p>
+              </div>
+              <span className={`sync-status ${syncStatus}`}>
+                {syncStatus === 'checking' ? '⏳ Checking' : syncStatus === 'ok' ? '🟢 Active' : '🔴 Expired'}
+              </span>
             </div>
-            {/* Streak stats — read-only display, values come from DB */}
-            <div className="streak-stats">
-              <div className="streak-item">
-                <div className="streak-value">{displayCurrentStreak}</div>
-                <div className="streak-label">Current Streak</div>
-              </div>
-              <div className="streak-divider"></div>
-              <div className="streak-item">
-                <div className="streak-value">{displayMaxStreak}</div>
-                <div className="streak-label">Max Streak</div>
-              </div>
-              <div className="streak-divider"></div>
-              <div className="streak-item">
-                <div className="streak-value">{displayActiveDays}</div>
-                <div className="streak-label">Active Days</div>
-              </div>
+            <div className="header-actions">
+              <button
+                className="btn-sync-lc"
+                onClick={handleSyncLeetCode}
+                disabled={syncing}
+                title="Sync recent accepted submissions from LeetCode"
+              >
+                {syncing ? (
+                  <><span className="sync-spinner">⟳</span> Syncing...</>
+                ) : (
+                  <>🔄 Sync LeetCode</>
+                )}
+              </button>
+              <a
+                href="https://leetcode.com/u/invisiblemanfromheart/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-profile"
+              >
+                <span>LeetCode Profile</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
+                </svg>
+              </a>
+              <button
+                className={`btn-admin-lock ${isAdminUnlocked ? 'unlocked' : 'locked'}`}
+                onClick={() => isAdminUnlocked ? lockAdmin() : setShowAdminModal(true)}
+                title={isAdminUnlocked ? 'Admin mode active — click to lock' : 'Click to unlock admin mode'}
+              >
+                {isAdminUnlocked ? '🔓' : '🔒'}
+              </button>
+              <button
+                className="theme-toggle"
+                onClick={() => setDarkMode(prev => !prev)}
+                title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              >
+                {darkMode ? '☀️' : '🌙'}
+              </button>
             </div>
+          </div>
+        </header>
 
-            {/* Today Status */}
-            <div className={`today-status ${(() => {
-              const solvedToday = Object.values(solvedDates).includes(todayLocalStr);
-              return solvedToday ? 'solved' : 'pending';
-            })()}`}>
-              {(() => {
+        <div className="container">
+          {/* Navbar Stats Bar */}
+          <div className="navbar-stats">
+            <StatCard value={totalSolved} label="Problems Solved" icon="✅" delay={0.05} isReady={statsReady} />
+            <div className="navbar-stat-divider" />
+            <StatCard value={displayActiveDays} label="Active Days" icon="📅" delay={0.10} isReady={statsReady} />
+            <div className="navbar-stat-divider" />
+            <div className="navbar-stat navbar-stat-targeted">
+              <span className="navbar-stat-value">{targetedProblems.list.length}</span>
+              <span className="navbar-stat-label">🎯 Targeted</span>
+            </div>
+            <div className="navbar-stat-divider" />
+            <StatCard value={totalProblems} label="Total Problems" icon="📚" delay={0.20} isReady={statsReady} />
+          </div>
+
+          {/* Difficulty Navbar — filter by Easy/Medium/Hard */}
+          <DifficultyNavbar
+            easy={easyCount}
+            medium={mediumCount}
+            hard={hardCount}
+            total={totalSolved}
+            selectedFilter={selectedFilter}
+            onFilterChange={setSelectedFilter}
+          />
+
+          {/* Streak & Monthly Stats */}
+          <div className="streak-monthly-grid fade-up fade-up-2">
+            <div className="streak-card">
+              <div className="streak-header">
+                <h3 className="card-title">🔥 Streak Stats</h3>
+              </div>
+              {/* Streak stats — read-only display, values come from DB */}
+              <div className="streak-stats">
+                <div className="streak-item">
+                  <div className="streak-value">{displayCurrentStreak}</div>
+                  <div className="streak-label">Current Streak</div>
+                </div>
+                <div className="streak-divider"></div>
+                <div className="streak-item">
+                  <div className="streak-value">{displayMaxStreak}</div>
+                  <div className="streak-label">Max Streak</div>
+                </div>
+                <div className="streak-divider"></div>
+                <div className="streak-item">
+                  <div className="streak-value">{displayActiveDays}</div>
+                  <div className="streak-label">Active Days</div>
+                </div>
+              </div>
+
+              {/* Today Status */}
+              <div className={`today-status ${(() => {
                 const solvedToday = Object.values(solvedDates).includes(todayLocalStr);
-                return solvedToday
-                  ? <><span className="status-icon">✅</span> Solved Today — Consistency Maintained</>
-                  : <><span className="status-icon">🎯</span> Today's session pending — stay consistent</>;
-              })()}
-            </div>
-
-            {/* Last 7 Days Activity */}
-            <div className="recent-activity-section">
-              <div className="recent-activity-title">Last 7 Days Activity</div>
-              <div className="recent-activity-grid">
+                return solvedToday ? 'solved' : 'pending';
+              })()}`}>
                 {(() => {
-                  const days = [];
-                  const todayUTC = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
-                  
-                  for (let i = 6; i >= 0; i--) {
-                    const date = new Date(todayUTC);
-                    date.setUTCDate(date.getUTCDate() - i);
-                    const dateStr = toLocalDateStr(date);
-                    const dayName = date.toLocaleString('en-US', { timeZone: 'UTC', weekday: 'short' });
-                    
-                    // Count problems solved on this date
-                    const problemCount = Object.values(solvedDates).filter(
-                      d => d === dateStr
-                    ).length;
-                    
-                    const isToday = i === 0;
-                    
-                    days.push(
-                      <div key={dateStr} className={`activity-day ${isToday ? 'today' : ''}`}>
-                        <div className="activity-day-name">{dayName}</div>
-                        <div className={`activity-day-count ${problemCount > 0 ? 'active' : 'inactive'}`}>
-                          {problemCount > 0 ? problemCount : '—'}
-                        </div>
-                        <div className="activity-day-bar">
-                          <div 
-                            className="activity-day-bar-fill"
-                            style={{ height: `${Math.min((problemCount / 5) * 100, 100)}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                    );
-                  }
-                  return days;
+                  const solvedToday = Object.values(solvedDates).includes(todayLocalStr);
+                  return solvedToday
+                    ? <><span className="status-icon">✅</span> Solved Today — Consistency Maintained</>
+                    : <><span className="status-icon">🎯</span> Today's session pending — stay consistent</>;
                 })()}
               </div>
+
+              {/* Last 7 Days Activity */}
+              <div className="recent-activity-section">
+                <div className="recent-activity-title">Last 7 Days Activity</div>
+                <div className="recent-activity-grid">
+                  {(() => {
+                    const days = [];
+                    const todayUTC = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
+
+                    for (let i = 6; i >= 0; i--) {
+                      const date = new Date(todayUTC);
+                      date.setUTCDate(date.getUTCDate() - i);
+                      const dateStr = toLocalDateStr(date);
+                      const dayName = date.toLocaleString('en-US', { timeZone: 'UTC', weekday: 'short' });
+
+                      // Count problems solved on this date
+                      const problemCount = Object.values(solvedDates).filter(
+                        d => d === dateStr
+                      ).length;
+
+                      const isToday = i === 0;
+
+                      days.push(
+                        <div key={dateStr} className={`activity-day ${isToday ? 'today' : ''}`}>
+                          <div className="activity-day-name">{dayName}</div>
+                          <div className={`activity-day-count ${problemCount > 0 ? 'active' : 'inactive'}`}>
+                            {problemCount > 0 ? problemCount : '—'}
+                          </div>
+                          <div className="activity-day-bar">
+                            <div
+                              className="activity-day-bar-fill"
+                              style={{ height: `${Math.min((problemCount / 5) * 100, 100)}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return days;
+                  })()}
+                </div>
+              </div>
+
+              {/* Next Milestone */}
+              <div className="streak-milestone">
+                <div className="milestone-header">
+                  <span className="milestone-label">Next Milestone</span>
+                  <span className="milestone-target">{displayCurrentStreak < 50 ? '50 Days' : '100 Days'}</span>
+                </div>
+                <div className="milestone-progress-bar">
+                  <div className="milestone-progress-fill" style={{ width: `${displayCurrentStreak < 50 ? (displayCurrentStreak / 50) * 100 : ((displayCurrentStreak - 50) / 50) * 100}%` }}></div>
+                </div>
+                <div className="milestone-text">{displayCurrentStreak < 50 ? `${displayCurrentStreak} / 50 days` : `${displayCurrentStreak} / 100 days`}</div>
+              </div>
+
+              {/* Motivation Message */}
+              <div className="motivation-message">
+                {displayCurrentStreak >= 30 ? '🔥 Discipline Level: Elite' : displayCurrentStreak >= 15 ? '⚡ Momentum Building' : '🚀 Build Your Streak'}
+              </div>
             </div>
 
-            {/* Next Milestone */}
-            <div className="streak-milestone">
-              <div className="milestone-header">
-                <span className="milestone-label">Next Milestone</span>
-                <span className="milestone-target">{displayCurrentStreak < 50 ? '50 Days' : '100 Days'}</span>
-              </div>
-              <div className="milestone-progress-bar">
-                <div className="milestone-progress-fill" style={{ width: `${displayCurrentStreak < 50 ? (displayCurrentStreak / 50) * 100 : ((displayCurrentStreak - 50) / 50) * 100}%` }}></div>
-              </div>
-              <div className="milestone-text">{displayCurrentStreak < 50 ? `${displayCurrentStreak} / 50 days` : `${displayCurrentStreak} / 100 days`}</div>
-            </div>
+            <div className="monthly-card">
+              <h3 className="card-title">📅 Monthly Planner</h3>
 
-            {/* Motivation Message */}
-            <div className="motivation-message">
-              {displayCurrentStreak >= 30 ? '🔥 Discipline Level: Elite' : displayCurrentStreak >= 15 ? '⚡ Momentum Building' : '🚀 Build Your Streak'}
-            </div>
-          </div>
-
-          <div className="monthly-card">
-            <h3 className="card-title">📅 Monthly Planner</h3>
-
-            {/* ── Progress Overview ── */}
-            <div className="mp-section">
-              <div className="mp-month-row">
-                <span className="mp-month-name">{new Date().toLocaleString('en-US', { timeZone: 'UTC', month: 'long', year: 'numeric' })}</span>
-                {(() => {
-                  const pace = targetSuggestion.hasData
-                    ? parseFloat(targetSuggestion.avgLast30) >= parseFloat(targetSuggestion.dailyRequired)
-                    : null;
-                  if (pace === null) return null;
-                  return (
-                    <span className={`mp-track-badge ${pace ? 'on-track' : 'behind'}`}>
-                      {pace ? '🟢 On track' : '🔴 Behind'}
-                    </span>
-                  );
-                })()}
-              </div>
-              {targetSuggestion.hasData ? (
-                <>
-                  <div className="mp-progress-bar-track">
-                    <div className="mp-progress-bar-fill" style={{ width: `${Math.min(100, Math.round((currentMonthStats.count / targetSuggestion.moderateMonthlyTarget) * 100))}%` }} />
-                    {/* Expected progress marker */}
-                    {(() => {
-                      const daysInMonth = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 1, 0)).getUTCDate();
-                      const dayOfMonth = new Date().getUTCDate();
-                      const expectedPct = Math.round((dayOfMonth / daysInMonth) * 100);
-                      return <div className="mp-expected-marker" style={{ left: `${expectedPct}%` }} title={`Expected: ${expectedPct}%`} />;
-                    })()}
-                  </div>
-                  <div className="mp-progress-label">
-                    <span><strong style={{ color: 'var(--primary)' }}>{currentMonthStats.count}</strong> solved · {targetSuggestion.moderateMonthlyTarget - currentMonthStats.count} remaining</span>
-                    <span style={{ color: 'var(--text-muted)' }}>{Math.min(100, Math.round((currentMonthStats.count / targetSuggestion.moderateMonthlyTarget) * 100))}%</span>
-                  </div>
-                  <div className="mp-stats-row">
-                    <div className="mp-stat">
-                      <span className="mp-stat-val">{targetSuggestion.avgLast30}</span>
-                      <span className="mp-stat-lbl">your pace/day</span>
-                    </div>
-                    <div className="mp-stat-divider" />
-                    <div className="mp-stat">
-                      <span className="mp-stat-val" style={{ color: parseFloat(targetSuggestion.dailyRequired) > parseFloat(targetSuggestion.avgLast30) ? 'var(--warning, #f59e0b)' : 'var(--success)' }}>
-                        {targetSuggestion.dailyRequired}
+              {/* ── Progress Overview ── */}
+              <div className="mp-section">
+                <div className="mp-month-row">
+                  <span className="mp-month-name">{new Date().toLocaleString('en-US', { timeZone: 'UTC', month: 'long', year: 'numeric' })}</span>
+                  {(() => {
+                    const pace = targetSuggestion.hasData
+                      ? parseFloat(targetSuggestion.avgLast30) >= parseFloat(targetSuggestion.dailyRequired)
+                      : null;
+                    if (pace === null) return null;
+                    return (
+                      <span className={`mp-track-badge ${pace ? 'on-track' : 'behind'}`}>
+                        {pace ? '🟢 On track' : '🔴 Behind'}
                       </span>
-                      <span className="mp-stat-lbl">required/day</span>
+                    );
+                  })()}
+                </div>
+                {targetSuggestion.hasData ? (
+                  <>
+                    <div className="mp-progress-bar-track">
+                      <div className="mp-progress-bar-fill" style={{ width: `${Math.min(100, Math.round((currentMonthStats.count / targetSuggestion.moderateMonthlyTarget) * 100))}%` }} />
+                      {/* Expected progress marker */}
+                      {(() => {
+                        const daysInMonth = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 1, 0)).getUTCDate();
+                        const dayOfMonth = new Date().getUTCDate();
+                        const expectedPct = Math.round((dayOfMonth / daysInMonth) * 100);
+                        return <div className="mp-expected-marker" style={{ left: `${expectedPct}%` }} title={`Expected: ${expectedPct}%`} />;
+                      })()}
                     </div>
-                    <div className="mp-stat-divider" />
-                    <div className="mp-stat">
-                      <span className="mp-stat-val">{targetSuggestion.remainingDays}</span>
-                      <span className="mp-stat-lbl">days left</span>
+                    <div className="mp-progress-label">
+                      <span><strong style={{ color: 'var(--primary)' }}>{currentMonthStats.count}</strong> solved · {targetSuggestion.moderateMonthlyTarget - currentMonthStats.count} remaining</span>
+                      <span style={{ color: 'var(--text-muted)' }}>{Math.min(100, Math.round((currentMonthStats.count / targetSuggestion.moderateMonthlyTarget) * 100))}%</span>
                     </div>
+                    <div className="mp-stats-row">
+                      <div className="mp-stat">
+                        <span className="mp-stat-val">{targetSuggestion.avgLast30}</span>
+                        <span className="mp-stat-lbl">your pace/day</span>
+                      </div>
+                      <div className="mp-stat-divider" />
+                      <div className="mp-stat">
+                        <span className="mp-stat-val" style={{ color: parseFloat(targetSuggestion.dailyRequired) > parseFloat(targetSuggestion.avgLast30) ? 'var(--warning, #f59e0b)' : 'var(--success)' }}>
+                          {targetSuggestion.dailyRequired}
+                        </span>
+                        <span className="mp-stat-lbl">required/day</span>
+                      </div>
+                      <div className="mp-stat-divider" />
+                      <div className="mp-stat">
+                        <span className="mp-stat-val">{targetSuggestion.remainingDays}</span>
+                        <span className="mp-stat-lbl">days left</span>
+                      </div>
+                    </div>
+                    {parseFloat(targetSuggestion.dailyRequired) > parseFloat(targetSuggestion.avgLast30) && (
+                      <div className="mp-pace-gap">
+                        +{(parseFloat(targetSuggestion.dailyRequired) - parseFloat(targetSuggestion.avgLast30)).toFixed(1)} more/day needed
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', padding: '0.5rem 0' }}>
+                    <strong style={{ color: 'var(--primary)' }}>{currentMonthStats.count}</strong> solved · Need 7+ days of data for targets
                   </div>
-                  {parseFloat(targetSuggestion.dailyRequired) > parseFloat(targetSuggestion.avgLast30) && (
-                    <div className="mp-pace-gap">
-                      +{(parseFloat(targetSuggestion.dailyRequired) - parseFloat(targetSuggestion.avgLast30)).toFixed(1)} more/day needed
+                )}
+              </div>
+
+              {/* ── Today's Plan ── */}
+              {targetSuggestion.hasData && (() => {
+                const solveTarget = Math.max(1, Math.ceil(parseFloat(targetSuggestion.dailyRequired)));
+                const reviseTarget = Math.min(3, coachingMetrics.forgottenCount > 0 ? 5 : 3);
+                const focusTopics = weaknessAnalysis.slice(0, 2).map(w => w.topic);
+                return (
+                  <div className="mp-today-plan">
+                    <div className="mp-today-title">🎯 Today's Plan</div>
+                    <div className="mp-today-numbers">
+                      <div className="mp-today-num">
+                        <span className="mp-today-big">{solveTarget}</span>
+                        <span className="mp-today-sub">solve</span>
+                      </div>
+                      <div className="mp-today-sep">·</div>
+                      <div className="mp-today-num">
+                        <span className="mp-today-big">{reviseTarget}</span>
+                        <span className="mp-today-sub">revise</span>
+                      </div>
                     </div>
-                  )}
-                </>
-              ) : (
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', padding: '0.5rem 0' }}>
-                  <strong style={{ color: 'var(--primary)' }}>{currentMonthStats.count}</strong> solved · Need 7+ days of data for targets
+                    {focusTopics.length > 0 && (
+                      <div className="mp-today-focus">Focus: {focusTopics.join(' · ')}</div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* ── Action Insights (severity system) ── */}
+              {smartCoachInsights.length > 0 && (
+                <div className="mp-section mp-insights">
+                  <div className="mp-insights-title">Insights</div>
+                  {smartCoachInsights.map((ins, i) => (
+                    <div key={i} className={`mp-insight-row mp-insight-${ins.sev === 'critical' ? 'urgent' : ins.sev === 'warning' ? 'improve' : 'positive'}`}>
+                      <span>{ins.icon} {ins.msg}</span>
+                      <span className="mp-insight-action">→ {ins.action}</span>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
+          </div>
 
-            {/* ── Today's Plan ── */}
-            {targetSuggestion.hasData && (() => {
-              const solveTarget = Math.max(1, Math.ceil(parseFloat(targetSuggestion.dailyRequired)));
-              const reviseTarget = Math.min(3, coachingMetrics.forgottenCount > 0 ? 5 : 3);
-              const focusTopics = weaknessAnalysis.slice(0, 2).map(w => w.topic);
-              return (
-                <div className="mp-today-plan">
-                  <div className="mp-today-title">🎯 Today's Plan</div>
-                  <div className="mp-today-numbers">
-                    <div className="mp-today-num">
-                      <span className="mp-today-big">{solveTarget}</span>
-                      <span className="mp-today-sub">solve</span>
-                    </div>
-                    <div className="mp-today-sep">·</div>
-                    <div className="mp-today-num">
-                      <span className="mp-today-big">{reviseTarget}</span>
-                      <span className="mp-today-sub">revise</span>
-                    </div>
-                  </div>
-                  {focusTopics.length > 0 && (
-                    <div className="mp-today-focus">Focus: {focusTopics.join(' · ')}</div>
-                  )}
+          {/* Advanced Analytics Grid */}
+          <div className="advanced-analytics-grid fade-up fade-up-3">
+            {/* Consistency Score */}
+            <div className="analytics-card consistency-card">
+              <h3 className="card-title">🎯 Consistency Score</h3>
+              <div className="consistency-content">
+                <div className="consistency-score-display">
+                  <div className="consistency-score">{consistencyScore.score}%</div>
+                  <div className="consistency-status">{consistencyScore.status}</div>
                 </div>
-              );
-            })()}
-
-            {/* ── Action Insights (severity system) ── */}
-            {smartCoachInsights.length > 0 && (
-              <div className="mp-section mp-insights">
-                <div className="mp-insights-title">Insights</div>
-                {smartCoachInsights.map((ins, i) => (
-                  <div key={i} className={`mp-insight-row mp-insight-${ins.sev === 'critical' ? 'urgent' : ins.sev === 'warning' ? 'improve' : 'positive'}`}>
-                    <span>{ins.icon} {ins.msg}</span>
-                    <span className="mp-insight-action">→ {ins.action}</span>
+                <div className="consistency-details">
+                  <div className="consistency-detail-item">
+                    <span className="detail-label">Start Date</span>
+                    <span className="detail-value">{consistencyScore.firstDate}</span>
                   </div>
-                ))}
+                  <div className="consistency-detail-item">
+                    <span className="detail-label">Days Tracked</span>
+                    <span className="detail-value">{consistencyScore.totalDaysTracked}</span>
+                  </div>
+                </div>
               </div>
+            </div>
+
+            {/* Weekly Performance */}
+            <div className="analytics-card weekly-card">
+              <h3 className="card-title">📊 Weekly Performance</h3>
+              <div className="compact-card-body">
+                <div className="compact-main-row">
+                  <div className="compact-stat">
+                    <span className="compact-big">{weeklyPerformance.thisWeek}</span>
+                    <span className="compact-lbl">this week</span>
+                  </div>
+                  <div className="compact-divider" />
+                  <div className="compact-stat">
+                    <span className="compact-big">{weeklyPerformance.lastWeek}</span>
+                    <span className="compact-lbl">last week</span>
+                  </div>
+                </div>
+                <div className="compact-sub-row">
+                  <span style={{ color: weeklyPerformance.change > 0 ? 'var(--success)' : weeklyPerformance.change < 0 ? 'var(--danger)' : 'var(--text-secondary)', fontWeight: 700 }}>
+                    {weeklyPerformance.trend} {weeklyPerformance.change > 0 ? '+' : ''}{weeklyPerformance.change}%
+                  </span>
+                  <span className="compact-context">{weeklyPerformance.contextLabel}</span>
+                </div>
+                <div className="compact-sub-row">
+                  <span className="compact-muted">Avg this week:</span>
+                  <span className="compact-muted-val">{weeklyPerformance.thisWeekAvgPerDay}/day</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Daily Average */}
+            <div className="analytics-card daily-avg-card">
+              <h3 className="card-title">📈 Daily Average</h3>
+              <div className="compact-card-body">
+                <div className="compact-hero">
+                  <span className="compact-hero-num">{dailyAverage.overallAvg}</span>
+                  <span className="compact-hero-sub">overall avg/active day</span>
+                </div>
+                <div className="compact-sub-row">
+                  <span className="compact-muted">Last 7d:</span>
+                  <span className="compact-muted-val">{dailyAverage.last7Avg}</span>
+                </div>
+                <div className="compact-sub-row">
+                  <span className="compact-muted">Last 30d:</span>
+                  <span className="compact-muted-val">{dailyAverage.last30Avg}</span>
+                </div>
+                <div className="compact-sub-row">
+                  <span style={{ color: dailyAverage.trend === 'Improving' ? 'var(--success)' : dailyAverage.trend === 'Declining' ? 'var(--danger)' : 'var(--text-secondary)', fontWeight: 600, fontSize: '0.8rem' }}>
+                    {dailyAverage.arrow} {dailyAverage.trend}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Strongest Day */}
+            <div className="analytics-card strongest-day-card">
+              <h3 className="card-title">🔥 Best Day Record</h3>
+              <div className="compact-card-body">
+                <div className="compact-hero">
+                  <span className="compact-hero-num" style={{ background: 'linear-gradient(135deg, var(--warning), #F97316)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                    {strongestDay.count}
+                  </span>
+                  <span className="compact-hero-sub">problems in one day</span>
+                </div>
+                {strongestDay.topDays.length > 0 && (
+                  <div style={{ marginTop: '8px' }}>
+                    <div className="compact-muted" style={{ marginBottom: '4px' }}>Top days:</div>
+                    {strongestDay.topDays.map((d, i) => (
+                      <div key={i} className="compact-sub-row">
+                        <span className="compact-muted">{d.label}</span>
+                        <span className="compact-muted-val">{d.count} solved</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Striver Progress Card — ABOVE Needs Revision */}
+          <div className="analytics-card striver-card fade-up fade-up-4">
+            <h3 className="card-title">📘 Striver Progress</h3>
+            <div className="striver-stats">
+              <div className="striver-stat-row">
+                <span className="striver-dot easy"></span>
+                <span className="striver-label">Easy</span>
+                <span className="striver-value">{striverStats.easy}</span>
+              </div>
+              <div className="striver-stat-row">
+                <span className="striver-dot medium"></span>
+                <span className="striver-label">Medium</span>
+                <span className="striver-value">{striverStats.medium}</span>
+              </div>
+              <div className="striver-stat-row">
+                <span className="striver-dot hard"></span>
+                <span className="striver-label">Hard</span>
+                <span className="striver-value">{striverStats.hard}</span>
+              </div>
+              <div className="striver-stat-row striver-total-row">
+                <span className="striver-dot total"></span>
+                <span className="striver-label">Total Solved</span>
+                <span className="striver-value striver-total">{striverStats.total}</span>
+              </div>
+            </div>
+            {striverStats.total === 0 && (
+              <div className="striver-empty">Click 📘 on any problem in the table to mark it as Striver</div>
             )}
           </div>
-        </div>
 
-        {/* Advanced Analytics Grid */}
-        <div className="advanced-analytics-grid fade-up fade-up-3">
-          {/* Consistency Score */}
-          <div className="analytics-card consistency-card">
-            <h3 className="card-title">🎯 Consistency Score</h3>
-            <div className="consistency-content">
-              <div className="consistency-score-display">
-                <div className="consistency-score">{consistencyScore.score}%</div>
-                <div className="consistency-status">{consistencyScore.status}</div>
-              </div>
-              <div className="consistency-details">
-                <div className="consistency-detail-item">
-                  <span className="detail-label">Start Date</span>
-                  <span className="detail-value">{consistencyScore.firstDate}</span>
-                </div>
-                <div className="consistency-detail-item">
-                  <span className="detail-label">Days Tracked</span>
-                  <span className="detail-value">{consistencyScore.totalDaysTracked}</span>
-                </div>
-              </div>
-            </div>
-          </div>
+          {/* Needs Revision — Spaced Repetition Queue */}
+          {(() => {
+            const now = new Date();
+            const dueNow = intelligentRevision; // already filtered to nextRevisionAt <= now
+            const failureLoop = intelligentRevision.filter(p => p.failureLoopFlagged);
+            const pendingCount = dueNow.length;
+            const limitReached = dailyRevisionCount >= DAILY_REVISION_LIMIT;
 
-          {/* Weekly Performance */}
-          <div className="analytics-card weekly-card">
-            <h3 className="card-title">📊 Weekly Performance</h3>
-            <div className="compact-card-body">
-              <div className="compact-main-row">
-                <div className="compact-stat">
-                  <span className="compact-big">{weeklyPerformance.thisWeek}</span>
-                  <span className="compact-lbl">this week</span>
-                </div>
-                <div className="compact-divider" />
-                <div className="compact-stat">
-                  <span className="compact-big">{weeklyPerformance.lastWeek}</span>
-                  <span className="compact-lbl">last week</span>
-                </div>
-              </div>
-              <div className="compact-sub-row">
-                <span style={{ color: weeklyPerformance.change > 0 ? 'var(--success)' : weeklyPerformance.change < 0 ? 'var(--danger)' : 'var(--text-secondary)', fontWeight: 700 }}>
-                  {weeklyPerformance.trend} {weeklyPerformance.change > 0 ? '+' : ''}{weeklyPerformance.change}%
-                </span>
-                <span className="compact-context">{weeklyPerformance.contextLabel}</span>
-              </div>
-              <div className="compact-sub-row">
-                <span className="compact-muted">Avg this week:</span>
-                <span className="compact-muted-val">{weeklyPerformance.thisWeekAvgPerDay}/day</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Daily Average */}
-          <div className="analytics-card daily-avg-card">
-            <h3 className="card-title">📈 Daily Average</h3>
-            <div className="compact-card-body">
-              <div className="compact-hero">
-                <span className="compact-hero-num">{dailyAverage.overallAvg}</span>
-                <span className="compact-hero-sub">overall avg/active day</span>
-              </div>
-              <div className="compact-sub-row">
-                <span className="compact-muted">Last 7d:</span>
-                <span className="compact-muted-val">{dailyAverage.last7Avg}</span>
-              </div>
-              <div className="compact-sub-row">
-                <span className="compact-muted">Last 30d:</span>
-                <span className="compact-muted-val">{dailyAverage.last30Avg}</span>
-              </div>
-              <div className="compact-sub-row">
-                <span style={{ color: dailyAverage.trend === 'Improving' ? 'var(--success)' : dailyAverage.trend === 'Declining' ? 'var(--danger)' : 'var(--text-secondary)', fontWeight: 600, fontSize: '0.8rem' }}>
-                  {dailyAverage.arrow} {dailyAverage.trend}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Strongest Day */}
-          <div className="analytics-card strongest-day-card">
-            <h3 className="card-title">🔥 Best Day Record</h3>
-            <div className="compact-card-body">
-              <div className="compact-hero">
-                <span className="compact-hero-num" style={{ background: 'linear-gradient(135deg, var(--warning), #F97316)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                  {strongestDay.count}
-                </span>
-                <span className="compact-hero-sub">problems in one day</span>
-              </div>
-              {strongestDay.topDays.length > 0 && (
-                <div style={{ marginTop: '8px' }}>
-                  <div className="compact-muted" style={{ marginBottom: '4px' }}>Top days:</div>
-                  {strongestDay.topDays.map((d, i) => (
-                    <div key={i} className="compact-sub-row">
-                      <span className="compact-muted">{d.label}</span>
-                      <span className="compact-muted-val">{d.count} solved</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Striver Progress Card — ABOVE Needs Revision */}
-        <div className="analytics-card striver-card fade-up fade-up-4">
-          <h3 className="card-title">📘 Striver Progress</h3>
-          <div className="striver-stats">
-            <div className="striver-stat-row">
-              <span className="striver-dot easy"></span>
-              <span className="striver-label">Easy</span>
-              <span className="striver-value">{striverStats.easy}</span>
-            </div>
-            <div className="striver-stat-row">
-              <span className="striver-dot medium"></span>
-              <span className="striver-label">Medium</span>
-              <span className="striver-value">{striverStats.medium}</span>
-            </div>
-            <div className="striver-stat-row">
-              <span className="striver-dot hard"></span>
-              <span className="striver-label">Hard</span>
-              <span className="striver-value">{striverStats.hard}</span>
-            </div>
-            <div className="striver-stat-row striver-total-row">
-              <span className="striver-dot total"></span>
-              <span className="striver-label">Total Solved</span>
-              <span className="striver-value striver-total">{striverStats.total}</span>
-            </div>
-          </div>
-          {striverStats.total === 0 && (
-            <div className="striver-empty">Click 📘 on any problem in the table to mark it as Striver</div>
-          )}
-        </div>
-
-        {/* Needs Revision — Spaced Repetition Queue */}
-        {(() => {
-          const now = new Date();
-          const dueNow    = intelligentRevision; // already filtered to nextRevisionAt <= now
-          const failureLoop = intelligentRevision.filter(p => p.failureLoopFlagged);
-          const pendingCount = dueNow.length;
-          const limitReached = dailyRevisionCount >= DAILY_REVISION_LIMIT;
-
-          const RevSubSection = ({ title, items }) => {
-            if (items.length === 0) return null;
-            return (
-              <div className="sug-section">
-                <div className="sug-section-title">{title}</div>
-                <div className={getPcGridClass(items.length)}>
-                  {items.map(p => (
-                    <div key={p.number} style={{ position: 'relative' }}>
-                      {p.failureLoopFlagged && (
-                        <div style={{
-                          position: 'absolute', top: 6, right: 6, zIndex: 2,
-                          background: 'rgba(239,68,68,0.15)', border: '1px solid #ef4444',
-                          borderRadius: 6, padding: '2px 7px', fontSize: '0.7rem',
-                          color: '#ef4444', fontWeight: 700,
-                        }}>⚠️ Pattern not learned</div>
-                      )}
-                      <ProblemCard
-                        p={p}
-                        variant="revision"
-                        onRevise={handleRevise}
-                        revisingId={revisingId}
-                        formatDate={formatDate}
-                        onUserDiffChange={handleUserDifficultyChange}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          };
-
-          return (
-            <div className="suggestions-card fade-up">
-              <div className="sug-header">
-                <h3 className="card-title">🔁 Needs Revision ({pendingCount})</h3>
-                <span className="sug-subtitle">
-                  {dailyRevisionCount}/{DAILY_REVISION_LIMIT} revised today
-                  {limitReached ? ' · Daily limit reached' : ''}
-                </span>
-              </div>
-
-              {limitReached && (
-                <div style={{
-                  background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
-                  borderRadius: 8, padding: '0.6rem 1rem', marginBottom: '1rem',
-                  fontSize: '0.82rem', color: '#ef4444',
-                }}>
-                  🚫 Daily revision limit reached (5/5). Come back tomorrow.
-                </div>
-              )}
-
-              {failureLoop.length > 0 && (
-                <div style={{
-                  background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)',
-                  borderRadius: 8, padding: '0.6rem 1rem', marginBottom: '1rem',
-                  fontSize: '0.82rem', color: 'var(--text-secondary)',
-                }}>
-                  ⚠️ <strong style={{ color: '#ef4444' }}>{failureLoop.length} problem{failureLoop.length > 1 ? 's' : ''}</strong> stuck in failure loop — study the pattern, then retry after 24h.
-                </div>
-              )}
-
-              {pendingCount === 0 ? (
-                <div className="pc-empty">
-                  <div className="pc-empty-icon">🎉</div>
-                  <div>No revisions due right now</div>
-                  <small>Problems appear here when their scheduled revision date arrives</small>
-                </div>
-              ) : (
-                <RevSubSection title="📅 Due Now" items={dueNow} />
-              )}
-            </div>
-          );
-        })()}
-
-        {/* Today's Progress + Recently Solved */}
-        {(() => {
-          const relativeTime = (date) => {
-            if (!date) return '';
-            const diff = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
-            if (diff < 60)   return `${diff}s ago`;
-            if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-            if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-            return `${Math.floor(diff / 86400)}d ago`;
-          };
-
-          // Merge backend data with full problem data from allProblems for extra fields
-          const enrichProblem = (p) => {
-            if (!p) return null;
-            const full = allProblems.find(ap => ap.number === (p.id || p.number)) || {};
-            return {
-              ...p,
-              number: p.id || p.number,
-              isStriver: full.isStriver ?? p.isStriver ?? false,
-              targeted: full.targeted ?? p.targeted ?? false,
-              revisionCount: full.revisionCount ?? p.revisionCount ?? 0,
-              lastRevisedAt: full.lastRevisedAt ?? p.lastRevisedAt ?? null,
-              link: p.leetcodeLink || full.link || `https://leetcode.com/problems/${p.id}/`,
-              providerTitle: p?.providerTitle || full?.providerTitle || 'LeetCode',
-            };
-          };
-
-          const enrichedRecent = (recentProblems || []).map(enrichProblem).filter(Boolean);
-          const enrichedToday  = (todayProblems  || []).map(enrichProblem).filter(Boolean);
-
-          // Status badge for recently solved cards
-          const solveStatus = (lastSubmittedAt) => {
-            if (!lastSubmittedAt) return null;
-            const hrs = (Date.now() - new Date(lastSubmittedAt).getTime()) / 3600000;
-            if (hrs < 24)  return { label: 'Fresh',          cls: 'rs-status-fresh' };
-            if (hrs > 72)  return { label: 'Needs Revision', cls: 'rs-status-stale' };
-            return null;
-          };
-
-          // Card click handler with navigation
-          const handleCardClick = (problemNumber) => {
-            handleClickSuggestion(problemNumber);
-          };
-
-          // Button click with propagation stop
-          const handleButtonClick = (e, action, problemNumber) => {
-            e.stopPropagation();
-            if (action === 'revise') {
-              handleRevise(problemNumber);
-            } else if (action === 'striver') {
-              handleToggleStriver(problemNumber);
-            } else if (action === 'target') {
-              handleToggleTarget(problemNumber);
-            }
-          };
-
-          return (
-            <>
-              {/* ── Today's Progress ── */}
-              <div className="suggestions-card fade-up" style={{ marginBottom: 16 }}>
-                <div className="sug-header">
-                  <div>
-                    <h3 className="card-title" style={{ marginBottom: 2 }}>
-                      ☀️ Today's Progress
-                      <span style={{ marginLeft: 10, fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-secondary)' }}>
-                        {enrichedToday.length} solved
-                      </span>
-                    </h3>
-                    <span className="sug-subtitle">Problems you solved today</span>
+            const RevSubSection = ({ title, items }) => {
+              if (items.length === 0) return null;
+              return (
+                <div className="sug-section">
+                  <div className="sug-section-title">{title}</div>
+                  <div className={getPcGridClass(items.length)}>
+                    {items.map(p => (
+                      <div key={p.number} style={{ position: 'relative' }}>
+                        {p.failureLoopFlagged && (
+                          <div style={{
+                            position: 'absolute', top: 6, right: 6, zIndex: 2,
+                            background: 'rgba(239,68,68,0.15)', border: '1px solid #ef4444',
+                            borderRadius: 6, padding: '2px 7px', fontSize: '0.7rem',
+                            color: '#ef4444', fontWeight: 700,
+                          }}>⚠️ Pattern not learned</div>
+                        )}
+                        <ProblemCard
+                          p={p}
+                          variant="revision"
+                          onRevise={handleRevise}
+                          revisingId={revisingId}
+                          formatDate={formatDate}
+                          onUserDiffChange={handleUserDifficultyChange}
+                        />
+                      </div>
+                    ))}
                   </div>
                 </div>
+              );
+            };
 
-                {enrichedToday.length === 0 ? (
+            return (
+              <div className="suggestions-card fade-up">
+                <div className="sug-header">
+                  <h3 className="card-title">🔁 Needs Revision ({pendingCount})</h3>
+                  <span className="sug-subtitle">
+                    {dailyRevisionCount}/{DAILY_REVISION_LIMIT} revised today
+                    {limitReached ? ' · Daily limit reached' : ''}
+                  </span>
+                </div>
+
+                {limitReached && (
+                  <div style={{
+                    background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+                    borderRadius: 8, padding: '0.6rem 1rem', marginBottom: '1rem',
+                    fontSize: '0.82rem', color: '#ef4444',
+                  }}>
+                    🚫 Daily revision limit reached (5/5). Come back tomorrow.
+                  </div>
+                )}
+
+                {failureLoop.length > 0 && (
+                  <div style={{
+                    background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)',
+                    borderRadius: 8, padding: '0.6rem 1rem', marginBottom: '1rem',
+                    fontSize: '0.82rem', color: 'var(--text-secondary)',
+                  }}>
+                    ⚠️ <strong style={{ color: '#ef4444' }}>{failureLoop.length} problem{failureLoop.length > 1 ? 's' : ''}</strong> stuck in failure loop — study the pattern, then retry after 24h.
+                  </div>
+                )}
+
+                {pendingCount === 0 ? (
                   <div className="pc-empty">
-                    <div className="pc-empty-icon">🌅</div>
-                    <div>No problems solved today</div>
-                    <small>Start solving to build your streak</small>
+                    <div className="pc-empty-icon">🎉</div>
+                    <div>No revisions due right now</div>
+                    <small>Problems appear here when their scheduled revision date arrives</small>
                   </div>
                 ) : (
-                  <div className="tp-list">
-                    {enrichedToday.map((p, idx) => {
-                      const diff = (p.difficulty || 'medium').toLowerCase();
-                      const isRevisited = (p.revisionCount || 0) > 0;
-                      return (
-                        <React.Fragment key={p._id || p.number}>
-                          {idx > 0 && <div className="tp-divider" />}
-                          <div className="tp-item">
-                            <div className="tp-item-left">
-                              <span className={`badge badge-${diff}`}>{p.difficulty}</span>
-                              <div className="tp-problem-info">
-                                <div className="tp-title">#{p.number} {p.title}</div>
-                                <div className="tp-meta">
-                                  {isRevisited
-                                    ? <span className="tp-badge tp-badge-revisited">Revisited</span>
-                                    : <span className="tp-badge tp-badge-new">New</span>
-                                  }
-                                  <span className="recent-time">{relativeTime(p.lastSubmittedAt)}</span>
+                  <RevSubSection title="📅 Due Now" items={dueNow} />
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Today's Progress + Recently Solved */}
+          {(() => {
+            const relativeTime = (date) => {
+              if (!date) return '';
+              const diff = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
+              if (diff < 60) return `${diff}s ago`;
+              if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+              if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+              return `${Math.floor(diff / 86400)}d ago`;
+            };
+
+            // Merge backend data with full problem data from allProblems for extra fields
+            const enrichProblem = (p) => {
+              if (!p) return null;
+              const full = allProblems.find(ap => ap.number === (p.id || p.number)) || {};
+              return {
+                ...p,
+                number: p.id || p.number,
+                isStriver: full.isStriver ?? p.isStriver ?? false,
+                targeted: full.targeted ?? p.targeted ?? false,
+                revisionCount: full.revisionCount ?? p.revisionCount ?? 0,
+                lastRevisedAt: full.lastRevisedAt ?? p.lastRevisedAt ?? null,
+                link: p.leetcodeLink || full.link || `https://leetcode.com/problems/${p.id}/`,
+                providerTitle: p?.providerTitle || full?.providerTitle || 'LeetCode',
+              };
+            };
+
+            const enrichedRecent = (recentProblems || []).map(enrichProblem).filter(Boolean);
+            const enrichedToday = (todayProblems || []).map(enrichProblem).filter(Boolean);
+
+            // Status badge for recently solved cards
+            const solveStatus = (lastSubmittedAt) => {
+              if (!lastSubmittedAt) return null;
+              const hrs = (Date.now() - new Date(lastSubmittedAt).getTime()) / 3600000;
+              if (hrs < 24) return { label: 'Fresh', cls: 'rs-status-fresh' };
+              if (hrs > 72) return { label: 'Needs Revision', cls: 'rs-status-stale' };
+              return null;
+            };
+
+            // Card click handler with navigation
+            const handleCardClick = (problemNumber) => {
+              handleClickSuggestion(problemNumber);
+            };
+
+            // Button click with propagation stop
+            const handleButtonClick = (e, action, problemNumber) => {
+              e.stopPropagation();
+              if (action === 'revise') {
+                handleRevise(problemNumber);
+              } else if (action === 'striver') {
+                handleToggleStriver(problemNumber);
+              } else if (action === 'target') {
+                handleToggleTarget(problemNumber);
+              }
+            };
+
+            return (
+              <>
+                {/* ── Today's Progress ── */}
+                <div className="suggestions-card fade-up" style={{ marginBottom: 16 }}>
+                  <div className="sug-header">
+                    <div>
+                      <h3 className="card-title" style={{ marginBottom: 2 }}>
+                        ☀️ Today's Progress
+                        <span style={{ marginLeft: 10, fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                          {enrichedToday.length} solved
+                        </span>
+                      </h3>
+                      <span className="sug-subtitle">Problems you solved today</span>
+                    </div>
+                  </div>
+
+                  {enrichedToday.length === 0 ? (
+                    <div className="pc-empty">
+                      <div className="pc-empty-icon">🌅</div>
+                      <div>No problems solved today</div>
+                      <small>Start solving to build your streak</small>
+                    </div>
+                  ) : (
+                    <div className="tp-list">
+                      {enrichedToday.map((p, idx) => {
+                        const diff = (p.difficulty || 'medium').toLowerCase();
+                        const isRevisited = (p.revisionCount || 0) > 0;
+                        return (
+                          <React.Fragment key={p._id || p.number}>
+                            {idx > 0 && <div className="tp-divider" />}
+                            <div className="tp-item">
+                              <div className="tp-item-left">
+                                <span className={`badge badge-${diff}`}>{p.difficulty}</span>
+                                <div className="tp-problem-info">
+                                  <div className="tp-title">#{p.number} {p.title}</div>
+                                  <div className="tp-meta">
+                                    {isRevisited
+                                      ? <span className="tp-badge tp-badge-revisited">Revisited</span>
+                                      : <span className="tp-badge tp-badge-new">New</span>
+                                    }
+                                    <span className="recent-time">{relativeTime(p.lastSubmittedAt)}</span>
+                                  </div>
                                 </div>
                               </div>
+                              <div className="tp-item-right">
+                                <a
+                                  className="pc-btn pc-btn-open"
+                                  href={p.link || p.leetcodeLink || `https://leetcode.com/problems/${p.number}/`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  Open ↗
+                                </a>
+                              </div>
                             </div>
-                            <div className="tp-item-right">
+                          </React.Fragment>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Recently Solved ── */}
+                <div className="suggestions-card fade-up" style={{ marginBottom: 16 }}>
+                  <div className="sug-header">
+                    <h3 className="card-title" style={{ marginBottom: 2 }}>🆕 Recently Solved</h3>
+                    <span className="sug-subtitle">Click any card to find in table</span>
+                  </div>
+
+                  {enrichedRecent.length === 0 ? (
+                    <div className="pc-empty">
+                      <div className="pc-empty-icon">📭</div>
+                      <div>No recent problems found</div>
+                      <small>Sync LeetCode to populate</small>
+                    </div>
+                  ) : (
+                    <div className={getPcGridClass(enrichedRecent.length)}>
+                      {enrichedRecent.map(p => {
+                        const diff = (p.difficulty || 'medium').toLowerCase();
+                        const status = solveStatus(p.lastSubmittedAt);
+                        return (
+                          <div
+                            key={p._id || p.number}
+                            className="pc-card pc-card-clickable"
+                            onClick={() => handleCardClick(p.number)}
+                          >
+                            {/* Top row */}
+                            <div className="pc-top-row">
+                              <span className="pc-id">#{p.number}</span>
+                              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                {status && <span className={`rs-status ${status.cls}`}>{status.label}</span>}
+                                <span className="recent-time">{relativeTime(p.lastSubmittedAt)}</span>
+                              </div>
+                            </div>
+
+                            {/* Title */}
+                            <div className="pc-title">{p.title}</div>
+
+                            {/* Meta */}
+                            <div className="pc-meta">
+                              <span className={`badge badge-${diff}`}>{p.difficulty}</span>
+                              {(p.revisionCount || 0) > 0 && (
+                                <span className="pc-rev-badge">🔁 {p.revisionCount}×</span>
+                              )}
+                            </div>
+
+                            {/* Actions */}
+                            <div className="pc-actions">
                               <a
                                 className="pc-btn pc-btn-open"
                                 href={p.link || p.leetcodeLink || `https://leetcode.com/problems/${p.number}/`}
@@ -3201,822 +3299,822 @@ function App() {
                               >
                                 Open ↗
                               </a>
+                              <button
+                                className={`pc-btn-toggle ${p.isStriver ? 'active' : ''}`}
+                                onClick={(e) => handleButtonClick(e, 'striver', p.number)}
+                                disabled={striverId === p.number}
+                                title={p.isStriver ? 'Striver Active' : 'Add to Striver'}
+                              >
+                                <span className="toggle-icon">📘</span>
+                              </button>
+                              <button
+                                className={`pc-btn-toggle ${p.targeted ? 'active' : ''}`}
+                                onClick={(e) => handleButtonClick(e, 'target', p.number)}
+                                disabled={targetingId === p.number}
+                                title={p.targeted ? 'Target Active' : 'Add to Targeted'}
+                              >
+                                <span className="toggle-icon">🎯</span>
+                              </button>
                             </div>
                           </div>
-                        </React.Fragment>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* ── Recently Solved ── */}
-              <div className="suggestions-card fade-up" style={{ marginBottom: 16 }}>
-                <div className="sug-header">
-                  <h3 className="card-title" style={{ marginBottom: 2 }}>🆕 Recently Solved</h3>
-                  <span className="sug-subtitle">Click any card to find in table</span>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
+              </>
+            );
+          })()}
 
-                {enrichedRecent.length === 0 ? (
-                  <div className="pc-empty">
-                    <div className="pc-empty-icon">📭</div>
-                    <div>No recent problems found</div>
-                    <small>Sync LeetCode to populate</small>
+          {/* Targeted Problems — manually marked by user */}
+          {(() => {
+            const list = targetedProblems.list;
+            return (
+              <div className="pc-section fade-up">
+                <h3 className="card-title">🎯 Targeted Problems ({list.length})</h3>
+                {list.length > 0 ? (
+                  <div className={getPcGridClass(list.length)}>
+                    {list.map(p => (
+                      <ProblemCard
+                        key={p.number}
+                        p={p}
+                        variant="targeted"
+                        onRevise={handleRevise}
+                        revisingId={revisingId}
+                        formatDate={formatDate}
+                        onUserDiffChange={handleUserDifficultyChange}
+                        onTarget={handleToggleTarget}
+                        targetingId={targetingId}
+                        onClickCard={handleClickSuggestion}
+                      />
+                    ))}
                   </div>
                 ) : (
-                  <div className={getPcGridClass(enrichedRecent.length)}>
-                    {enrichedRecent.map(p => {
-                      const diff = (p.difficulty || 'medium').toLowerCase();
-                      const status = solveStatus(p.lastSubmittedAt);
-                      return (
-                        <div 
-                          key={p._id || p.number} 
-                          className="pc-card pc-card-clickable"
-                          onClick={() => handleCardClick(p.number)}
-                        >
-                          {/* Top row */}
-                          <div className="pc-top-row">
-                            <span className="pc-id">#{p.number}</span>
-                            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                              {status && <span className={`rs-status ${status.cls}`}>{status.label}</span>}
-                              <span className="recent-time">{relativeTime(p.lastSubmittedAt)}</span>
-                            </div>
-                          </div>
-
-                          {/* Title */}
-                          <div className="pc-title">{p.title}</div>
-
-                          {/* Meta */}
-                          <div className="pc-meta">
-                            <span className={`badge badge-${diff}`}>{p.difficulty}</span>
-                            {(p.revisionCount || 0) > 0 && (
-                              <span className="pc-rev-badge">🔁 {p.revisionCount}×</span>
-                            )}
-                          </div>
-
-                          {/* Actions */}
-                          <div className="pc-actions">
-                            <a
-                              className="pc-btn pc-btn-open"
-                              href={p.link || p.leetcodeLink || `https://leetcode.com/problems/${p.number}/`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              Open ↗
-                            </a>
-                            <button
-                              className={`pc-btn-toggle ${p.isStriver ? 'active' : ''}`}
-                              onClick={(e) => handleButtonClick(e, 'striver', p.number)}
-                              disabled={striverId === p.number}
-                              title={p.isStriver ? 'Striver Active' : 'Add to Striver'}
-                            >
-                              <span className="toggle-icon">📘</span>
-                            </button>
-                            <button
-                              className={`pc-btn-toggle ${p.targeted ? 'active' : ''}`}
-                              onClick={(e) => handleButtonClick(e, 'target', p.number)}
-                              disabled={targetingId === p.number}
-                              title={p.targeted ? 'Target Active' : 'Add to Targeted'}
-                            >
-                              <span className="toggle-icon">🎯</span>
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
+                  <div className="pc-empty pc-empty-cta">
+                    <div className="pc-empty-icon">🎯</div>
+                    <div>No targeted problems yet</div>
+                    <small>Click the 🎯 button on any problem in the table to add it here</small>
+                    <button
+                      className="btn-cta"
+                      onClick={() => {
+                        const tableSection = document.querySelector('.table-card');
+                        if (tableSection) {
+                          tableSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+                      }}
+                    >
+                      Browse Problems
+                    </button>
                   </div>
                 )}
               </div>
-            </>
-          );
-        })()}
+            );
+          })()}
 
-        {/* Targeted Problems — manually marked by user */}
-        {(() => {
-          const list = targetedProblems.list;
-          return (
-            <div className="pc-section fade-up">
-              <h3 className="card-title">🎯 Targeted Problems ({list.length})</h3>
-              {list.length > 0 ? (
-                <div className={getPcGridClass(list.length)}>
-                  {list.map(p => (
-                    <ProblemCard
-                      key={p.number}
-                      p={p}
-                      variant="targeted"
-                      onRevise={handleRevise}
-                      revisingId={revisingId}
-                      formatDate={formatDate}
-                      onUserDiffChange={handleUserDifficultyChange}
-                      onTarget={handleToggleTarget}
-                      targetingId={targetingId}
-                      onClickCard={handleClickSuggestion}
-                    />
-                  ))}
+          {/* Rolling Focus — Intelligent */}
+          <div className="progress-card">
+            <div className="progress-header">
+              <div>
+                <h2>Rolling Focus</h2>
+                <p className="progress-subtitle">
+                  {totalSolved} solved · {totalProblems - totalSolved} remaining
+                  {completedCycles > 0 && ` · ${completedCycles} cycle${completedCycles > 1 ? 's' : ''} done`}
+                </p>
+              </div>
+              <div className="progress-actions">
+                <button className="btn-add-problem" onClick={() => setShowModal(true)}>
+                  <span>+</span> Add Problem
+                </button>
+              </div>
+            </div>
+            <div className="progress-bar-wrapper">
+              <div className="progress-bar-track">
+                <div className="progress-bar-fill" style={{ width: `${rollingProgressPercentage}%` }}>
+                  <span className="progress-bar-text">{rollingProgressPercentage}%</span>
                 </div>
-              ) : (
-                <div className="pc-empty pc-empty-cta">
-                  <div className="pc-empty-icon">🎯</div>
-                  <div>No targeted problems yet</div>
-                  <small>Click the 🎯 button on any problem in the table to add it here</small>
-                  <button 
-                    className="btn-cta"
-                    onClick={() => {
-                      const tableSection = document.querySelector('.table-card');
-                      if (tableSection) {
-                        tableSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                      }
-                    }}
+              </div>
+            </div>
+            {/* Coaching insight badges */}
+            <div className="rolling-insight-badges">
+              <span className={`rib ${coachingMetrics.revisionRate < 0.3 ? 'rib-red' : coachingMetrics.revisionRate < 0.5 ? 'rib-yellow' : 'rib-green'}`}>
+                🔁 {Math.round(coachingMetrics.revisionRate * 100)}% revised
+              </span>
+              <span className={`rib ${coachingMetrics.avgGap > 5 ? 'rib-yellow' : 'rib-green'}`}>
+                ⏱ {coachingMetrics.avgGap}d avg gap
+              </span>
+              <span className={`rib ${coachingMetrics.forgottenCount > 40 ? 'rib-red' : coachingMetrics.forgottenCount > 20 ? 'rib-yellow' : 'rib-green'}`}>
+                🧠 {coachingMetrics.forgottenCount} forgotten
+              </span>
+              {coachingMetrics.topicDist[0] && (
+                <span className={`rib ${coachingMetrics.topicDist[0].pct > 40 ? 'rib-yellow' : 'rib-green'}`}>
+                  📊 {coachingMetrics.topicDist[0].topic} {coachingMetrics.topicDist[0].pct}%
+                </span>
+              )}
+            </div>
+            <div className="rolling-stats">
+              <div className="rolling-stat-item">
+                <span className="rolling-stat-label">Total:</span>
+                <span className="rolling-stat-value">{totalProblems}</span>
+              </div>
+              <div className="rolling-stat-divider"></div>
+              <div className="rolling-stat-item">
+                <span className="rolling-stat-label">Solved:</span>
+                <span className="rolling-stat-value solved">{totalSolved}</span>
+              </div>
+              <div className="rolling-stat-divider"></div>
+              <div className="rolling-stat-item">
+                <span className="rolling-stat-label">Revised:</span>
+                <span className="rolling-stat-value">{coachingMetrics.revisedSolvedCount}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Analytics Grid */}
+          <div className="analytics-grid">
+            {/* LeetCode Difficulty Distribution */}
+            <div className="analytics-card">
+              <h3 className="card-title">LeetCode Difficulty</h3>
+              <div className="difficulty-stats">
+                <div className="difficulty-item">
+                  <div className="difficulty-header">
+                    <span className="difficulty-badge difficulty-easy">Easy</span>
+                    <span className="difficulty-count">{easyCount} / {totalEasy}</span>
+                  </div>
+                  <div className="difficulty-bar">
+                    <div className="difficulty-bar-fill difficulty-easy" style={{ width: `${easyPercent}%` }}></div>
+                  </div>
+                  <div className="difficulty-percent">{easyPercent}%</div>
+                </div>
+                <div className="difficulty-item">
+                  <div className="difficulty-header">
+                    <span className="difficulty-badge difficulty-medium">Medium</span>
+                    <span className="difficulty-count">{mediumCount} / {totalMedium}</span>
+                  </div>
+                  <div className="difficulty-bar">
+                    <div className="difficulty-bar-fill difficulty-medium" style={{ width: `${mediumPercent}%` }}></div>
+                  </div>
+                  <div className="difficulty-percent">{mediumPercent}%</div>
+                </div>
+                <div className="difficulty-item">
+                  <div className="difficulty-header">
+                    <span className="difficulty-badge difficulty-hard">Hard</span>
+                    <span className="difficulty-count">{hardCount} / {totalHard}</span>
+                  </div>
+                  <div className="difficulty-bar">
+                    <div className="difficulty-bar-fill difficulty-hard" style={{ width: `${hardPercent}%` }}></div>
+                  </div>
+                  <div className="difficulty-percent">{hardPercent}%</div>
+                </div>
+              </div>
+              {hardCoverage < 10 && (
+                <div className="alert alert-warning">
+                  ⚠️ Hard problem coverage is low ({hardCoverage.toFixed(0)}%)
+                </div>
+              )}
+            </div>
+
+            {/* User Difficulty Distribution */}
+            <div className="analytics-card">
+              <h3 className="card-title">User Difficulty (Your Experience)</h3>
+              <div className="difficulty-stats">
+                <div className="difficulty-item">
+                  <div className="difficulty-header">
+                    <span className="difficulty-badge difficulty-easy">Easy</span>
+                    <span className="difficulty-count">{userEasyCount} / {totalUserEasy}</span>
+                  </div>
+                  <div className="difficulty-bar">
+                    <div className="difficulty-bar-fill difficulty-easy" style={{ width: `${userEasyPercent}%` }}></div>
+                  </div>
+                  <div className="difficulty-percent">{userEasyPercent}%</div>
+                </div>
+                <div className="difficulty-item">
+                  <div className="difficulty-header">
+                    <span className="difficulty-badge difficulty-medium">Medium</span>
+                    <span className="difficulty-count">{userMediumCount} / {totalUserMedium}</span>
+                  </div>
+                  <div className="difficulty-bar">
+                    <div className="difficulty-bar-fill difficulty-medium" style={{ width: `${userMediumPercent}%` }}></div>
+                  </div>
+                  <div className="difficulty-percent">{userMediumPercent}%</div>
+                </div>
+                <div className="difficulty-item">
+                  <div className="difficulty-header">
+                    <span className="difficulty-badge difficulty-hard">Hard</span>
+                    <span className="difficulty-count">{userHardCount} / {totalUserHard}</span>
+                  </div>
+                  <div className="difficulty-bar">
+                    <div className="difficulty-bar-fill difficulty-hard" style={{ width: `${userHardPercent}%` }}></div>
+                  </div>
+                  <div className="difficulty-percent">{userHardPercent}%</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Visualizations */}
+          <div className="analytics-grid" style={{ marginTop: 16 }}>
+            <WeaknessRadar problems={allProblems} />
+          </div>
+
+          {/* Filters */}
+          {/* Platform Filter Tabs */}
+          <div className="platform-tabs" style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+            {[
+              { key: 'ALL', label: '🌐 All', count: allProblems.length },
+              { key: 'LC',  label: '💻 LeetCode', count: allProblems.filter(p => p.platform === 'LC').length },
+              { key: 'CF',  label: '🏆 Codeforces', count: allProblems.filter(p => p.platform === 'CF').length },
+            ].map(tab => (
+              <button
+                key={tab.key}
+                className={`platform-tab-btn${platformFilter === tab.key ? ' active' : ''}`}
+                onClick={() => setPlatformFilter(tab.key)}
+                style={{
+                  padding: '8px 18px',
+                  borderRadius: '10px',
+                  border: platformFilter === tab.key ? '1.5px solid var(--primary)' : '1.5px solid var(--border)',
+                  background: platformFilter === tab.key ? 'rgba(99,102,241,0.15)' : 'var(--bg-tertiary)',
+                  color: platformFilter === tab.key ? 'var(--primary)' : 'var(--text-secondary)',
+                  fontWeight: platformFilter === tab.key ? 700 : 500,
+                  fontSize: '0.85rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                {tab.label}
+                <span style={{
+                  background: platformFilter === tab.key ? 'var(--primary)' : 'var(--bg-secondary)',
+                  color: platformFilter === tab.key ? '#fff' : 'var(--text-secondary)',
+                  padding: '2px 8px',
+                  borderRadius: '6px',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                }}>{tab.count}</span>
+              </button>
+            ))}
+            {/* CF Sync Button */}
+            <button
+              className="platform-tab-btn"
+              onClick={handleCFSync}
+              disabled={cfSyncing}
+              title="Sync Codeforces problems"
+              style={{
+                padding: '8px 14px',
+                borderRadius: '10px',
+                border: '1.5px solid var(--border)',
+                background: cfSyncing ? 'rgba(99,102,241,0.1)' : 'var(--bg-tertiary)',
+                color: 'var(--text-secondary)',
+                fontWeight: 500,
+                fontSize: '0.85rem',
+                cursor: cfSyncing ? 'wait' : 'pointer',
+                transition: 'all 0.2s ease',
+                marginLeft: 'auto',
+              }}
+            >
+              {cfSyncing ? '⏳ Syncing CF...' : '🔄 Sync CF'}
+            </button>
+          </div>
+
+          <div className="filters-card">
+            <div className="filters-grid">
+              <div className="filter-group">
+                <label>Search</label>
+                <div className="search-input-wrapper">
+                  <input
+                    type="text"
+                    placeholder="Search name, #ID, difficulty..."
+                    value={searchTerm}
+                    onChange={(e) => handleSearchChange(e.target.value)}
+                    className="filter-input"
+                  />
+                </div>
+              </div>
+              <div className="filter-group">
+                <label>Difficulty</label>
+                <select
+                  value={difficultyFilter}
+                  onChange={(e) => setDifficultyFilter(e.target.value)}
+                  className={`filter-select${difficultyFilter !== 'All' ? ' filter-active' : ''}`}
+                >
+                  <option>All</option>
+                  <option>Easy</option>
+                  <option>Medium</option>
+                  <option>Hard</option>
+                </select>
+              </div>
+              <div className="filter-group">
+                <label>Pattern</label>
+                <select
+                  value={patternFilter}
+                  onChange={(e) => setPatternFilter(e.target.value)}
+                  className={`filter-select${patternFilter !== 'All' ? ' filter-active' : ''}`}
+                >
+                  {patterns.map(pattern => (
+                    <option key={pattern}>{pattern}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="filter-group">
+                <label>Status</label>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className={`filter-select${statusFilter !== 'All' ? ' filter-active' : ''}`}
+                >
+                  <option>All</option>
+                  <option>Not Started</option>
+                  <option>In Progress</option>
+                  <option>Done</option>
+                  <option>Targeted</option>
+                  <option>Striver</option>
+                </select>
+              </div>
+              {(searchTerm || difficultyFilter !== 'All' || patternFilter !== 'All' || statusFilter !== 'All' || selectedFilter !== null || platformFilter !== 'ALL') && (
+                <div className="filter-group filter-clear-group">
+                  <label>&nbsp;</label>
+                  <button
+                    className="btn-clear-filters"
+                    onClick={handleClearAllFilters}
+                    title="Clear all filters (ESC)"
                   >
-                    Browse Problems
+                    ✕ Clear
                   </button>
                 </div>
               )}
             </div>
-          );
-        })()}
-
-        {/* Rolling Focus — Intelligent */}
-        <div className="progress-card">
-          <div className="progress-header">
-            <div>
-              <h2>Rolling Focus</h2>
-              <p className="progress-subtitle">
-                {totalSolved} solved · {totalProblems - totalSolved} remaining
-                {completedCycles > 0 && ` · ${completedCycles} cycle${completedCycles > 1 ? 's' : ''} done`}
-              </p>
-            </div>
-            <div className="progress-actions">
-              <button className="btn-add-problem" onClick={() => setShowModal(true)}>
-                <span>+</span> Add Problem
-              </button>
-            </div>
-          </div>
-          <div className="progress-bar-wrapper">
-            <div className="progress-bar-track">
-              <div className="progress-bar-fill" style={{ width: `${rollingProgressPercentage}%` }}>
-                <span className="progress-bar-text">{rollingProgressPercentage}%</span>
-              </div>
-            </div>
-          </div>
-          {/* Coaching insight badges */}
-          <div className="rolling-insight-badges">
-            <span className={`rib ${coachingMetrics.revisionRate < 0.3 ? 'rib-red' : coachingMetrics.revisionRate < 0.5 ? 'rib-yellow' : 'rib-green'}`}>
-              🔁 {Math.round(coachingMetrics.revisionRate * 100)}% revised
-            </span>
-            <span className={`rib ${coachingMetrics.avgGap > 5 ? 'rib-yellow' : 'rib-green'}`}>
-              ⏱ {coachingMetrics.avgGap}d avg gap
-            </span>
-            <span className={`rib ${coachingMetrics.forgottenCount > 40 ? 'rib-red' : coachingMetrics.forgottenCount > 20 ? 'rib-yellow' : 'rib-green'}`}>
-              🧠 {coachingMetrics.forgottenCount} forgotten
-            </span>
-            {coachingMetrics.topicDist[0] && (
-              <span className={`rib ${coachingMetrics.topicDist[0].pct > 40 ? 'rib-yellow' : 'rib-green'}`}>
-                📊 {coachingMetrics.topicDist[0].topic} {coachingMetrics.topicDist[0].pct}%
-              </span>
-            )}
-          </div>
-          <div className="rolling-stats">
-            <div className="rolling-stat-item">
-              <span className="rolling-stat-label">Total:</span>
-              <span className="rolling-stat-value">{totalProblems}</span>
-            </div>
-            <div className="rolling-stat-divider"></div>
-            <div className="rolling-stat-item">
-              <span className="rolling-stat-label">Solved:</span>
-              <span className="rolling-stat-value solved">{totalSolved}</span>
-            </div>
-            <div className="rolling-stat-divider"></div>
-            <div className="rolling-stat-item">
-              <span className="rolling-stat-label">Revised:</span>
-              <span className="rolling-stat-value">{coachingMetrics.revisedSolvedCount}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Analytics Grid */}
-        <div className="analytics-grid">
-          {/* LeetCode Difficulty Distribution */}
-          <div className="analytics-card">
-            <h3 className="card-title">LeetCode Difficulty</h3>
-            <div className="difficulty-stats">
-              <div className="difficulty-item">
-                <div className="difficulty-header">
-                  <span className="difficulty-badge difficulty-easy">Easy</span>
-                  <span className="difficulty-count">{easyCount} / {totalEasy}</span>
-                </div>
-                <div className="difficulty-bar">
-                  <div className="difficulty-bar-fill difficulty-easy" style={{ width: `${easyPercent}%` }}></div>
-                </div>
-                <div className="difficulty-percent">{easyPercent}%</div>
-              </div>
-              <div className="difficulty-item">
-                <div className="difficulty-header">
-                  <span className="difficulty-badge difficulty-medium">Medium</span>
-                  <span className="difficulty-count">{mediumCount} / {totalMedium}</span>
-                </div>
-                <div className="difficulty-bar">
-                  <div className="difficulty-bar-fill difficulty-medium" style={{ width: `${mediumPercent}%` }}></div>
-                </div>
-                <div className="difficulty-percent">{mediumPercent}%</div>
-              </div>
-              <div className="difficulty-item">
-                <div className="difficulty-header">
-                  <span className="difficulty-badge difficulty-hard">Hard</span>
-                  <span className="difficulty-count">{hardCount} / {totalHard}</span>
-                </div>
-                <div className="difficulty-bar">
-                  <div className="difficulty-bar-fill difficulty-hard" style={{ width: `${hardPercent}%` }}></div>
-                </div>
-                <div className="difficulty-percent">{hardPercent}%</div>
-              </div>
-            </div>
-            {hardCoverage < 10 && (
-              <div className="alert alert-warning">
-                ⚠️ Hard problem coverage is low ({hardCoverage.toFixed(0)}%)
-              </div>
-            )}
           </div>
 
-          {/* User Difficulty Distribution */}
-          <div className="analytics-card">
-            <h3 className="card-title">User Difficulty (Your Experience)</h3>
-            <div className="difficulty-stats">
-              <div className="difficulty-item">
-                <div className="difficulty-header">
-                  <span className="difficulty-badge difficulty-easy">Easy</span>
-                  <span className="difficulty-count">{userEasyCount} / {totalUserEasy}</span>
-                </div>
-                <div className="difficulty-bar">
-                  <div className="difficulty-bar-fill difficulty-easy" style={{ width: `${userEasyPercent}%` }}></div>
-                </div>
-                <div className="difficulty-percent">{userEasyPercent}%</div>
-              </div>
-              <div className="difficulty-item">
-                <div className="difficulty-header">
-                  <span className="difficulty-badge difficulty-medium">Medium</span>
-                  <span className="difficulty-count">{userMediumCount} / {totalUserMedium}</span>
-                </div>
-                <div className="difficulty-bar">
-                  <div className="difficulty-bar-fill difficulty-medium" style={{ width: `${userMediumPercent}%` }}></div>
-                </div>
-                <div className="difficulty-percent">{userMediumPercent}%</div>
-              </div>
-              <div className="difficulty-item">
-                <div className="difficulty-header">
-                  <span className="difficulty-badge difficulty-hard">Hard</span>
-                  <span className="difficulty-count">{userHardCount} / {totalUserHard}</span>
-                </div>
-                <div className="difficulty-bar">
-                  <div className="difficulty-bar-fill difficulty-hard" style={{ width: `${userHardPercent}%` }}></div>
-                </div>
-                <div className="difficulty-percent">{userHardPercent}%</div>
+          {/* Problem List — desktop table + mobile cards */}
+          <div className="table-card">
+            <div className="table-header" ref={tableHeaderRef}>
+              <h3>Problem List</h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {selectedFilter && (
+                  <span className={`diff-active-badge diff-active-${selectedFilter}`}>
+                    {selectedFilter === 'solved' ? 'All Solved' : selectedFilter.charAt(0).toUpperCase() + selectedFilter.slice(1)} only
+                    <button className="diff-active-clear" onClick={() => setSelectedFilter(null)}>✕</button>
+                  </span>
+                )}
+                <span className="table-count">{filteredProblems.length} problems</span>
               </div>
             </div>
-          </div>
-        </div>
 
-        {/* Visualizations */}
-        <div className="analytics-grid" style={{ marginTop: 16 }}>
-          <WeaknessRadar problems={allProblems} />
-        </div>
-
-        {/* Filters */}
-        <div className="filters-card">
-          <div className="filters-grid">
-            <div className="filter-group">
-              <label>Search</label>
-              <div className="search-input-wrapper">
-                <input
-                  type="text"
-                  placeholder="Search name, #ID, difficulty..."
-                  value={searchTerm}
-                  onChange={(e) => handleSearchChange(e.target.value)}
-                  className="filter-input"
-                />
-              </div>
-            </div>
-            <div className="filter-group">
-              <label>Difficulty</label>
-              <select 
-                value={difficultyFilter}
-                onChange={(e) => setDifficultyFilter(e.target.value)}
-                className={`filter-select${difficultyFilter !== 'All' ? ' filter-active' : ''}`}
-              >
-                <option>All</option>
-                <option>Easy</option>
-                <option>Medium</option>
-                <option>Hard</option>
-              </select>
-            </div>
-            <div className="filter-group">
-              <label>Pattern</label>
-              <select 
-                value={patternFilter}
-                onChange={(e) => setPatternFilter(e.target.value)}
-                className={`filter-select${patternFilter !== 'All' ? ' filter-active' : ''}`}
-              >
-                {patterns.map(pattern => (
-                  <option key={pattern}>{pattern}</option>
-                ))}
-              </select>
-            </div>
-            <div className="filter-group">
-              <label>Status</label>
-              <select 
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className={`filter-select${statusFilter !== 'All' ? ' filter-active' : ''}`}
-              >
-                <option>All</option>
-                <option>Not Started</option>
-                <option>In Progress</option>
-                <option>Done</option>
-                <option>Targeted</option>
-                <option>Striver</option>
-              </select>
-            </div>
-            {(searchTerm || difficultyFilter !== 'All' || patternFilter !== 'All' || statusFilter !== 'All' || selectedFilter !== null) && (
-              <div className="filter-group filter-clear-group">
-                <label>&nbsp;</label>
-                <button
-                  className="btn-clear-filters"
-                  onClick={handleClearAllFilters}
-                  title="Clear all filters (ESC)"
-                >
-                  ✕ Clear
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Problem List — desktop table + mobile cards */}
-        <div className="table-card">
-          <div className="table-header" ref={tableHeaderRef}>
-            <h3>Problem List</h3>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {selectedFilter && (
-                <span className={`diff-active-badge diff-active-${selectedFilter}`}>
-                  {selectedFilter === 'solved' ? 'All Solved' : selectedFilter.charAt(0).toUpperCase() + selectedFilter.slice(1)} only
-                  <button className="diff-active-clear" onClick={() => setSelectedFilter(null)}>✕</button>
-                </span>
-              )}
-              <span className="table-count">{filteredProblems.length} problems</span>
-            </div>
-          </div>
-
-          {/* ── DESKTOP TABLE ── */}
-          <div className="table-wrapper">
-            <table className="problems-table">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Title</th>
-                  <th>Difficulty</th>
-                  <th>My Difficulty</th>
-                  <th>Rev</th>
-                  <th>Solved On</th>
-                  <th>Last Revised</th>
-                  <th>Link</th>
-                  <th>Status</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredProblems.length > 0 ? (
-                  filteredProblems.map(problem => (
-                    <tr key={problem.number} data-problem-number={problem.number}
-                      className={selectedProblemId === problem.number ? 'highlight-row' : ''}
-                    >
-                      <td className="problem-number">{problem.number}</td>
-                      <td className="problem-title">{problem.title}</td>
-                      <td>
-                        <span className={`badge badge-${(problem.difficulty || 'medium').toLowerCase()}`}>
-                          {problem.difficulty}
-                        </span>
-                      </td>
-                      <td>
-                        <select
-                          className={`difficulty-select difficulty-${(problem.userDifficulty || problem.difficulty || 'medium').toLowerCase()}`}
-                          value={problem.userDifficulty || problem.difficulty || 'Medium'}
-                          onChange={(e) => handleUserDifficultyChange(problem.number, e.target.value)}
-                          title="How hard did you find this?"
-                        >
-                          <option value="Easy">Easy</option>
-                          <option value="Medium">Medium</option>
-                          <option value="Hard">Hard</option>
-                        </select>
-                      </td>
-                      <td>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                          <span className={`rev-chip${(problem.revisionCount || 0) === 0 ? ' zero' : ''}`}>
-                            {problem.revisionCount || 0}×
+            {/* ── DESKTOP TABLE ── */}
+            <div className="table-wrapper">
+              <table className="problems-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Title</th>
+                    <th>Difficulty</th>
+                    <th>My Difficulty</th>
+                    <th>Rev</th>
+                    <th>Solved On</th>
+                    <th>Last Revised</th>
+                    <th>Link</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredProblems.length > 0 ? (
+                    filteredProblems.map(problem => (
+                      <tr key={problem._id || problem.id} data-problem-number={problem.number}
+                        className={selectedProblemId === problem.number ? 'highlight-row' : ''}
+                      >
+                        <td className="problem-number">{problem.number}</td>
+                        <td className="problem-title">{problem.title}</td>
+                        <td>
+                          <span className={`badge badge-${(problem.difficulty || 'medium').toLowerCase()}`}>
+                            {problem.difficulty}
                           </span>
-                          <div className="rev-controls">
-                            <button
-                              className="rev-btn"
-                              onClick={() => handleUnrevise(problem.number)}
-                              disabled={(problem.revisionCount || 0) === 0 || unrevisingId === problem.number}
-                              title="Remove revision"
-                            >−</button>
-                            <button
-                              className="rev-btn"
-                              onClick={() => handleRevise(problem.number)}
-                              disabled={revisingId === problem.number}
-                              title="Add revision"
-                            >+</button>
+                        </td>
+                        <td>
+                          <select
+                            className={`difficulty-select difficulty-${(problem.userDifficulty || problem.difficulty || 'medium').toLowerCase()}`}
+                            value={problem.userDifficulty || problem.difficulty || 'Medium'}
+                            onChange={(e) => handleUserDifficultyChange(problem.number, e.target.value)}
+                            title="How hard did you find this?"
+                          >
+                            <option value="Easy">Easy</option>
+                            <option value="Medium">Medium</option>
+                            <option value="Hard">Hard</option>
+                          </select>
+                        </td>
+                        <td>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                            <span className={`rev-chip${(problem.revisionCount || 0) === 0 ? ' zero' : ''}`}>
+                              {problem.revisionCount || 0}×
+                            </span>
+                            <div className="rev-controls">
+                              <button
+                                className="rev-btn"
+                                onClick={() => handleUnrevise(problem.number)}
+                                disabled={(problem.revisionCount || 0) === 0 || unrevisingId === problem.number}
+                                title="Remove revision"
+                              >−</button>
+                              <button
+                                className="rev-btn"
+                                onClick={() => handleRevise(problem.number)}
+                                disabled={revisingId === problem.number}
+                                title="Add revision"
+                              >+</button>
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                      <td style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                        {problem.status === 'Done' ? formatDate(problem._solvedDateISO) : '—'}
-                      </td>
-                      <td style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                        {(problem.revisionCount || 0) === 0 ? '—' : formatDate(problem.lastRevisedAt)}
-                      </td>
-                      <td>
-                        <a
-                          href={problem.link || `https://leetcode.com/problems/${problem.number}/`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="problem-link-btn"
-                          title="Open on LeetCode"
-                        >
-                          🔗 Open
-                        </a>
-                      </td>
-                      <td>
-                        <select
-                          className={`status-select status-${(problem.status || 'not-started').toLowerCase().replace(' ', '-')}`}
-                          value={problem.status}
-                          onChange={(e) => handleStatusChange(problem.number, e.target.value)}
-                        >
-                          <option>Not Started</option>
-                          <option>In Progress</option>
-                          <option>Done</option>
-                        </select>
-                      </td>
-                      <td>
-                        <div className="action-buttons">
-                          <button
-                            className={`btn-target${problem.targeted ? ' active' : ''}`}
-                            onClick={() => handleToggleTarget(problem.number)}
-                            disabled={targetingId === problem.number}
-                            title={problem.targeted ? 'Remove from Targeted' : 'Add to Targeted'}
+                        </td>
+                        <td style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                          {problem.status === 'Done' ? formatDate(problem._solvedDateISO) : '—'}
+                        </td>
+                        <td style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                          {(problem.revisionCount || 0) === 0 ? '—' : formatDate(problem.lastRevisedAt)}
+                        </td>
+                        <td>
+                          <a
+                            href={problem.link || (problem.platform === 'CF' ? `https://codeforces.com/problemset/problem/${problem.contestId}/${problem.index}` : `https://leetcode.com/problems/${problem.number}/`)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="problem-link-btn"
+                            title={`Open on ${problem.platform === 'CF' ? 'Codeforces' : 'LeetCode'}`}
                           >
-                            {targetingId === problem.number ? '⏳' : '🎯'}
-                          </button>
-                          <button
-                            className={`btn-striver${problem.isStriver ? ' active' : ''}`}
-                            onClick={() => handleToggleStriver(problem.number)}
-                            disabled={striverId === problem.number}
-                            title={problem.isStriver ? 'Remove from Striver' : 'Mark as Striver'}
+                            {problem.platform === 'CF' ? '🏆' : '🔗'} Open
+                          </a>
+                        </td>
+                        <td>
+                          <select
+                            className={`status-select status-${(problem.status || 'not-started').toLowerCase().replace(' ', '-')}`}
+                            value={problem.status}
+                            onChange={(e) => handleStatusChange(problem.number, e.target.value)}
                           >
-                            {striverId === problem.number ? '⏳' : '📘'}
-                          </button>
-                          <button
-                            className="btn-delete"
-                            onClick={() => handleDelete(problem.number, problem.isCustom)}
-                            title="Delete problem"
-                          >
-                            🗑️
-                          </button>
-                        </div>
+                            <option>Not Started</option>
+                            <option>In Progress</option>
+                            <option>Done</option>
+                          </select>
+                        </td>
+                        <td>
+                          <div className="action-buttons">
+                            <button
+                              className={`btn-target${problem.targeted ? ' active' : ''}`}
+                              onClick={() => handleToggleTarget(problem.number)}
+                              disabled={targetingId === problem.number}
+                              title={problem.targeted ? 'Remove from Targeted' : 'Add to Targeted'}
+                            >
+                              {targetingId === problem.number ? '⏳' : '🎯'}
+                            </button>
+                            <button
+                              className={`btn-striver${problem.isStriver ? ' active' : ''}`}
+                              onClick={() => handleToggleStriver(problem.number)}
+                              disabled={striverId === problem.number}
+                              title={problem.isStriver ? 'Remove from Striver' : 'Mark as Striver'}
+                            >
+                              {striverId === problem.number ? '⏳' : '📘'}
+                            </button>
+                            <button
+                              className="btn-delete"
+                              onClick={() => handleDelete(problem.number, problem.isCustom)}
+                              title="Delete problem"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="10" className="empty-state">
+                        {allProblems.length === 0 ? (
+                          <>
+                            <div className="empty-icon">📚</div>
+                            <p className="empty-title">No Problems Yet</p>
+                            <small>Click "Add Problem" to start tracking your LeetCode journey</small>
+                          </>
+                        ) : (
+                          <>
+                            <div className="empty-icon">🔍</div>
+                            <p className="empty-title">No results found</p>
+                            <small>
+                              {debouncedSearch
+                                ? `No problems match "${debouncedSearch}" — try a different name, ID, or difficulty`
+                                : 'Try adjusting your filters'}
+                            </small>
+                          </>
+                        )}
                       </td>
                     </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan="10" className="empty-state">
-                      {allProblems.length === 0 ? (
-                        <>
-                          <div className="empty-icon">📚</div>
-                          <p className="empty-title">No Problems Yet</p>
-                          <small>Click "Add Problem" to start tracking your LeetCode journey</small>
-                        </>
-                      ) : (
-                        <>
-                          <div className="empty-icon">🔍</div>
-                          <p className="empty-title">No results found</p>
-                          <small>
-                            {debouncedSearch
-                              ? `No problems match "${debouncedSearch}" — try a different name, ID, or difficulty`
-                              : 'Try adjusting your filters'}
-                          </small>
-                        </>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* ── MOBILE CARDS ── */}
+            <div className="problems-mobile">
+              {filteredProblems.length > 0 ? (
+                filteredProblems.map(problem => (
+                  <div key={problem._id || problem.id} className="pm-card" data-problem-number={problem.number}>
+                    {/* Row 1: number + badges */}
+                    <div className="pm-top">
+                      <span className="pm-number">#{problem.number}</span>
+                      <span className={`badge badge-${(problem.difficulty || 'medium').toLowerCase()}`}>
+                        {problem.difficulty}
+                      </span>
+                      {problem.status === 'Done' && problem._solvedDateISO && (
+                        <span className="pm-date">📅 {formatDate(problem._solvedDateISO)}</span>
                       )}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* ── MOBILE CARDS ── */}
-          <div className="problems-mobile">
-            {filteredProblems.length > 0 ? (
-              filteredProblems.map(problem => (
-                <div key={problem.number} className="pm-card" data-problem-number={problem.number}>
-                  {/* Row 1: number + badges */}
-                  <div className="pm-top">
-                    <span className="pm-number">#{problem.number}</span>
-                    <span className={`badge badge-${(problem.difficulty || 'medium').toLowerCase()}`}>
-                      {problem.difficulty}
-                    </span>
-                    {problem.status === 'Done' && problem._solvedDateISO && (
-                      <span className="pm-date">📅 {formatDate(problem._solvedDateISO)}</span>
-                    )}
-                    {problem.targeted && <span className="pm-tag pm-tag-target">🎯</span>}
-                    {problem.isStriver && <span className="pm-tag pm-tag-striver">📘</span>}
-                  </div>
-
-                  {/* Row 2: title */}
-                  <div className="pm-title">{problem.title}</div>
-
-                  {/* Row 3: revision count */}
-                  <div className="pm-meta">
-                    <span className={`rev-chip${(problem.revisionCount || 0) === 0 ? ' zero' : ''}`}>
-                      🔁 {problem.revisionCount || 0}×
-                    </span>
-                    {(problem.revisionCount || 0) > 0 && problem.lastRevisedAt && (
-                      <span className="pm-date">Last: {formatDate(problem.lastRevisedAt)}</span>
-                    )}
-                  </div>
-
-                  {/* Row 4: primary actions */}
-                  <div className="pm-actions-primary">
-                    <a
-                      href={problem.link || `https://leetcode.com/problems/${problem.number}/`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="pm-btn pm-btn-open"
-                    >🔗 Open</a>
-                    <select
-                      className={`pm-status-select status-${(problem.status || 'not-started').toLowerCase().replace(' ', '-')}`}
-                      value={problem.status}
-                      onChange={(e) => handleStatusChange(problem.number, e.target.value)}
-                    >
-                      <option>Not Started</option>
-                      <option>In Progress</option>
-                      <option>Done</option>
-                    </select>
-                  </div>
-
-                  {/* Row 5: secondary actions */}
-                  <div className="pm-actions-secondary">
-                    <select
-                      className={`pm-diff-select difficulty-${(problem.userDifficulty || problem.difficulty || 'medium').toLowerCase()}`}
-                      value={problem.userDifficulty || problem.difficulty || 'Medium'}
-                      onChange={(e) => handleUserDifficultyChange(problem.number, e.target.value)}
-                      title="Your experience"
-                    >
-                      <option value="Easy">Easy ✓</option>
-                      <option value="Medium">Medium ~</option>
-                      <option value="Hard">Hard ✗</option>
-                    </select>
-                    <div className="pm-rev-controls">
-                      <button
-                        className="rev-btn"
-                        onClick={() => handleUnrevise(problem.number)}
-                        disabled={(problem.revisionCount || 0) === 0 || unrevisingId === problem.number}
-                        title="Remove revision"
-                      >−</button>
-                      <span className="pm-rev-label">Rev</span>
-                      <button
-                        className="rev-btn"
-                        onClick={() => handleRevise(problem.number)}
-                        disabled={revisingId === problem.number}
-                        title="Add revision"
-                      >+</button>
+                      {problem.targeted && <span className="pm-tag pm-tag-target">🎯</span>}
+                      {problem.isStriver && <span className="pm-tag pm-tag-striver">📘</span>}
                     </div>
-                    <button
-                      className={`btn-target${problem.targeted ? ' active' : ''}`}
-                      onClick={() => handleToggleTarget(problem.number)}
-                      disabled={targetingId === problem.number}
-                      title={problem.targeted ? 'Remove from Targeted' : 'Add to Targeted'}
-                    >
-                      {targetingId === problem.number ? '⏳' : '🎯'}
-                    </button>
-                    <button
-                      className={`btn-striver${problem.isStriver ? ' active' : ''}`}
-                      onClick={() => handleToggleStriver(problem.number)}
-                      disabled={striverId === problem.number}
-                      title={problem.isStriver ? 'Remove from Striver' : 'Mark as Striver'}
-                    >
-                      {striverId === problem.number ? '⏳' : '📘'}
-                    </button>
-                    <button
-                      className="btn-delete"
-                      onClick={() => handleDelete(problem.number, problem.isCustom)}
-                      title="Delete problem"
-                    >🗑️</button>
+
+                    {/* Row 2: title */}
+                    <div className="pm-title">{problem.title}</div>
+
+                    {/* Row 3: revision count */}
+                    <div className="pm-meta">
+                      <span className={`rev-chip${(problem.revisionCount || 0) === 0 ? ' zero' : ''}`}>
+                        🔁 {problem.revisionCount || 0}×
+                      </span>
+                      {(problem.revisionCount || 0) > 0 && problem.lastRevisedAt && (
+                        <span className="pm-date">Last: {formatDate(problem.lastRevisedAt)}</span>
+                      )}
+                    </div>
+
+                    {/* Row 4: primary actions */}
+                    <div className="pm-actions-primary">
+                      <a
+                        href={problem.link || `https://leetcode.com/problems/${problem.number}/`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="pm-btn pm-btn-open"
+                      >🔗 Open</a>
+                      <select
+                        className={`pm-status-select status-${(problem.status || 'not-started').toLowerCase().replace(' ', '-')}`}
+                        value={problem.status}
+                        onChange={(e) => handleStatusChange(problem.number, e.target.value)}
+                      >
+                        <option>Not Started</option>
+                        <option>In Progress</option>
+                        <option>Done</option>
+                      </select>
+                    </div>
+
+                    {/* Row 5: secondary actions */}
+                    <div className="pm-actions-secondary">
+                      <select
+                        className={`pm-diff-select difficulty-${(problem.userDifficulty || problem.difficulty || 'medium').toLowerCase()}`}
+                        value={problem.userDifficulty || problem.difficulty || 'Medium'}
+                        onChange={(e) => handleUserDifficultyChange(problem.number, e.target.value)}
+                        title="Your experience"
+                      >
+                        <option value="Easy">Easy ✓</option>
+                        <option value="Medium">Medium ~</option>
+                        <option value="Hard">Hard ✗</option>
+                      </select>
+                      <div className="pm-rev-controls">
+                        <button
+                          className="rev-btn"
+                          onClick={() => handleUnrevise(problem.number)}
+                          disabled={(problem.revisionCount || 0) === 0 || unrevisingId === problem.number}
+                          title="Remove revision"
+                        >−</button>
+                        <span className="pm-rev-label">Rev</span>
+                        <button
+                          className="rev-btn"
+                          onClick={() => handleRevise(problem.number)}
+                          disabled={revisingId === problem.number}
+                          title="Add revision"
+                        >+</button>
+                      </div>
+                      <button
+                        className={`btn-target${problem.targeted ? ' active' : ''}`}
+                        onClick={() => handleToggleTarget(problem.number)}
+                        disabled={targetingId === problem.number}
+                        title={problem.targeted ? 'Remove from Targeted' : 'Add to Targeted'}
+                      >
+                        {targetingId === problem.number ? '⏳' : '🎯'}
+                      </button>
+                      <button
+                        className={`btn-striver${problem.isStriver ? ' active' : ''}`}
+                        onClick={() => handleToggleStriver(problem.number)}
+                        disabled={striverId === problem.number}
+                        title={problem.isStriver ? 'Remove from Striver' : 'Mark as Striver'}
+                      >
+                        {striverId === problem.number ? '⏳' : '📘'}
+                      </button>
+                      <button
+                        className="btn-delete"
+                        onClick={() => handleDelete(problem.number, problem.isCustom)}
+                        title="Delete problem"
+                      >🗑️</button>
+                    </div>
                   </div>
+                ))
+              ) : (
+                <div className="pm-empty">
+                  <div className="empty-icon">{allProblems.length === 0 ? '📚' : '🔍'}</div>
+                  <p>{allProblems.length === 0 ? 'No Problems Yet' : 'No results found'}</p>
+                  <small>{allProblems.length === 0 ? 'Click "Add Problem" to start' : 'Try adjusting your filters'}</small>
                 </div>
-              ))
-            ) : (
-              <div className="pm-empty">
-                <div className="empty-icon">{allProblems.length === 0 ? '📚' : '🔍'}</div>
-                <p>{allProblems.length === 0 ? 'No Problems Yet' : 'No results found'}</p>
-                <small>{allProblems.length === 0 ? 'Click "Add Problem" to start' : 'Try adjusting your filters'}</small>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Modal */}
-      {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Add New Problem</h2>
-              <button className="modal-close" onClick={() => setShowModal(false)}>×</button>
-            </div>
-            <form onSubmit={handleAddProblem}>
-              <div className="modal-body">
-                <div className="form-row">
+        {/* Modal */}
+        {showModal && (
+          <div className="modal-overlay" onClick={() => setShowModal(false)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2>Add New Problem</h2>
+                <button className="modal-close" onClick={() => setShowModal(false)}>×</button>
+              </div>
+              <form onSubmit={handleAddProblem}>
+                <div className="modal-body">
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Problem Number *</label>
+                      <input
+                        type="number"
+                        value={formData.number}
+                        onChange={(e) => setFormData({ ...formData, number: e.target.value })}
+                        placeholder="e.g., 1"
+                        className="form-input"
+                        required
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Type *</label>
+                      <select
+                        value={formData.type}
+                        onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                        className="form-input"
+                      >
+                        <option>Solved</option>
+                        <option>Target</option>
+                      </select>
+                    </div>
+                  </div>
                   <div className="form-group">
-                    <label>Problem Number *</label>
+                    <label>Title *</label>
                     <input
-                      type="number"
-                      value={formData.number}
-                      onChange={(e) => setFormData({...formData, number: e.target.value})}
-                      placeholder="e.g., 1"
+                      type="text"
+                      value={formData.title}
+                      onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                      placeholder="e.g., Two Sum"
                       className="form-input"
                       required
                     />
                   </div>
                   <div className="form-group">
-                    <label>Type *</label>
-                    <select
-                      value={formData.type}
-                      onChange={(e) => setFormData({...formData, type: e.target.value})}
-                      className="form-input"
-                    >
-                      <option>Solved</option>
-                      <option>Target</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="form-group">
-                  <label>Title *</label>
-                  <input
-                    type="text"
-                    value={formData.title}
-                    onChange={(e) => setFormData({...formData, title: e.target.value})}
-                    placeholder="e.g., Two Sum"
-                    className="form-input"
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label>LeetCode Link *</label>
-                  <input
-                    type="url"
-                    value={formData.link}
-                    onChange={(e) => setFormData({...formData, link: e.target.value})}
-                    placeholder="https://leetcode.com/problems/two-sum/"
-                    className="form-input"
-                    required
-                  />
-                </div>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>Difficulty *</label>
-                    <select
-                      value={formData.difficulty}
-                      onChange={(e) => setFormData({...formData, difficulty: e.target.value})}
-                      className="form-input"
-                    >
-                      <option>Easy</option>
-                      <option>Medium</option>
-                      <option>Hard</option>
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label>Pattern (optional)</label>
+                    <label>LeetCode Link *</label>
                     <input
-                      type="text"
-                      value={formData.pattern}
-                      onChange={(e) => setFormData({...formData, pattern: e.target.value})}
-                      placeholder="Auto-detected from title"
+                      type="url"
+                      value={formData.link}
+                      onChange={(e) => setFormData({ ...formData, link: e.target.value })}
+                      placeholder="https://leetcode.com/problems/two-sum/"
                       className="form-input"
+                      required
                     />
                   </div>
-                </div>
-                <div className="form-hint">
-                  💡 Pattern will be automatically detected from the title if not provided
-                </div>
-                {formData.type === 'Solved' && (
-                  <>
-                    <div className="form-row" style={{ marginTop: '0.5rem' }}>
-                      <div className="form-group">
-                        <label>Solve Time (minutes)</label>
-                        <input
-                          type="number"
-                          min="1"
-                          value={formData.solveTime}
-                          onChange={(e) => setFormData({...formData, solveTime: e.target.value})}
-                          placeholder="e.g., 30"
-                          className="form-input"
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label>Wrong Attempts</label>
-                        <input
-                          type="number"
-                          min="0"
-                          value={formData.wrongAttempts}
-                          onChange={(e) => setFormData({...formData, wrongAttempts: e.target.value})}
-                          placeholder="e.g., 2"
-                          className="form-input"
-                        />
-                      </div>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Difficulty *</label>
+                      <select
+                        value={formData.difficulty}
+                        onChange={(e) => setFormData({ ...formData, difficulty: e.target.value })}
+                        className="form-input"
+                      >
+                        <option>Easy</option>
+                        <option>Medium</option>
+                        <option>Hard</option>
+                      </select>
                     </div>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem',
-                      fontSize: '0.82rem', color: 'var(--text-secondary)', cursor: 'pointer', marginTop: '0.4rem' }}>
+                    <div className="form-group">
+                      <label>Pattern (optional)</label>
                       <input
-                        type="checkbox"
-                        checked={formData.hintsUsed}
-                        onChange={(e) => setFormData({...formData, hintsUsed: e.target.checked})}
+                        type="text"
+                        value={formData.pattern}
+                        onChange={(e) => setFormData({ ...formData, pattern: e.target.value })}
+                        placeholder="Auto-detected from title"
+                        className="form-input"
                       />
-                      Used a hint / looked at solution
-                    </label>
-                    {((formData.solveTime && parseFloat(formData.solveTime) > 25) || formData.hintsUsed || (formData.wrongAttempts && parseInt(formData.wrongAttempts) >= 2)) && (
-                      <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.75rem', borderRadius: 7,
-                        background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
-                        fontSize: '0.78rem', color: '#ef4444' }}>
-                        ⚠️ Auto-flagged for Needs Revision — you'll be asked for the root cause.
+                    </div>
+                  </div>
+                  <div className="form-hint">
+                    💡 Pattern will be automatically detected from the title if not provided
+                  </div>
+                  {formData.type === 'Solved' && (
+                    <>
+                      <div className="form-row" style={{ marginTop: '0.5rem' }}>
+                        <div className="form-group">
+                          <label>Solve Time (minutes)</label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={formData.solveTime}
+                            onChange={(e) => setFormData({ ...formData, solveTime: e.target.value })}
+                            placeholder="e.g., 30"
+                            className="form-input"
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label>Wrong Attempts</label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={formData.wrongAttempts}
+                            onChange={(e) => setFormData({ ...formData, wrongAttempts: e.target.value })}
+                            placeholder="e.g., 2"
+                            className="form-input"
+                          />
+                        </div>
                       </div>
-                    )}
-                  </>
-                )}
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn-primary">
-                  Add Problem
-                </button>
-              </div>
-            </form>
+                      <label style={{
+                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                        fontSize: '0.82rem', color: 'var(--text-secondary)', cursor: 'pointer', marginTop: '0.4rem'
+                      }}>
+                        <input
+                          type="checkbox"
+                          checked={formData.hintsUsed}
+                          onChange={(e) => setFormData({ ...formData, hintsUsed: e.target.checked })}
+                        />
+                        Used a hint / looked at solution
+                      </label>
+                      {((formData.solveTime && parseFloat(formData.solveTime) > 25) || formData.hintsUsed || (formData.wrongAttempts && parseInt(formData.wrongAttempts) >= 2)) && (
+                        <div style={{
+                          marginTop: '0.5rem', padding: '0.5rem 0.75rem', borderRadius: 7,
+                          background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+                          fontSize: '0.78rem', color: '#ef4444'
+                        }}>
+                          ⚠️ Auto-flagged for Needs Revision — you'll be asked for the root cause.
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+                <div className="modal-footer">
+                  <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn-primary">
+                    Add Problem
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
+        )}
+
+        {/* Admin Auth Modal */}
+        {showAdminModal && (
+          <AdminModal
+            adminPassword={ADMIN_PASSWORD}
+            onClose={() => { setShowAdminModal(false); setPendingAction(null); }}
+            onUnlock={handleAdminUnlock}
+          />
+        )}
+
+        {/* Password Confirm Modal */}
+        {pwModal && (
+          <PwModal
+            modal={pwModal}
+            adminPassword={ADMIN_PASSWORD}
+            onClose={closePwModal}
+          />
+        )}
+
+        {/* Mistake Type Modal — mandatory after auto-flagging */}
+        {mistakeModal && (
+          <MistakeTypeModal
+            problemTitle={`#${mistakeModal.number} ${mistakeModal.title}`}
+            onConfirm={handleMistakeTypeConfirm}
+            onClose={() => setMistakeModal(null)}
+          />
+        )}
+
+        {/* Revision Mode Modal — 15-min timer */}
+        {revisionModal && (
+          <RevisionModeModal
+            problem={revisionModal}
+            onComplete={handleRevisionComplete}
+            onClose={() => setRevisionModal(null)}
+          />
+        )}
+
+        {/* Scroll buttons */}
+        <div className="scroll-btns">
+          {showScrollTop && (
+            <button className="scroll-btn" onClick={scrollToTop} title="Back to top">↑</button>
+          )}
+          {showScrollBottom && (
+            <button className="scroll-btn scroll-btn-down" onClick={scrollToBottom} title="Scroll to bottom">↓</button>
+          )}
         </div>
-      )}
 
-      {/* Admin Auth Modal */}
-      {showAdminModal && (
-        <AdminModal
-          adminPassword={ADMIN_PASSWORD}
-          onClose={() => { setShowAdminModal(false); setPendingAction(null); }}
-          onUnlock={handleAdminUnlock}
-        />
-      )}
 
-      {/* Password Confirm Modal */}
-      {pwModal && (
-        <PwModal
-          modal={pwModal}
-          adminPassword={ADMIN_PASSWORD}
-          onClose={closePwModal}
-        />
-      )}
 
-      {/* Mistake Type Modal — mandatory after auto-flagging */}
-      {mistakeModal && (
-        <MistakeTypeModal
-          problemTitle={`#${mistakeModal.number} ${mistakeModal.title}`}
-          onConfirm={handleMistakeTypeConfirm}
-          onClose={() => setMistakeModal(null)}
-        />
-      )}
-
-      {/* Revision Mode Modal — 15-min timer */}
-      {revisionModal && (
-        <RevisionModeModal
-          problem={revisionModal}
-          onComplete={handleRevisionComplete}
-          onClose={() => setRevisionModal(null)}
-        />
-      )}
-
-      {/* Scroll buttons */}
-      <div className="scroll-btns">
-        {showScrollTop && (
-          <button className="scroll-btn" onClick={scrollToTop} title="Back to top">↑</button>
-        )}
-        {showScrollBottom && (
-          <button className="scroll-btn scroll-btn-down" onClick={scrollToBottom} title="Scroll to bottom">↓</button>
-        )}
       </div>
-
-
-
-    </div>
-  );
+    );
   } catch (error) {
     console.error('Render error:', error);
     return (
@@ -4025,7 +4123,7 @@ function App() {
         <p style={{ color: 'var(--text-secondary)', marginTop: '1rem' }}>
           Something went wrong. Please refresh the page.
         </p>
-        <button 
+        <button
           onClick={() => {
             localStorage.removeItem('priyanshu-leetcode-state');
             window.location.reload();
@@ -4057,7 +4155,7 @@ function syncStickyOffsets() {
     document.documentElement.style.setProperty('--table-header-height', '0px');
     return;
   }
-  const appHeader   = document.querySelector('.header');
+  const appHeader = document.querySelector('.header');
   const tableHeader = document.querySelector('.table-header');
   if (appHeader) {
     document.documentElement.style.setProperty('--app-header-height', appHeader.offsetHeight + 'px');

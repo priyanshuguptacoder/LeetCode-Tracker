@@ -1,16 +1,30 @@
-// updated: added providerTitle field with default 'LeetCode'
+// updated: multi-platform support (LeetCode + Codeforces)
 const mongoose = require('mongoose');
 
 const problemSchema = new mongoose.Schema(
   {
-    id: { type: Number, required: true, unique: true },
+    // ── Platform Support ──────────────────────────────────────────────────
+    // id: String format - "LC-1" for LeetCode, "CF-123A" for Codeforces or "CF-123-A"
+    id: { type: String, required: true, unique: true },
+    // platform: 'LC' | 'CF' | future platforms
+    platform: { type: String, enum: ['LC', 'CF'], default: 'LC', required: true, index: true },
+    // Codeforces explicit references
+    contestId: { type: Number, default: null },
+    index: { type: String, default: null },
+    // rawDifficulty: original difficulty value (rating for CF, string for LC)
+    rawDifficulty: { type: mongoose.Schema.Types.Mixed, default: null },
+    // difficultyRating: normalized 1-5 scale for consistent comparison
+    difficultyRating: { type: Number, min: 1, max: 5, default: null },
     title: { type: String, required: true },
     difficulty: { type: String, enum: ['Easy', 'Medium', 'Hard'], required: true },
     topics: { type: [String], default: [] },
     solved: { type: Boolean, default: false },
     inProgress: { type: Boolean, default: false },
     notes: { type: String, default: '' },
-    leetcodeLink: { type: String, required: true },
+    // platformLink: generic link field (replaces leetcodeLink)
+    platformLink: { type: String, required: true },
+    // legacy field kept for backward compatibility
+    leetcodeLink: { type: String, required: false },
     solvedDate: { type: Date, default: null },
     submittedAt: { type: Date, default: null }, // latest solve timestamp — source of truth for Recently Solved
     lastSubmittedAt: { type: Date, default: null, index: true }, // always updated on every sync
@@ -40,7 +54,8 @@ const problemSchema = new mongoose.Schema(
     interval:         { type: Number, default: 1 },
     nextRevisionDate: { type: Date,   default: null }, // SM-2 computed next date
     revisionPriority: { type: Number, default: 0 },    // higher = more urgent
-    providerTitle: { type: String, default: 'LeetCode' },
+    // providerTitle: display name for the platform
+    providerTitle: { type: String, default: function() { return this.platform === 'CF' ? 'Codeforces' : 'LeetCode'; } },
     // ── Soft delete / User Intent Lock ────────────────────────────────────
     isDeleted:  { type: Boolean, default: false, index: true },
     deletedAt:  { type: Date,    default: null },
@@ -48,9 +63,22 @@ const problemSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+problemSchema.index({ platform: 1, solved: 1 });
 problemSchema.index({ solvedDate: -1 });
 problemSchema.index({ nextRevisionAt: 1 });
 problemSchema.index({ solved: 1 });
 problemSchema.index({ topics: 1 });
+problemSchema.index({ platform: 1, difficultyRating: 1 });
+
+// ── Global Filters ───────────────────────────────────────────────────────────
+problemSchema.pre(/^find/, function(next) {
+  this.where({ isDeleted: { $ne: true } });
+  next();
+});
+
+problemSchema.pre('countDocuments', function(next) {
+  this.where({ isDeleted: { $ne: true } });
+  next();
+});
 
 module.exports = mongoose.model('Problem', problemSchema);

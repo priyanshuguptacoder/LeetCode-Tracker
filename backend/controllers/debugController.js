@@ -44,8 +44,55 @@ exports.health = async (req, res) => {
     leetcode_api:    lcStatus,
     leetcode_ping_ms: lcMs,
     total_problems:  totalProblems,
+    totalProblems:   totalProblems,
     timestamp:       new Date().toISOString(),
   });
+};
+
+// ─── GET /api/stats ───────────────────────────────────────────────────────────
+// Return total solved per platform, average difficulty per platform
+exports.stats = async (req, res) => {
+  try {
+    const problems = await Problem.find({ solved: true, isDeleted: { $ne: true } }).lean();
+    
+    // Group by platform
+    const platformStats = {};
+    
+    problems.forEach(p => {
+      const plat = p.platform || 'LC';
+      if (!platformStats[plat]) {
+        platformStats[plat] = { totalSolved: 0, sumDifficulty: 0, validRatingCount: 0 };
+      }
+      platformStats[plat].totalSolved++;
+      
+      if (p.difficultyRating != null) {
+        platformStats[plat].sumDifficulty += p.difficultyRating;
+        platformStats[plat].validRatingCount++;
+      } else {
+        // Approximate for older records without rating (Easy:1, Med:3, Hard:5)
+        const est = p.difficulty === 'Easy' ? 1 : p.difficulty === 'Medium' ? 3 : 5;
+        platformStats[plat].sumDifficulty += est;
+        platformStats[plat].validRatingCount++;
+      }
+    });
+
+    const result = {
+       platforms: Object.keys(platformStats).map(plat => {
+         const avg = platformStats[plat].validRatingCount > 0 
+            ? (platformStats[plat].sumDifficulty / platformStats[plat].validRatingCount).toFixed(2) 
+            : 0;
+         return {
+           platform: plat,
+           totalSolved: platformStats[plat].totalSolved,
+           averageDifficulty: avg,
+         };
+       })
+    };
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 };
 
 // ─── GET /api/test/leetcode ───────────────────────────────────────────────────

@@ -16,11 +16,12 @@ function validateEnv() {
 }
 validateEnv();
 
-const problemRoutes  = require('./routes/problems');
-const leetcodeRoutes = require('./routes/leetcode');
-const debugRoutes    = require('./routes/debug');
-const analyticsRoutes = require('./routes/analytics');
-const revisionRoutes  = require('./routes/revision');
+const problemRoutes     = require('./routes/problems');
+const leetcodeRoutes    = require('./routes/leetcode');
+const codeforcesRoutes  = require('./routes/codeforces');
+const debugRoutes       = require('./routes/debug');
+const analyticsRoutes   = require('./routes/analytics');
+const revisionRoutes    = require('./routes/revision');
 
 const app  = express();
 const PORT = process.env.PORT || 5001;
@@ -49,11 +50,12 @@ app.use((req, res, next) => {
 });
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
-app.use('/api/problems',  problemRoutes);
-app.use('/api/problem',   leetcodeRoutes);
-app.use('/api',           debugRoutes);
-app.use('/api/analytics', analyticsRoutes);
-app.use('/api/revision',  revisionRoutes);
+app.use('/api/problems',     problemRoutes);
+app.use('/api/problem',      leetcodeRoutes);
+app.use('/api/codeforces',   codeforcesRoutes);
+app.use('/api',              debugRoutes);
+app.use('/api/analytics',    analyticsRoutes);
+app.use('/api/revision',     revisionRoutes);
 
 app.get('/', (req, res) => {
   res.json({
@@ -77,7 +79,10 @@ app.get('/', (req, res) => {
       'GET  /api/problem/today':        'Problems solved today',
       'GET  /api/problem/revision':     'Revision queue',
       'GET  /api/problem/streaks':      'Streak stats',
-      'GET  /api/problems':             'All problems (tracker)',
+      'GET  /api/problems':             'All problems (tracker, ?platform=LC|CF|ALL)',
+      'POST /api/codeforces/sync':      'Sync Codeforces submissions',
+      'GET  /api/codeforces/info':      'Codeforces user info',
+      'GET  /api/codeforces/stats':     'Codeforces problem stats',
     },
   });
 });
@@ -125,8 +130,13 @@ mongoose
       console.warn('[BACKFILL] isDeleted backfill failed:', e.message);
     }
 
+    // Initialize automated 12-hour sync for Codeforces
+    const { initCron } = require('./tasks/cronSync');
+    initCron();
+
     app.listen(PORT, () => {
       console.log(`[INIT] Server running on port ${PORT}`);
+      console.log('[INIT] Automation: Codeforces 12-hour sync started');
       console.log('[INIT] Key endpoints:');
       console.log('[INIT]   GET  /api/health');
       console.log('[INIT]   GET  /api/problem/:slug');
