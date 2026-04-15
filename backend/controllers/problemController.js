@@ -89,42 +89,56 @@ function streakPayload(stats) {
 }
 
 // ─── GET /api/problems/streak ─────────────────────────────────────────────────
+// ─── computeStreakForPlatform — reusable per-platform streak helper ───────────
+async function computeStreakForPlatform(platform = 'ALL', calendarDates = null) {
+  const filter = {
+    solved: true,
+    isDeleted: { $ne: true },
+    $or: [{ solvedDate: { $ne: null } }, { lastSubmittedAt: { $ne: null } }],
+  };
+  if (platform !== 'ALL') filter.platform = platform;
+
+  const rawProblems = await Problem.find(filter, { solvedDate: 1, lastSubmittedAt: 1 }).lean();
+  console.log(`[STREAK] platform=${platform} count=${rawProblems.length}`);
+
+  const problems = rawProblems.map(p => ({
+    ...p,
+    solvedDate: p.solvedDate || p.lastSubmittedAt,
+  }));
+
+  // Only use calendar dates for global/LC (calendar is LC-specific)
+  const effectiveCal = (platform === 'ALL' || platform === 'LC') ? calendarDates : null;
+  return computeStats(problems, effectiveCal);
+}
+
+// ─── GET /api/problems/streak ─────────────────────────────────────────────────
 exports.getStreak = async (req, res) => {
   try {
-    const [rawProblems, settings] = await Promise.all([
-      Problem.find(
-        {
-          solved: true,
-          isDeleted: { $ne: true },
-          $or: [
-            { solvedDate: { $ne: null } },
-            { lastSubmittedAt: { $ne: null } },
-          ],
-        },
-        { solvedDate: 1, lastSubmittedAt: 1 }
-      ).lean(),
-      Settings.findOne({ key: 'global' }, { submissionCalendarDates: 1 }).lean(),
-    ]);
-
-    // Normalize: use lastSubmittedAt as fallback if solvedDate is null
-    const problems = rawProblems.map(p => ({
-      ...p,
-      solvedDate: p.solvedDate || p.lastSubmittedAt,
-    }));
-
+    const settings = await Settings.findOne({ key: 'global' }, { submissionCalendarDates: 1 }).lean();
     const calendarDates = settings?.submissionCalendarDates?.length > 0
       ? settings.submissionCalendarDates
       : null;
 
-    const stats = computeStats(problems, calendarDates);
+    const [global, lc, cf] = await Promise.all([
+      computeStreakForPlatform('ALL', calendarDates),
+      computeStreakForPlatform('LC',  calendarDates),
+      computeStreakForPlatform('CF',  null),
+    ]);
 
-    // Debug log
-    console.log('[STREAK] count:', problems.length, '| currentStreak:', stats.currentStreak, '| activeDays:', stats.activeDays);
-
-    if (!stats.isValid) {
-      return res.status(500).json({ success: false, error: 'Stats invariant violation', errors: stats.errors });
+    if (!global.isValid) {
+      return res.status(500).json({ success: false, error: 'Stats invariant violation', errors: global.errors });
     }
-    res.json({ success: true, data: streakPayload(stats) });
+
+    // Primary response shape (backward-compatible: top-level = global)
+    res.json({
+      success: true,
+      data: {
+        ...streakPayload(global),   // currentStreak, maxStreak, activeDays (global)
+        global: streakPayload(global),
+        lc:     streakPayload(lc),
+        cf:     streakPayload(cf),
+      },
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to fetch streak', message: err.message });
   }
@@ -511,6 +525,25 @@ exports.untargetProblem = async (req, res) => {
     res.json({ success: true, data: { id: problem.id, targeted: problem.targeted, targetedAt: problem.targetedAt } });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to untarget problem', message: err.message });
+  }
+};
+
+// ─── PATCH /api/problems/:id/target — unified toggle ─────────────────────────
+exports.toggleTarget = async (req, res) => {
+  try {
+    const existing = await findProblemById(req.params.id);
+    if (!existing || existing.isDeleted) {
+      return res.status(404).json({ success: false, error: 'Problem not found' });
+    }
+    const newVal = !existing.targeted;
+    const updated = await Problem.findOneAndUpdate(
+      { uniqueId: existing.uniqueId },
+      { $set: { targeted: newVal, targetedAt: newVal ? new Date() : null } },
+      { new: true }
+    );
+    res.json({ success: true, data: { id: updated.id, uniqueId: updated.uniqueId, targeted: updated.targeted, targetedAt: updated.targetedAt } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Failed to toggle target', message: err.message });
   }
 };
 

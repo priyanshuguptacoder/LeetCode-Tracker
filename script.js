@@ -2914,11 +2914,11 @@ function App() {
               </div>
 
               {/* Per-platform streak breakdown */}
-              {platformStreak && (
+              {(dbStreak.lc || dbStreak.cf) && (
                 <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
                   {[
-                    { label: '💻 LC', streak: platformStreak.lc?.currentStreak ?? '—', days: platformStreak.lc?.activeDays ?? '—' },
-                    { label: '🏆 CF', streak: platformStreak.cf?.currentStreak ?? '—', days: platformStreak.cf?.activeDays ?? '—' },
+                    { label: '💻 LC', streak: dbStreak.lc?.currentStreak ?? '—', days: dbStreak.lc?.activeDays ?? '—' },
+                    { label: '🏆 CF', streak: dbStreak.cf?.currentStreak ?? '—', days: dbStreak.cf?.activeDays ?? '—' },
                   ].map(p => (
                     <div key={p.label} style={{
                       flex: 1, minWidth: 90,
