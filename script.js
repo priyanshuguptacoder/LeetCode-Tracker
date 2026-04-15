@@ -936,10 +936,10 @@ function App() {
   };
 
   const getTopicsForProblem = (p) => {
-    const num = p.id ?? p.number;
+    // Use numeric problemIdNum for LC TOPIC_MAP lookup; fall back to parsing from id
+    const num = p.problemIdNum || parseInt((p.uniqueId || p.id || '').replace(/\D/g, ''), 10) || p.number;
     if (TOPIC_MAP[num]) return TOPIC_MAP[num];
     if (p.topics && p.topics.length > 0) return p.topics;
-    // Fallback: use existing pattern
     return [p.pattern || 'Miscellaneous'];
   };
 
@@ -963,7 +963,10 @@ function App() {
 
     return {
       ...p,
-      number: p.id ?? p.number,
+      // number: for LC use numeric problemIdNum; for CF use uniqueId string (e.g. "CF-1700A")
+      number: (p.platform === 'CF')
+        ? (p.uniqueId || p.id)
+        : (p.problemIdNum || parseInt((p.uniqueId || p.id || '').replace(/\D/g, ''), 10) || p.number),
       platform: p.platform || 'LC',
       status,
       isTLE,
@@ -1564,7 +1567,11 @@ function App() {
   // ============================================
   // DUPLICATE PREVENTION
   // ============================================
-  const problemExists = (number) => apiProblems.some(p => p.number === parseInt(number));
+  const problemExists = (number) => apiProblems.some(p =>
+    p.platform === 'CF'
+      ? p.number === number || p.number === String(number)
+      : p.number === parseInt(number, 10) || p.problemIdNum === parseInt(number, 10)
+  );
 
   // verifyPassword removed — replaced by requireAdmin() session-based system
 
@@ -2516,12 +2523,14 @@ function App() {
       if (q === '') {
         matchesSearch = true;
       } else if (/^[0-9]+$/.test(q)) {
-        matchesSearch = problem.number === Number(q);
+        // Numeric search: match LC problemIdNum exactly
+        matchesSearch = problem.number === Number(q) || problem.problemIdNum === Number(q);
       } else {
         matchesSearch =
           (problem.title || '').toLowerCase().includes(q) ||
           (problem.difficulty || '').toLowerCase().includes(q) ||
           (problem.pattern || '').toLowerCase().includes(q) ||
+          String(problem.number || '').toLowerCase().includes(q) ||
           (Array.isArray(problem.topics) ? problem.topics : []).some(t => t.toLowerCase().includes(q));
       }
 
@@ -3893,8 +3902,12 @@ function App() {
                         <td className="problem-number">{index + 1}</td>
                         <td className="problem-title">
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                             <span style={{ fontSize: '0.8rem', opacity: 0.6 }}>#{problem.number}</span>
-                             <span>{problem.title}</span>
+                            <span style={{ fontSize: '0.8rem', opacity: 0.6 }}>
+                              {problem.platform === 'CF'
+                                ? problem.number  /* already "CF-1700A" */
+                                : `#${problem.number}`}
+                            </span>
+                            <span>{problem.title}</span>
                           </div>
                         </td>
                         <td>
@@ -4026,7 +4039,9 @@ function App() {
                   <div key={problem._id || problem.id} className="pm-card" data-problem-number={problem.number}>
                     {/* Row 1: number + badges */}
                     <div className="pm-top">
-                      <span className="pm-number">#{problem.number}</span>
+                      <span className="pm-number">
+                        {problem.platform === 'CF' ? problem.number : `#${problem.number}`}
+                      </span>
                       <span className={`badge badge-${(problem.difficulty || 'medium').toLowerCase()}`}>
                         {problem.difficulty}
                       </span>

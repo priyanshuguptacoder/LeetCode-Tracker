@@ -217,7 +217,36 @@ mongoose
       console.warn('[BACKFILL] isDeleted backfill failed:', e.message);
     }
 
-    // Backfill: ensure LC problems have numeric problemIdNum for correct sorting
+    // Backfill: strip leading "#N " from LC problem titles and ensure problemIdNum is set
+    try {
+      const Problem = require('./models/Problem');
+      // Find LC problems whose title starts with "#" (e.g. "#63 Unique Paths II")
+      const hashTitles = await Problem.find({
+        platform: 'LC',
+        title: /^#/,
+      }, { _id: 1, title: 1, uniqueId: 1, id: 1, problemIdNum: 1 }).lean();
+
+      if (hashTitles.length > 0) {
+        await Problem.bulkWrite(hashTitles.map(doc => {
+          // "#63 Unique Paths II" → num=63, cleanTitle="Unique Paths II"
+          const m = doc.title.match(/^#(\d+)\s+(.*)/);
+          const cleanTitle = m ? m[2].trim() : doc.title.replace(/^#+\s*/, '').trim();
+          const numFromTitle = m ? parseInt(m[1], 10) : null;
+          // Prefer existing problemIdNum, then extracted from title, then from uniqueId
+          const idMatch = (doc.uniqueId || doc.id || '').match(/(\d+)/);
+          const problemIdNum = doc.problemIdNum || numFromTitle || (idMatch ? parseInt(idMatch[1], 10) : 999999);
+          return {
+            updateOne: {
+              filter: { _id: doc._id },
+              update: { $set: { title: cleanTitle, problemIdNum } },
+            },
+          };
+        }));
+        console.log(`[BACKFILL] Stripped "#" prefix from ${hashTitles.length} LC problem titles`);
+      }
+    } catch (e) {
+      console.warn('[BACKFILL] Title cleanup backfill failed:', e.message);
+    }
     try {
       const Problem = require('./models/Problem');
       const lcMissing = await Problem.find({
