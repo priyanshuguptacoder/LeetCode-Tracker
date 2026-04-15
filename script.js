@@ -2658,27 +2658,15 @@ function App() {
 
       return matchesSearch && matchesDifficulty && matchesPattern && matchesStatus && matchesSelectedFilter && matchesPlatform;
     });
-    console.log("After filter:", filtered.length);
-    const sortedProblems = [...filtered].sort((a, b) => {
-      if (a.platform !== b.platform) {
-        return String(a.platform).localeCompare(String(b.platform));
+    return filtered.sort((a, b) => {
+      if (a.platform !== b.platform) return String(a.platform).localeCompare(String(b.platform));
+      if (a.platform === 'LC') return (a.problemIdNum || 0) - (b.problemIdNum || 0);
+      if (a.platform === 'CF') {
+        if (a.contestId !== b.contestId) return (a.contestId || 0) - (b.contestId || 0);
+        return String(a.index || '').localeCompare(String(b.index || ''));
       }
-
-      if (a.platform === "LC") {
-        return a.problemIdNum - b.problemIdNum;
-      }
-
-      if (a.platform === "CF") {
-        if (a.contestId !== b.contestId) {
-          return a.contestId - b.contestId;
-        }
-        return String(a.index).localeCompare(String(b.index));
-      }
-
       return 0;
     });
-
-    return sortedProblems;
   }, [allProblems, debouncedSearch, difficultyFilter, patternFilter, statusFilter, selectedFilter, platformFilter]);
 
   // Animate table count when filtered problems change
