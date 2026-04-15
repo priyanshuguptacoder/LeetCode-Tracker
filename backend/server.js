@@ -30,18 +30,21 @@ const allowedOrigins = [
   process.env.FRONTEND_URL || "https://competativeprogrammingtrackerpriyanshu.vercel.app",
   "http://localhost:3000",
   "http://localhost:5500"
-];
+].map(o => o.replace(/\/+$/, '')); // normalize: strip trailing slashes
+
+console.log('[INIT] CORS allowedOrigins:', allowedOrigins);
 
 const corsOptions = {
   origin: (origin, callback) => {
-    // 1. Allow non-browser requests (Postman, curl, servers)
+    // Allow non-browser requests (Postman, curl, server-to-server)
     if (!origin) return callback(null, true);
-    
-    // 2. Check if origin is in our whitelist
-    if (allowedOrigins.indexOf(origin) !== -1) {
+
+    const normalized = origin.replace(/\/+$/, '');
+
+    if (allowedOrigins.includes(normalized)) {
       callback(null, true);
     } else {
-      console.warn(`[CORS] Blocked request from unauthorized origin: ${origin}`);
+      console.warn(`[CORS] Blocked origin: "${origin}" | Allowed: ${JSON.stringify(allowedOrigins)}`);
       callback(new Error('Not allowed by CORS'));
     }
   },
