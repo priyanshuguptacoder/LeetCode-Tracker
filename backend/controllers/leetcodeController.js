@@ -233,6 +233,9 @@ function calculateNextRevision(fromDate, revisionCount) {
 async function syncToProblemCollection(sub) {
   const existing = await Problem.findOne({ id: sub.problemId });
 
+  // Extract numeric ID for sorting - CRITICAL for numeric ordering
+  const problemIdNum = Number(sub.problemId);
+
   const update = {
     $set: {
       title:           sub.title,
@@ -242,6 +245,8 @@ async function syncToProblemCollection(sub) {
       lastSubmittedAt: sub.dateSolved,   // always updated — tracks most recent sync timestamp
       leetcodeLink:    sub.link || `https://leetcode.com/problems/${sub.slug}/`,
       providerTitle:   'LeetCode',
+      platform:        'LC',
+      problemIdNum:    problemIdNum,     // ENSURE numeric field for sorting
       ...(sub.notes && { notes: sub.notes }),
     },
   };
@@ -700,10 +705,71 @@ exports.syncSubmissions = async (req, res) => {
   }
 };
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// LEETCODE CONTEST DATA FETCH
+// Fetches contest rating, attend count, and global ranking
+// SAFETY: Returns null values if API fails or data missing — never crashes
+// ═══════════════════════════════════════════════════════════════════════════════
+async function fetchLeetCodeContestData() {
+  const session  = process.env.LEETCODE_SESSION;
+  const csrf     = process.env.LEETCODE_CSRF;
+  const username = process.env.LEETCODE_USERNAME;
+
+  if (!session || !csrf || !username) {
+    console.warn('[LC Contest] Missing env vars — skipping contest fetch');
+    return { rating: null, contestCount: null, globalRank: null };
+  }
+
+  const CONTEST_QUERY = `
+    query userContestRankingInfo($username: String!) {
+      userContestRanking(username: $username) {
+        rating
+        attendedContestsCount
+        globalRanking
+      }
+    }
+  `;
+
+  try {
+    const { data } = await axios.post(
+      LC_GRAPHQL,
+      { query: CONTEST_QUERY, variables: { username } },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Referer':      'https://leetcode.com',
+          'Cookie':       `LEETCODE_SESSION=${session}; csrftoken=${csrf}`,
+          'x-csrftoken':  csrf,
+        },
+        timeout: 10000,
+      }
+    );
+
+    // SAFE EXTRACTION: Use optional chaining, default to null
+    const ranking = data?.data?.userContestRanking;
+
+    if (!ranking) {
+      console.warn('[LC Contest] No contest data found for user');
+      return { rating: null, contestCount: null, globalRank: null };
+    }
+
+    return {
+      rating: ranking.rating ?? null,
+      contestCount: ranking.attendedContestsCount ?? null,
+      globalRank: ranking.globalRanking ?? null,
+    };
+  } catch (err) {
+    console.error('[LC Contest] Fetch error:', err.message);
+    // SAFE FALLBACK: Return nulls, don't crash
+    return { rating: null, contestCount: null, globalRank: null };
+  }
+}
+
 // ─── Exports ──────────────────────────────────────────────────────────────────
 exports.upsertProblem         = upsertProblem;
 exports.upsertManual          = upsertManual;
 exports.syncRecentSubmissions = syncRecentSubmissions;
+exports.fetchLeetCodeContestData = fetchLeetCodeContestData;
 
 // POST /api/problem/sync/calendar — fetch & store submissionCalendar only (no problem inserts)
 // Use this to backfill streak data without triggering a full sync.

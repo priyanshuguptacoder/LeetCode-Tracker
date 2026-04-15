@@ -112,28 +112,57 @@ exports.getAllProblems = async (req, res) => {
     
     const platformFilter = platform !== 'ALL' ? { platform: platform.toUpperCase() } : {};
     
-    // ─── SORTING LOGIC ────────────────────────────────────────────────────────
-    let sortOption = {};
+    // ─── SORTING LOGIC WITH DEFENSIVE FALLBACK ─────────────────────────────────
+    // If numeric field is missing, use 999999 so it goes LAST (not first)
+    let sortStage = {};
     if (sort === 'recent') {
-      sortOption = { lastSubmittedAt: -1, _id: -1 };
+      sortStage = { lastSubmittedAt: -1, _id: -1 };
     } else {
-      // problem order
+      // problem order — TRUE NUMERIC SORTING (no lexicographic)
       if (platform === 'CF') {
-        sortOption = { contestId: 1, index: 1 };
+        sortStage = { contestId: 1, index: 1 };
       } else if (platform === 'LC') {
-        // Use problemIdNum for numeric sort
-        sortOption = { problemIdNum: 1, _id: 1 };
+        sortStage = { problemIdNum: 1, _id: 1 };
       } else {
-        sortOption = { platform: 1, problemIdNum: 1, contestId: 1, index: 1 };
+        sortStage = { platform: 1, problemIdNum: 1, contestId: 1, index: 1 };
       }
     }
 
+    // Build aggregation pipeline with defensive numeric conversion
+    const pipeline = [
+      { $match: platformFilter },
+      // Add computed fields with fallback for missing numeric values
+      {
+        $addFields: {
+          // DEFENSIVE: Ensure numeric fields exist with fallback to 999999 (goes last)
+          problemIdNum: {
+            $cond: [
+              { $and: [{ $ne: ['$problemIdNum', null] }, { $ne: ['$problemIdNum', ''] }] },
+              { $toInt: '$problemIdNum' },
+              999999
+            ]
+          },
+          contestId: {
+            $cond: [
+              { $and: [{ $ne: ['$contestId', null] }, { $ne: ['$contestId', ''] }] },
+              { $toInt: '$contestId' },
+              999999
+            ]
+          },
+          // Ensure safe defaults for other fields
+          title: { $ifNull: ['$title', 'Untitled Problem'] },
+          difficulty: { $ifNull: ['$difficulty', 'Medium'] },
+          topics: { $ifNull: ['$topics', []] },
+          solved: { $ifNull: ['$solved', false] },
+          revisionCount: { $ifNull: ['$revisionCount', 0] },
+        }
+      },
+      { $sort: sortStage },
+      ...(l > 0 ? [{ $skip: (p - 1) * l }, { $limit: l }] : [])
+    ];
+
     const [rawProblems, rawTotal] = await Promise.all([
-      Problem.find(platformFilter)
-        .sort(sortOption)
-        .skip(l > 0 ? (p - 1) * l : 0)
-        .limit(l)
-        .lean(),
+      Problem.aggregate(pipeline),
       Problem.countDocuments(platformFilter)
     ]);
 
@@ -141,8 +170,14 @@ exports.getAllProblems = async (req, res) => {
     const total = typeof rawTotal === 'number' ? rawTotal : 0;
     console.log(`[DEBUG] result count: ${problems.length}, total count: ${total}`);
 
+    // Final defensive transformation
     const data = problems.map(p => {
       const obj = p || {};
+      // Ensure numeric types for frontend
+      if (obj.problemIdNum != null) obj.problemIdNum = Number(obj.problemIdNum);
+      if (obj.contestId != null) obj.contestId = Number(obj.contestId);
+      if (obj.revisionCount != null) obj.revisionCount = Number(obj.revisionCount);
+      
       if (!obj.providerTitle) {
         obj.providerTitle = obj.platform === 'CF' ? 'Codeforces' : 'LeetCode';
       }
@@ -342,10 +377,22 @@ exports.updateProblem = async (req, res) => {
   }
 };
 
+// Helper: Find problem by ID (supports both string and numeric)
+async function findProblemById(idParam) {
+  let problem = await Problem.findOne({ id: idParam });
+  if (!problem) {
+    const numericId = parseInt(idParam, 10);
+    if (!isNaN(numericId)) {
+      problem = await Problem.findOne({ id: numericId });
+    }
+  }
+  return problem;
+}
+
 // ─── POST /api/problems/:id/revise ───────────────────────────────────────────
 exports.reviseProblem = async (req, res) => {
   try {
-    const current = await Problem.findOne({ id: parseInt(req.params.id) });
+    const current = await findProblemById(req.params.id);
     if (!current) return res.status(404).json({ success: false, error: 'Problem not found' });
 
     const newCount = (current.revisionCount || 0) + 1;
@@ -398,7 +445,7 @@ exports.reviseProblem = async (req, res) => {
     };
 
     const problem = await Problem.findOneAndUpdate(
-      { id: parseInt(req.params.id) },
+      { id: current.id },
       { $set: updates },
       { new: true, runValidators: true }
     );
@@ -424,14 +471,14 @@ exports.reviseProblem = async (req, res) => {
 // ─── POST /api/problems/:id/unrevise ─────────────────────────────────────────
 exports.unreviseProblem = async (req, res) => {
   try {
-    const current = await Problem.findOne({ id: parseInt(req.params.id) });
+    const current = await findProblemById(req.params.id);
     if (!current) return res.status(404).json({ success: false, error: 'Problem not found' });
     if ((current.revisionCount || 0) === 0) {
       return res.status(400).json({ success: false, error: 'revisionCount is already 0' });
     }
     const newCount = current.revisionCount - 1;
     const problem = await Problem.findOneAndUpdate(
-      { id: parseInt(req.params.id) },
+      { id: current.id },
       { $set: { revisionCount: newCount, lastRevisedAt: newCount === 0 ? null : current.lastRevisedAt } },
       { new: true, runValidators: true }
     );
@@ -447,12 +494,14 @@ exports.unreviseProblem = async (req, res) => {
 // ─── POST /api/problems/:id/target ───────────────────────────────────────────
 exports.targetProblem = async (req, res) => {
   try {
+    const existing = await findProblemById(req.params.id);
+    if (!existing) return res.status(404).json({ success: false, error: 'Problem not found' });
+    
     const problem = await Problem.findOneAndUpdate(
-      { id: parseInt(req.params.id) },
+      { id: existing.id },
       { $set: { targeted: true, targetedAt: new Date() } },
       { new: true, runValidators: true }
     );
-    if (!problem) return res.status(404).json({ success: false, error: 'Problem not found' });
     res.json({ success: true, data: { id: problem.id, targeted: problem.targeted, targetedAt: problem.targetedAt } });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to target problem', message: err.message });
@@ -462,12 +511,14 @@ exports.targetProblem = async (req, res) => {
 // ─── POST /api/problems/:id/untarget ─────────────────────────────────────────
 exports.untargetProblem = async (req, res) => {
   try {
+    const existing = await findProblemById(req.params.id);
+    if (!existing) return res.status(404).json({ success: false, error: 'Problem not found' });
+    
     const problem = await Problem.findOneAndUpdate(
-      { id: parseInt(req.params.id) },
+      { id: existing.id },
       { $set: { targeted: false, targetedAt: null } },
       { new: true, runValidators: true }
     );
-    if (!problem) return res.status(404).json({ success: false, error: 'Problem not found' });
     res.json({ success: true, data: { id: problem.id, targeted: problem.targeted, targetedAt: problem.targetedAt } });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to untarget problem', message: err.message });
@@ -480,7 +531,7 @@ exports.untargetProblem = async (req, res) => {
 // Rebuilds streak from remaining non-deleted solved problems.
 exports.deleteProblem = async (req, res) => {
   try {
-    const problem = await Problem.findOne({ id: parseInt(req.params.id) });
+    const problem = await findProblemById(req.params.id);
     if (!problem) return res.status(404).json({ success: false, error: 'Problem not found' });
     if (problem.isDeleted) return res.status(410).json({ success: false, error: 'Problem already deleted' });
 
@@ -488,7 +539,7 @@ exports.deleteProblem = async (req, res) => {
 
     // Soft-delete the Problem document
     await Problem.findOneAndUpdate(
-      { id: parseInt(req.params.id) },
+      { id: problem.id },
       { $set: { isDeleted: true, deletedAt: now } }
     );
 
@@ -712,8 +763,8 @@ exports.alignProblems = async (req, res) => {
 // ─── PATCH /api/problems/:id/striver ─────────────────────────────────────────
 exports.toggleStriver = async (req, res) => {
   try {
-    const problem = await Problem.findOne({ id: parseInt(req.params.id), isDeleted: { $ne: true } });
-    if (!problem) return res.status(404).json({ success: false, error: 'Problem not found' });
+    const problem = await findProblemById(req.params.id);
+    if (!problem || problem.isDeleted) return res.status(404).json({ success: false, error: 'Problem not found' });
 
     problem.isStriver = !problem.isStriver;
     await problem.save();

@@ -30,6 +30,20 @@ const settingsSchema = new mongoose.Schema(
     // not just the problems we've manually tracked.
     submissionCalendarDates: { type: [String], default: [] },
     submissionCalendarUpdatedAt: { type: Date, default: null },
+
+    // ── Contest Stats: Codeforces ─────────────────────────────────────────────
+    cfRating: { type: Number, default: null },
+    cfMaxRating: { type: Number, default: null },
+    cfRank: { type: String, default: null },
+    cfMaxRank: { type: String, default: null },
+    cfContestCount: { type: Number, default: null },
+    cfContestUpdatedAt: { type: Date, default: null },
+
+    // ── Contest Stats: LeetCode ────────────────────────────────────────────────
+    lcRating: { type: Number, default: null },
+    lcContestCount: { type: Number, default: null },
+    lcGlobalRank: { type: Number, default: null },
+    lcContestUpdatedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

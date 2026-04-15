@@ -707,6 +707,70 @@ function WeaknessRadar({ problems }) {
   );
 }
 
+// ============================================
+// CONTEST STATS — LC + CF contest ratings
+// Safe rendering: handles null values gracefully
+// ============================================
+function ContestStats({ stats }) {
+  if (!stats) return null;
+
+  const lc = stats.leetcode || {};
+  const cf = stats.codeforces || {};
+
+  return (
+    <div className="analytics-card" style={{ minHeight: 'auto' }}>
+      <h3 className="card-title">🏆 Contest Stats</h3>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+        {/* LeetCode */}
+        <div style={{ padding: '12px', background: 'var(--bg-tertiary)', borderRadius: '8px' }}>
+          <div style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '8px', fontSize: '0.9rem' }}>
+            💻 LeetCode
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.85rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'var(--text-secondary)' }}>Rating:</span>
+              <span style={{ fontWeight: 600 }}>{lc.rating ?? 'N/A'}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'var(--text-secondary)' }}>Global Rank:</span>
+              <span style={{ fontWeight: 600 }}>{lc.globalRank ?? 'N/A'}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'var(--text-secondary)' }}>Contests:</span>
+              <span style={{ fontWeight: 600 }}>{lc.contestCount ?? 'N/A'}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Codeforces */}
+        <div style={{ padding: '12px', background: 'var(--bg-tertiary)', borderRadius: '8px' }}>
+          <div style={{ fontWeight: 700, color: '#a78bfa', marginBottom: '8px', fontSize: '0.9rem' }}>
+            🏆 Codeforces
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.85rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'var(--text-secondary)' }}>Rating:</span>
+              <span style={{ fontWeight: 600 }}>{cf.rating ?? 'N/A'}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'var(--text-secondary)' }}>Max Rating:</span>
+              <span style={{ fontWeight: 600 }}>{cf.maxRating ?? 'N/A'}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'var(--text-secondary)' }}>Rank:</span>
+              <span style={{ fontWeight: 600 }}>{cf.rank ?? 'N/A'}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'var(--text-secondary)' }}>Contests:</span>
+              <span style={{ fontWeight: 600 }}>{cf.contestCount ?? 'N/A'}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   // ============================================
   // API DATA FETCHING
@@ -741,6 +805,10 @@ function App() {
     lastSolvedDate: null,
     isSetup: false,
   });
+
+  // ── Contest Stats state ────────────────────────────────────────────────────
+  const [contestStats, setContestStats] = useState(null);
+
   const toLocalDateStr = (date) => {
     // Returns YYYY-MM-DD in UTC — matches LeetCode's day boundary (resets at 00:00 UTC)
     return new Date(date).toISOString().split('T')[0];
@@ -908,14 +976,18 @@ function App() {
         }
         // Non-blocking secondary fetches
         try {
-          const [sugRes, recentTodayRes] = await Promise.allSettled([
+          const [sugRes, recentTodayRes, contestRes] = await Promise.allSettled([
             window.API.getSuggestions(),
             window.API.getRecentAndToday(),
+            window.API.getContestStats(),
           ]);
           if (sugRes.status === 'fulfilled' && sugRes.value.success) setSuggestions(sugRes.value.data || []);
           if (recentTodayRes.status === 'fulfilled' && recentTodayRes.value.success) {
             setRecentProblems(recentTodayRes.value.recentSolved || []);
             setTodayProblems(recentTodayRes.value.todaySolved || []);
+          }
+          if (contestRes.status === 'fulfilled' && contestRes.value.success) {
+            setContestStats(contestRes.value.data);
           }
         } catch (_) { }
       } catch (error) {
@@ -3563,6 +3635,7 @@ function App() {
           {/* Visualizations */}
           <div className="analytics-grid" style={{ marginTop: 16 }}>
             <WeaknessRadar problems={allProblems} />
+            <ContestStats stats={contestStats} />
           </div>
 
           {/* Filters */}

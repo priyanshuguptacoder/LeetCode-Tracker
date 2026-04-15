@@ -134,19 +134,38 @@ const api = {
     if (!r.ok) throw new Error('Failed to fetch today\'s problems');
     return r.json();
   },
-  // ── Codeforces ────────────────────────────────────────────────────────────
+  // ─── Platform Filtered Problems ─────────────────────────────────────────────
+  getProblemsByPlatform: async (platform = 'ALL') => {
+    const r = await fetch(`${API_BASE_URL}/problems?platform=${platform}`);
+    if (!r.ok) throw new Error('Failed to fetch problems by platform');
+    return r.json();
+  },
+  // ─── Codeforces APIs ─────────────────────────────────────────────────────────
   syncCodeforces: async (handle) => {
-    const r = await fetch(`${API_BASE_URL.replace('/api', '')}/api/codeforces/sync`, {
+    const r = await fetch(`${API_BASE_URL}/codeforces/sync`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(handle ? { handle } : {}),
     });
-    if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'CF sync failed'); }
+    if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Codeforces sync failed'); }
+    return r.json();
+  },
+  getCodeforcesInfo: async (handle) => {
+    const url = handle 
+      ? `${API_BASE_URL}/codeforces/info?handle=${encodeURIComponent(handle)}`
+      : `${API_BASE_URL}/codeforces/info`;
+    const r = await fetch(url);
+    if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Failed to fetch Codeforces info'); }
     return r.json();
   },
   getCodeforcesStats: async () => {
-    const r = await fetch(`${API_BASE_URL.replace('/api', '')}/api/codeforces/stats`);
-    if (!r.ok) throw new Error('Failed to fetch CF stats');
+    const r = await fetch(`${API_BASE_URL}/codeforces/stats`);
+    if (!r.ok) throw new Error('Failed to fetch Codeforces stats');
+    return r.json();
+  },
+  getContestStats: async () => {
+    const r = await fetch(`${API_BASE_URL}/analytics/contest`);
+    if (!r.ok) throw new Error('Failed to fetch contest stats');
     return r.json();
   },
 };

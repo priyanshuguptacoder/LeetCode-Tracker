@@ -9,35 +9,74 @@ const CF_API_BASE = 'https://codeforces.com/api';
 
 /**
  * Normalize Codeforces rating to 1-5 difficulty scale
- * Formula: difficulty = Math.ceil(rating / 400), capped at 5
- * 
- * Rating ranges:
- * - 800-1199  → 1 (Easy)
- * - 1200-1599 → 2 (Easy-Medium)
- * - 1600-1999 → 3 (Medium)
- * - 2000-2399 → 4 (Medium-Hard)
- * - 2400+     → 5 (Hard)
+ * CONSISTENT THRESHOLDS with difficultyToString:
+ * - <= 1000  → 1 (Easy)
+ * - <= 1400  → 3 (Medium)
+ * - > 1400   → 5 (Hard)
  */
 function normalizeDifficulty(rating) {
-  if (!rating) return 2; // Default to Medium
-  if (rating <= 1200) return 1;
-  if (rating <= 1600) return 3;
-  return 5;
+  if (!rating) return 3; // Default to Medium
+  if (rating <= 1000) return 1;  // Easy
+  if (rating <= 1400) return 3; // Medium
+  return 5; // Hard
 }
 
 /**
  * Convert rating to LeetCode-style string
- * Easy <= 1200, Medium <= 1600, Hard > 1600
+ * CORRECT THRESHOLDS:
+ * Easy <= 1000, Medium <= 1400, Hard > 1400
  */
 function difficultyToString(rating) {
   if (!rating) return 'Medium';
-  if (rating <= 1200) return 'Easy';
-  if (rating <= 1600) return 'Medium';
+  if (rating <= 1000) return 'Easy';
+  if (rating <= 1400) return 'Medium';
   return 'Hard';
 }
 
 /**
- * Fetch user info from Codeforces API
+ * Fetch user contest rating history from Codeforces API
+ * Returns rating data array and contest count
+ * SAFETY: Always returns array (empty if API fails)
+ * @param {string} handle - Codeforces handle
+ */
+async function fetchUserContestData(handle) {
+  try {
+    const url = `${CF_API_BASE}/user.rating?handle=${encodeURIComponent(handle)}`;
+    const { data } = await axios.get(url, { timeout: 10000 });
+
+    if (data?.status !== 'OK') {
+      console.warn('[CF] Contest data fetch failed:', data?.comment || 'Unknown error');
+      return { ratingHistory: [], contestCount: 0 };
+    }
+
+    const ratingHistory = Array.isArray(data?.result) ? data.result : [];
+    const contestCount = ratingHistory.length;
+
+    // Get current rating (last entry) or null if no contests
+    const currentRating = contestCount > 0
+      ? ratingHistory[ratingHistory.length - 1]?.newRating
+      : null;
+
+    // Get max rating from history
+    const maxRating = ratingHistory.length > 0
+      ? Math.max(...ratingHistory.map(r => r.newRating || 0))
+      : null;
+
+    return {
+      ratingHistory,
+      contestCount,
+      currentRating,
+      maxRating,
+    };
+  } catch (err) {
+    console.error('[CF] Contest data fetch error:', err.message);
+    // SAFE FALLBACK: Return empty data, don't crash
+    return { ratingHistory: [], contestCount: 0, currentRating: null, maxRating: null };
+  }
+}
+
+/**
+ * Fetch user info from Codeforces API (extended with contest stats)
  * @param {string} handle - Codeforces handle
  */
 async function fetchUserInfo(handle) {
@@ -215,6 +254,7 @@ module.exports = {
   syncCodeforcesProblems,
   fetchUserSubmissions,
   fetchUserInfo,
+  fetchUserContestData,
   deduplicateProblems,
   transformToSchema,
   filterNewProblems,

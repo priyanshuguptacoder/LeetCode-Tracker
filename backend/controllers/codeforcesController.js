@@ -138,7 +138,22 @@ exports.syncCodeforces = async (req, res) => {
     });
   } catch (err) {
     console.error('[CF SYNC] Controller error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    // SAFE FALLBACK: Return empty result on error
+    res.status(500).json({ 
+      success: false, 
+      error: err.message,
+      handle: null,
+      rating: null,
+      maxRating: null,
+      totalFetched: 0,
+      uniqueAccepted: 0,
+      newProblems: 0,
+      inserted: 0,
+      skippedExisting: 0,
+      skippedDeleted: 0,
+      totalCFInDB: 0,
+      errors: [err.message]
+    });
   } finally {
     syncLock = false;
   }
@@ -170,7 +185,20 @@ exports.getCodeforcesInfo = async (req, res) => {
       },
     });
   } catch (err) {
-    res.status(502).json({ success: false, error: err.message });
+    // SAFE FALLBACK: Return nulls on error (UI handles nulls gracefully)
+    res.status(502).json({ 
+      success: false, 
+      error: err.message,
+      data: {
+        handle: null,
+        rating: null,
+        maxRating: null,
+        rank: null,
+        maxRank: null,
+        contribution: null,
+        avatar: null
+      }
+    });
   }
 };
 
@@ -212,6 +240,16 @@ exports.getCodeforcesStats = async (req, res) => {
       },
     });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    // SAFE FALLBACK: Return empty stats on error
+    res.status(500).json({ 
+      success: false, 
+      error: err.message,
+      data: {
+        total: 0,
+        byDifficulty: { Easy: 0, Medium: 0, Hard: 0 },
+        byRating: {},
+        byTag: {}
+      }
+    });
   }
 };

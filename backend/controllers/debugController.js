@@ -973,3 +973,300 @@ exports.backfillDifficulty = async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 };
+
+// ─── POST /api/sync/all ───────────────────────────────────────────────────────
+// Unified sync endpoint — syncs BOTH LeetCode and Codeforces
+// Includes: problems + contest stats
+// Uses Promise.allSettled for partial success handling
+exports.syncAll = async (req, res) => {
+  const results = {
+    lc: { problems: null, contest: null },
+    cf: { problems: null, contest: null },
+    success: false,
+  };
+
+  try {
+    const Settings = require('../models/Settings');
+
+    // ── LEETCODE PROMISES ───────────────────────────────────────────────────────
+    const lcProblemPromise = (async () => {
+      const { syncRecentSubmissions } = require('./leetcodeController');
+      return await syncRecentSubmissions();
+    })();
+
+    const lcContestPromise = (async () => {
+      const { fetchLeetCodeContestData } = require('./leetcodeController');
+      return await fetchLeetCodeContestData();
+    })();
+
+    // ── CODEFORCES PROMISES ────────────────────────────────────────────────────
+    const cfHandle = req.body.cfHandle || process.env.CF_HANDLE;
+
+    const cfProblemPromise = (async () => {
+      const { syncCodeforcesProblems } = require('../services/codeforcesService');
+      if (!cfHandle) throw new Error('CF_HANDLE not set');
+      return await syncCodeforcesProblems(cfHandle);
+    })();
+
+    const cfContestPromise = (async () => {
+      const { fetchUserContestData, fetchUserInfo } = require('../services/codeforcesService');
+      if (!cfHandle) throw new Error('CF_HANDLE not set');
+
+      // Fetch both contest data and user info (for rank)
+      const [contestData, userInfo] = await Promise.allSettled([
+        fetchUserContestData(cfHandle),
+        fetchUserInfo(cfHandle),
+      ]);
+
+      const cd = contestData.status === 'fulfilled' ? contestData.value : {};
+      const ui = userInfo.status === 'fulfilled' ? userInfo.value : {};
+
+      return {
+        rating: cd.currentRating ?? null,
+        maxRating: cd.maxRating ?? null,
+        rank: ui.rank ?? null,
+        maxRank: ui.maxRank ?? null,
+        contestCount: cd.contestCount ?? 0,
+      };
+    })();
+
+    // ── EXECUTE ALL PROMISES ───────────────────────────────────────────────────
+    const [
+      lcProblemResult,
+      lcContestResult,
+      cfProblemResult,
+      cfContestResult,
+    ] = await Promise.allSettled([
+      lcProblemPromise,
+      lcContestPromise,
+      cfProblemPromise,
+      cfContestPromise,
+    ]);
+
+    // ── PROCESS LEETCODE PROBLEMS ──────────────────────────────────────────────
+    if (lcProblemResult.status === 'fulfilled') {
+      results.lc.problems = {
+        success: true,
+        fetched: lcProblemResult.value?.fetched ?? 0,
+        inserted: lcProblemResult.value?.inserted ?? 0,
+      };
+    } else {
+      results.lc.problems = { success: false, error: lcProblemResult.reason?.message };
+    }
+
+    // ── PROCESS LEETCODE CONTEST ─────────────────────────────────────────────
+    if (lcContestResult.status === 'fulfilled') {
+      const lcd = lcContestResult.value;
+      results.lc.contest = {
+        success: true,
+        rating: lcd?.rating ?? null,
+        contestCount: lcd?.contestCount ?? null,
+        globalRank: lcd?.globalRank ?? null,
+      };
+
+      // Store in DB
+      await Settings.findOneAndUpdate(
+        { key: 'global' },
+        {
+          $set: {
+            lcRating: lcd?.rating ?? null,
+            lcContestCount: lcd?.contestCount ?? null,
+            lcGlobalRank: lcd?.globalRank ?? null,
+            lcContestUpdatedAt: new Date(),
+          },
+        },
+        { upsert: true }
+      );
+    } else {
+      results.lc.contest = { success: false, error: lcContestResult.reason?.message };
+    }
+
+    // ── PROCESS CODEFORCES PROBLEMS ──────────────────────────────────────────
+    if (cfProblemResult.status === 'fulfilled') {
+      const cfp = cfProblemResult.value;
+      results.cf.problems = {
+        success: cfp?.success ?? false,
+        handle: cfp?.handle,
+        uniqueAccepted: cfp?.uniqueAccepted ?? 0,
+      };
+    } else {
+      results.cf.problems = { success: false, error: cfProblemResult.reason?.message };
+    }
+
+    // ── PROCESS CODEFORCES CONTEST ───────────────────────────────────────────
+    if (cfContestResult.status === 'fulfilled') {
+      const cfc = cfContestResult.value;
+      results.cf.contest = {
+        success: true,
+        rating: cfc?.rating ?? null,
+        maxRating: cfc?.maxRating ?? null,
+        rank: cfc?.rank ?? null,
+        maxRank: cfc?.maxRank ?? null,
+        contestCount: cfc?.contestCount ?? 0,
+      };
+
+      // Store in DB
+      await Settings.findOneAndUpdate(
+        { key: 'global' },
+        {
+          $set: {
+            cfRating: cfc?.rating ?? null,
+            cfMaxRating: cfc?.maxRating ?? null,
+            cfRank: cfc?.rank ?? null,
+            cfMaxRank: cfc?.maxRank ?? null,
+            cfContestCount: cfc?.contestCount ?? 0,
+            cfContestUpdatedAt: new Date(),
+          },
+        },
+        { upsert: true }
+      );
+    } else {
+      results.cf.contest = { success: false, error: cfContestResult.reason?.message };
+    }
+
+    // ── DETERMINE OVERALL SUCCESS ──────────────────────────────────────────────
+    const anyProblemSuccess = results.lc.problems?.success || results.cf.problems?.success;
+    const anyContestSuccess = results.lc.contest?.success || results.cf.contest?.success;
+    results.success = anyProblemSuccess || anyContestSuccess;
+
+    const statusCode = results.success ? 200 : 502;
+    res.status(statusCode).json({
+      success: results.success,
+      message: results.success
+        ? 'Partial or full sync completed (problems + contest)'
+        : 'All syncs failed',
+      data: results,
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      error: 'Sync orchestration failed',
+      message: err.message,
+    });
+  }
+};
+
+// ─── POST /api/debug/backfill-all ─────────────────────────────────────────────
+// COMPREHENSIVE BACKFILL — Fixes all data consistency issues
+// 1. Converts problemIdNum to Number for all problems
+// 2. Converts contestId to Number for CF problems  
+// 3. Normalizes difficulty for CF problems (rating-based)
+// 4. Ensures platform field exists
+// 5. Removes duplicates (keeps latest)
+exports.backfillAll = async (req, res) => {
+  try {
+    const stats = {
+      total: 0,
+      problemIdNumFixed: 0,
+      contestIdFixed: 0,
+      difficultyFixed: 0,
+      platformFixed: 0,
+      duplicatesRemoved: 0,
+      errors: []
+    };
+
+    // ─── PHASE 1: Fix numeric fields and difficulty ─────────────────────────
+    const problems = await Problem.find({});
+    stats.total = problems.length;
+
+    for (const p of problems) {
+      let needsSave = false;
+
+      // Fix problemIdNum - ensure it's a Number
+      if (p.problemIdNum == null || typeof p.problemIdNum !== 'number') {
+        const match = p.id?.toString().match(/(\d+)/);
+        if (match) {
+          p.problemIdNum = parseInt(match[0], 10);
+          needsSave = true;
+          stats.problemIdNumFixed++;
+        }
+      }
+
+      // Fix contestId for CF - ensure it's a Number
+      if (p.platform === 'CF' && p.contestId != null && typeof p.contestId !== 'number') {
+        p.contestId = Number(p.contestId);
+        needsSave = true;
+        stats.contestIdFixed++;
+      }
+
+      // Fix platform field
+      if (!p.platform) {
+        // Detect from ID format
+        if (p.id?.startsWith('CF-')) {
+          p.platform = 'CF';
+        } else {
+          p.platform = 'LC';
+        }
+        needsSave = true;
+        stats.platformFixed++;
+      }
+
+      // Fix difficulty for CF based on rating (1000/1400 thresholds)
+      if (p.platform === 'CF' && p.rawDifficulty != null) {
+        const r = Number(p.rawDifficulty);
+        let target = 'Unknown';
+        if (!isNaN(r)) {
+          if (r <= 1000) target = 'Easy';
+          else if (r <= 1400) target = 'Medium';
+          else target = 'Hard';
+        }
+        if (p.difficulty !== target && target !== 'Unknown') {
+          p.difficulty = target;
+          needsSave = true;
+          stats.difficultyFixed++;
+        }
+      }
+
+      // Set safe defaults for missing required fields
+      if (!p.title) { p.title = 'Untitled Problem'; needsSave = true; }
+      if (!p.difficulty) { p.difficulty = 'Medium'; needsSave = true; }
+      if (!p.topics) { p.topics = []; needsSave = true; }
+      if (p.solved == null) { p.solved = false; needsSave = true; }
+      if (p.revisionCount == null) { p.revisionCount = 0; needsSave = true; }
+
+      if (needsSave) {
+        try {
+          await p.save();
+        } catch (err) {
+          stats.errors.push({ id: p.id, error: err.message });
+        }
+      }
+    }
+
+    // ─── PHASE 2: Remove duplicates (group by uniqueId, keep latest) ─────────
+    const duplicates = await Problem.aggregate([
+      { $group: { _id: '$id', count: { $sum: 1 }, docs: { $push: '$$ROOT' } } },
+      { $match: { count: { $gt: 1 } } }
+    ]);
+
+    for (const group of duplicates) {
+      // Sort by lastSubmittedAt descending, keep the first (latest)
+      const sorted = group.docs.sort((a, b) => {
+        const aDate = a.lastSubmittedAt ? new Date(a.lastSubmittedAt) : new Date(0);
+        const bDate = b.lastSubmittedAt ? new Date(b.lastSubmittedAt) : new Date(0);
+        return bDate - aDate;
+      });
+
+      // Delete all but the first (latest)
+      for (let i = 1; i < sorted.length; i++) {
+        try {
+          await Problem.deleteOne({ _id: sorted[i]._id });
+          stats.duplicatesRemoved++;
+        } catch (err) {
+          stats.errors.push({ id: sorted[i].id, error: err.message });
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Database backfill completed',
+      stats: {
+        ...stats,
+        errors: stats.errors.length > 0 ? stats.errors : undefined
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};

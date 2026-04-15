@@ -107,6 +107,13 @@ app.get('/', (req, res) => {
       'POST /api/codeforces/sync':      'Sync Codeforces submissions',
       'GET  /api/codeforces/info':      'Codeforces user info',
       'GET  /api/codeforces/stats':     'Codeforces problem stats',
+      'POST /api/sync/all':             'Unified sync — BOTH LeetCode + Codeforces (Promise.allSettled)',
+      'GET  /api/analytics/recently-solved': 'Recently solved from both platforms',
+      'GET  /api/analytics/by-platform': 'Stats grouped by platform (LC/CF)',
+      'GET  /api/analytics/targeted':   'Targeted problems from both platforms',
+      'GET  /api/analytics/contest':    'Contest stats (rating, rank, contests) for LC + CF',
+      'GET  /api/revision/stats':       'Revision stats by platform',
+      'POST /api/debug/backfill-all':   'Comprehensive DB backfill for all data issues',
     },
   });
 });
