@@ -168,12 +168,18 @@ function transformToSchema(cfProblem) {
   const difficulty = difficultyToString(rating);
   const difficultyRating = difficulty === 'Easy' ? 1 : difficulty === 'Medium' ? 3 : 5;
 
+  const cid = Number(contestId);
+  const idx = (index || '').toString().trim().toUpperCase();
+  const uniqueId = `CF-${cid}${idx}`;
+
   return {
-    id: `CF-${contestId}${index}`,
-    contestId,
-    index,
+    uniqueId,
+    id: uniqueId, // legacy alias
+    contestId: cid,
+    index: idx,
     title: name,
     platform: 'CF',
+    rating: rating != null ? Number(rating) : null,
     rawDifficulty: rating || null,
     difficultyRating,
     difficulty: difficulty,

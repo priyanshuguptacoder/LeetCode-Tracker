@@ -661,6 +661,25 @@ function computeStriverStats(problems) {
   };
 }
 
+function computeTLEStats(problems) {
+  const tle = problems.filter(p => p.platform === 'CF').filter(p => {
+    const r = Number(p.rawDifficulty || p.rating);
+    const inBand = !Number.isNaN(r) && r >= 1200 && r <= 1800;
+    const hasTag = Array.isArray(p.topics) && p.topics.some(t =>
+      ['dp', 'graphs', 'greedy', 'binary search'].includes((t || '').toLowerCase())
+    );
+    return inBand || hasTag;
+  });
+  const solved = tle.filter(p => p.status === 'Done');
+  return {
+    easy: solved.filter(p => p.difficulty === 'Easy').length,
+    medium: solved.filter(p => p.difficulty === 'Medium').length,
+    hard: solved.filter(p => p.difficulty === 'Hard').length,
+    total: solved.length,
+    totalInSheet: tle.length,
+  };
+}
+
 // ============================================
 // WEAKNESS RADAR — topic mastery via Recharts
 // ============================================
@@ -714,8 +733,17 @@ function WeaknessRadar({ problems }) {
 function ContestStats({ stats }) {
   if (!stats) return null;
 
-  const lc = stats.leetcode || {};
-  const cf = stats.codeforces || {};
+  const lc = {
+    rating: stats.lcRating,
+    globalRank: stats.lcGlobalRank,
+    contestCount: stats.lcContestCount,
+  };
+  const cf = {
+    rating: stats.cfRating,
+    maxRating: stats.cfMaxRating,
+    rank: stats.cfRank,
+    contestCount: stats.cfContestCount,
+  };
 
   return (
     <div className="analytics-card" style={{ minHeight: 'auto' }}>
@@ -1032,7 +1060,7 @@ function App() {
   const [statusFilter, setStatusFilter] = useState('All');
   const [platformFilter, setPlatformFilter] = useState('ALL'); // 'ALL' | 'LC' | 'CF'
   const [sortOrder, setSortOrder] = useState('recent'); // 'recent' | 'problem'
-  const [cfSyncing, setCfSyncing] = useState(false);
+  const [cfSheetMode, setCfSheetMode] = useState('ALL'); // 'ALL' | 'TLE'
   const [showModal, setShowModal] = useState(false);
   const [notification, setNotification] = useState(null);
   const [syncing, setSyncing] = useState(false);
@@ -1540,22 +1568,23 @@ function App() {
   const handleSyncLeetCode = async () => {
     setSyncing(true);
     try {
-      const result = await window.API.syncLeetCode();
-      if (!result.success) {
-        if (result.error === 'LEETCODE_SESSION_EXPIRED') {
-          setSyncStatus('expired');
-          showNotification('⚠️ LeetCode session expired — update cookies on Render', 'error');
-          return;
-        }
-        showNotification('❌ Sync failed', 'error');
-        return;
+      const result = await window.API.syncAll();
+
+      // If LC auth is expired we still want CF to succeed; just warn.
+      const lcErr = result?.data?.lc?.problems?.error || result?.data?.lc?.contest?.error;
+      if (lcErr && String(lcErr).includes('LEETCODE_SESSION_EXPIRED')) {
+        setSyncStatus('expired');
+        showNotification('⚠️ LeetCode session expired — update cookies on Render (CF may still sync)', 'error');
+      } else {
+        setSyncStatus('ok');
       }
-      setSyncStatus('ok');
-      // Refresh problems + streak + recent/today from DB after sync
-      const [probRes, recentTodayRes, streakRes] = await Promise.allSettled([
+
+      // Refetch after sync — do NOT clear state first (prevents flicker)
+      const [probRes, recentTodayRes, streakRes, contestRes] = await Promise.allSettled([
         window.API.getAllProblems(),
         window.API.getRecentAndToday(),
         window.API.getStreak(),
+        window.API.getContestStats(),
       ]);
       if (probRes.status === 'fulfilled' && probRes.value.success)
         setApiProblems(transformProblems(probRes.value.data));
@@ -1565,12 +1594,10 @@ function App() {
       }
       if (streakRes.status === 'fulfilled' && streakRes.value.success)
         setDbStreak(streakRes.value.data);
-      showNotification(
-        result.added > 0
-          ? `✅ Sync complete — ${result.added} new problem${result.added === 1 ? '' : 's'} added`
-          : '✅ Sync complete — already up to date',
-        'success'
-      );
+      if (contestRes.status === 'fulfilled' && contestRes.value.success)
+        setContestStats(contestRes.value.data);
+
+      showNotification('✅ Sync All complete', 'success');
     } catch (err) {
       showNotification(`❌ Network error: ${err.message}`, 'error');
     } finally {
@@ -2008,27 +2035,7 @@ function App() {
     }
   };
 
-  // ── Codeforces Sync Handler ──────────────────────────────────────────────
-  const handleCFSync = async () => {
-    if (cfSyncing) return;
-    requireAdmin(async () => {
-      setCfSyncing(true);
-      try {
-        const result = await window.API.syncCodeforces();
-        showNotification(
-          `✅ CF Sync: ${result.inserted} new, ${result.totalCFInDB} total CF problems`,
-          'success'
-        );
-        // Refresh problem list
-        const probRes = await window.API.getAllProblems();
-        if (probRes.success) setApiProblems(transformProblems(probRes.data));
-      } catch (err) {
-        showNotification(`❌ CF Sync failed: ${err.message}`, 'error');
-      } finally {
-        setCfSyncing(false);
-      }
-    });
-  };
+  // NOTE: Codeforces sync is unified into Sync All.
 
   const handleClearAllFilters = () => {
     const filterInputs = document.querySelectorAll('.filter-input, .filter-select');
@@ -2071,6 +2078,7 @@ function App() {
 
   // ── Derived: striver stats — always computed from apiProblems, never stored in state ──
   const striverStats = React.useMemo(() => computeStriverStats(apiProblems), [apiProblems]);
+  const tleStats = React.useMemo(() => computeTLEStats(apiProblems), [apiProblems]);
 
   const totalSolved = allProblems.filter(p => p.status === 'Done').length;
   const totalProblems = allProblems.length;
@@ -2483,6 +2491,11 @@ function App() {
   // Filters
   const patterns = ['All', ...new Set(allProblems.map(p => p.pattern))].sort();
 
+  // Reset CF sheet mode when leaving CF
+  useEffect(() => {
+    if (platformFilter !== 'CF' && cfSheetMode !== 'ALL') setCfSheetMode('ALL');
+  }, [platformFilter, cfSheetMode]);
+
   const filteredProblems = React.useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase();
     return allProblems.filter(problem => {
@@ -2530,16 +2543,16 @@ function App() {
 
       // CF TLE Mode filter
       const matchesTLE =
-        platformFilter !== 'CF' || 
-        difficultyFilter !== 'TLE' ||
+        platformFilter !== 'CF' ||
+        cfSheetMode !== 'TLE' ||
         (
-          (problem.rawDifficulty >= 1200 && problem.rawDifficulty <= 1800) ||
-          (Array.isArray(problem.topics) && problem.topics.some(t => ['dp', 'graphs', 'greedy', 'binary search', 'math'].includes(t.toLowerCase())))
+          (Number(problem.rawDifficulty || problem.rating) >= 1200 && Number(problem.rawDifficulty || problem.rating) <= 1800) ||
+          (Array.isArray(problem.topics) && problem.topics.some(t => ['dp', 'graphs', 'greedy', 'binary search'].includes(t.toLowerCase())))
         );
 
       return matchesSearch && matchesDifficulty && matchesPattern && matchesStatus && matchesSelectedFilter && matchesPlatform && matchesTLE;
     });
-  }, [allProblems, debouncedSearch, difficultyFilter, patternFilter, statusFilter, selectedFilter, platformFilter]);
+  }, [allProblems, debouncedSearch, difficultyFilter, patternFilter, statusFilter, selectedFilter, platformFilter, cfSheetMode]);
 
   // Animate table count when filtered problems change
   useEffect(() => {
@@ -2741,26 +2754,12 @@ function App() {
                 className="btn-sync-lc"
                 onClick={handleSyncLeetCode}
                 disabled={syncing}
-                title="Sync recent accepted submissions from LeetCode"
+                title="Sync LeetCode + Codeforces (problems + contest stats)"
               >
                 {syncing ? (
                   <><span className="sync-spinner">⟳</span> Syncing...</>
                 ) : (
-                  <>🔄 Sync LeetCode</>
-                )}
-              </button>
-
-              <button
-                className="btn-sync-lc"
-                onClick={handleCFSync}
-                disabled={cfSyncing}
-                title="Sync Codeforces problems"
-                style={{ marginLeft: '8px' }}
-              >
-                {cfSyncing ? (
-                  <><span className="sync-spinner">⟳</span> Syncing...</>
-                ) : (
-                  <>🔄 Sync CF</>
+                  <>🔄 Sync All</>
                 )}
               </button>
 
@@ -3132,6 +3131,9 @@ function App() {
                 )}
               </div>
             </div>
+
+            {/* Contest Stats — placed at top near core KPIs */}
+            <ContestStats stats={contestStats} />
           </div>
 
           {/* Striver Progress Card — ABOVE Needs Revision */}
@@ -3163,6 +3165,38 @@ function App() {
               <div className="striver-empty">Click 📘 on any problem in the table to mark it as Striver</div>
             )}
           </div>
+
+          {/* TLE Sheet Progress (Codeforces) */}
+          {platformFilter === 'CF' && (
+            <div className="analytics-card striver-card fade-up fade-up-4">
+              <h3 className="card-title">🏆 TLE Sheet Progress</h3>
+              <div className="striver-stats">
+                <div className="striver-stat-row">
+                  <span className="striver-dot easy"></span>
+                  <span className="striver-label">Easy</span>
+                  <span className="striver-value">{tleStats.easy}</span>
+                </div>
+                <div className="striver-stat-row">
+                  <span className="striver-dot medium"></span>
+                  <span className="striver-label">Medium</span>
+                  <span className="striver-value">{tleStats.medium}</span>
+                </div>
+                <div className="striver-stat-row">
+                  <span className="striver-dot hard"></span>
+                  <span className="striver-label">Hard</span>
+                  <span className="striver-value">{tleStats.hard}</span>
+                </div>
+                <div className="striver-stat-row striver-total-row">
+                  <span className="striver-dot total"></span>
+                  <span className="striver-label">Solved / Sheet</span>
+                  <span className="striver-value striver-total">{tleStats.total}/{tleStats.totalInSheet}</span>
+                </div>
+              </div>
+              {tleStats.totalInSheet === 0 && (
+                <div className="striver-empty">No CF problems match the TLE Sheet filter yet.</div>
+              )}
+            </div>
+          )}
 
           {/* Needs Revision — Spaced Repetition Queue */}
           {(() => {
@@ -3635,7 +3669,6 @@ function App() {
           {/* Visualizations */}
           <div className="analytics-grid" style={{ marginTop: 16 }}>
             <WeaknessRadar problems={allProblems} />
-            <ContestStats stats={contestStats} />
           </div>
 
           {/* Filters */}
@@ -3677,6 +3710,35 @@ function App() {
               </button>
             ))}
           </div>
+
+          {/* CF Sheet Toggle */}
+          {platformFilter === 'CF' && (
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+              {[
+                { key: 'ALL', label: 'All' },
+                { key: 'TLE', label: 'TLE Sheet' },
+              ].map(t => (
+                <button
+                  key={t.key}
+                  className={`platform-tab-btn${cfSheetMode === t.key ? ' active' : ''}`}
+                  onClick={() => setCfSheetMode(t.key)}
+                  style={{
+                    padding: '8px 18px',
+                    borderRadius: '10px',
+                    border: cfSheetMode === t.key ? '1.5px solid var(--primary)' : '1.5px solid var(--border)',
+                    background: cfSheetMode === t.key ? 'rgba(99,102,241,0.15)' : 'var(--bg-tertiary)',
+                    color: cfSheetMode === t.key ? 'var(--primary)' : 'var(--text-secondary)',
+                    fontWeight: cfSheetMode === t.key ? 700 : 500,
+                    fontSize: '0.85rem',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          )}
 
           <div className="filters-card">
             <div className="filters-grid">

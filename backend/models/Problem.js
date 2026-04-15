@@ -4,13 +4,19 @@ const mongoose = require('mongoose');
 const problemSchema = new mongoose.Schema(
   {
     // ── Platform Support ──────────────────────────────────────────────────
-    // id: String format - "LC-1" for LeetCode, "CF-123A" for Codeforces or "CF-123-A"
-    id: { type: String, required: true, unique: true },
+    // uniqueId: canonical cross-platform identity
+    // Examples: "LC-1", "CF-1700A"
+    // NOTE: this replaces legacy `id` as the stable key.
+    uniqueId: { type: String, required: true, unique: true, index: true },
+    // id: legacy alias kept for backwards compatibility (will mirror uniqueId)
+    id: { type: String, required: true, index: true },
     // platform: 'LC' | 'CF' | future platforms
     platform: { type: String, enum: ['LC', 'CF'], default: 'LC', required: true, index: true },
     // Codeforces explicit references
     contestId: { type: Number, default: null },
     index: { type: String, default: null },
+    // rating: Codeforces rating (e.g. 800..3500)
+    rating: { type: Number, default: null },
     // problemIdNum: numeric ID for stable numeric sorting (especially LeetCode)
     problemIdNum: { type: Number, default: null, index: true },
     // rawDifficulty: original difficulty value (rating for CF, string for LC)
@@ -71,6 +77,7 @@ problemSchema.index({ nextRevisionAt: 1 });
 problemSchema.index({ solved: 1 });
 problemSchema.index({ topics: 1 });
 problemSchema.index({ platform: 1, difficultyRating: 1 });
+problemSchema.index({ uniqueId: 1 }, { unique: true });
 
 // ── Global Filters ───────────────────────────────────────────────────────────
 problemSchema.pre(/^find/, function() {
@@ -79,6 +86,23 @@ problemSchema.pre(/^find/, function() {
 
 problemSchema.pre('countDocuments', function() {
   this.where({ isDeleted: { $ne: true } });
+});
+
+// ── Invariants ───────────────────────────────────────────────────────────────
+// 1) `id` always mirrors `uniqueId` (legacy compatibility)
+// 2) If `solved === true`, `solvedDate` MUST be a valid Date (never null)
+problemSchema.pre('validate', function(next) {
+  if (this.uniqueId && (!this.id || this.id !== this.uniqueId)) {
+    this.id = this.uniqueId;
+  }
+
+  if (this.solved === true) {
+    if (!this.solvedDate) {
+      // Use lastSubmittedAt if available; otherwise now.
+      this.solvedDate = this.lastSubmittedAt || this.submittedAt || new Date();
+    }
+  }
+  next();
 });
 
 module.exports = mongoose.model('Problem', problemSchema);

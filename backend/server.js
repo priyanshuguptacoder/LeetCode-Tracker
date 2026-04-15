@@ -16,9 +16,14 @@ function validateEnv() {
 }
 validateEnv();
 
+// ─── Database Connection Logging ─────────────────────────────────────────────
+const maskedUri = process.env.MONGO_URI?.replace(/\/\/([^:]+):[^@]+@/, '//***:***@') || 'not-set';
+console.log('[DB] Mongo URI:', maskedUri);
+
 const problemRoutes     = require('./routes/problems');
 const leetcodeRoutes    = require('./routes/leetcode');
 const codeforcesRoutes  = require('./routes/codeforces');
+const syncRoutes       = require('./routes/sync');
 const debugRoutes       = require('./routes/debug');
 const analyticsRoutes   = require('./routes/analytics');
 const revisionRoutes    = require('./routes/revision');
@@ -77,6 +82,7 @@ app.use((req, res, next) => {
 app.use('/api/problems',     problemRoutes);
 app.use('/api/problem',      leetcodeRoutes);
 app.use('/api/codeforces',   codeforcesRoutes);
+app.use('/api/sync',         syncRoutes);
 app.use('/api',              debugRoutes);
 app.use('/api/analytics',    analyticsRoutes);
 app.use('/api/revision',     revisionRoutes);
@@ -132,20 +138,69 @@ mongoose
   .connect(process.env.MONGO_URI)
   .then(async () => {
     console.log('[INIT] MongoDB connected');
-
-    // One-time backfill: copy solvedDate → lastSubmittedAt for problems missing it
+    
+    // ─── VERIFY DATA EXISTS ──────────────────────────────────────────────────
     try {
       const Problem = require('./models/Problem');
-      const subset = await Problem.find({ solved: true, solvedDate: { $ne: null }, lastSubmittedAt: null });
-      if (subset.length > 0) {
-        await Promise.all(subset.map(doc => {
-          doc.lastSubmittedAt = doc.solvedDate;
-          return doc.save();
-        }));
-        console.log(`[BACKFILL] Parallel-set lastSubmittedAt on ${subset.length} problems`);
+      const count = await Problem.countDocuments();
+      console.log('[COUNT] Problems in database:', count);
+      if (count === 0) {
+        console.warn('[WARN] Database appears empty — check MONGO_URI is correct');
       }
     } catch (e) {
-      console.warn('[BACKFILL] Parallel backfill failed:', e.message);
+      console.error('[COUNT] Failed to count problems:', e.message);
+    }
+
+    // Startup backfill: ensure solved problems always have both solvedDate and lastSubmittedAt
+    try {
+      const Problem = require('./models/Problem');
+
+      // Direction 1: solvedDate exists but lastSubmittedAt is null → copy solvedDate → lastSubmittedAt
+      const missingLast = await Problem.find({ solved: true, solvedDate: { $ne: null }, lastSubmittedAt: null }).lean();
+      if (missingLast.length > 0) {
+        await Problem.bulkWrite(missingLast.map(doc => ({
+          updateOne: {
+            filter: { _id: doc._id },
+            update: { $set: { lastSubmittedAt: doc.solvedDate } },
+          },
+        })));
+        console.log(`[BACKFILL] Set lastSubmittedAt on ${missingLast.length} problems`);
+      }
+
+      // Direction 2: solved=true but solvedDate is null → copy lastSubmittedAt → solvedDate (CRITICAL)
+      const missingSolved = await Problem.find({
+        solved: true,
+        solvedDate: null,
+        lastSubmittedAt: { $ne: null },
+      }).lean();
+      if (missingSolved.length > 0) {
+        await Problem.bulkWrite(missingSolved.map(doc => ({
+          updateOne: {
+            filter: { _id: doc._id },
+            update: { $set: { solvedDate: doc.lastSubmittedAt } },
+          },
+        })));
+        console.log(`[BACKFILL] Set solvedDate on ${missingSolved.length} problems (was null)`);
+      }
+
+      // Direction 3: solved=true but BOTH dates are null → use now as fallback
+      const bothNull = await Problem.find({
+        solved: true,
+        solvedDate: null,
+        $or: [{ lastSubmittedAt: null }, { lastSubmittedAt: { $exists: false } }],
+      }).lean();
+      if (bothNull.length > 0) {
+        const now = new Date();
+        await Problem.bulkWrite(bothNull.map(doc => ({
+          updateOne: {
+            filter: { _id: doc._id },
+            update: { $set: { solvedDate: now, lastSubmittedAt: now } },
+          },
+        })));
+        console.warn(`[BACKFILL] Set solvedDate=now on ${bothNull.length} problems (both dates were null)`);
+      }
+    } catch (e) {
+      console.warn('[BACKFILL] Date backfill failed:', e.message);
     }
 
     // Backfill: set isDeleted=false on all existing docs that predate the soft-delete field

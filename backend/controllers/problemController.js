@@ -13,10 +13,23 @@ function todayUTCKey() { return getUTCDayKey(new Date()); }
 // When provided, streak is computed from calendar (matches LeetCode exactly).
 // When null, falls back to problem solvedDates from DB.
 async function rebuildStreak(calendarDates = null) {
-  const problems = await Problem.find(
-    { solved: true, isDeleted: { $ne: true }, solvedDate: { $ne: null } },
-    { solvedDate: 1 }
+  const rawProblems = await Problem.find(
+    {
+      solved: true,
+      isDeleted: { $ne: true },
+      $or: [
+        { solvedDate: { $ne: null } },
+        { lastSubmittedAt: { $ne: null } },
+      ],
+    },
+    { solvedDate: 1, lastSubmittedAt: 1 }
   ).lean();
+
+  // Normalize: use lastSubmittedAt as fallback if solvedDate is null
+  const problems = rawProblems.map(p => ({
+    ...p,
+    solvedDate: p.solvedDate || p.lastSubmittedAt,
+  }));
 
   // If no calendarDates passed in, check if we have stored ones in Settings
   let effectiveCalendarDates = calendarDates;
@@ -78,19 +91,36 @@ function streakPayload(stats) {
 // ─── GET /api/problems/streak ─────────────────────────────────────────────────
 exports.getStreak = async (req, res) => {
   try {
-    const [problems, settings] = await Promise.all([
+    const [rawProblems, settings] = await Promise.all([
       Problem.find(
-        { solved: true, isDeleted: { $ne: true }, solvedDate: { $ne: null } },
-        { solvedDate: 1 }
+        {
+          solved: true,
+          isDeleted: { $ne: true },
+          $or: [
+            { solvedDate: { $ne: null } },
+            { lastSubmittedAt: { $ne: null } },
+          ],
+        },
+        { solvedDate: 1, lastSubmittedAt: 1 }
       ).lean(),
       Settings.findOne({ key: 'global' }, { submissionCalendarDates: 1 }).lean(),
     ]);
+
+    // Normalize: use lastSubmittedAt as fallback if solvedDate is null
+    const problems = rawProblems.map(p => ({
+      ...p,
+      solvedDate: p.solvedDate || p.lastSubmittedAt,
+    }));
 
     const calendarDates = settings?.submissionCalendarDates?.length > 0
       ? settings.submissionCalendarDates
       : null;
 
     const stats = computeStats(problems, calendarDates);
+
+    // Debug log
+    console.log('[STREAK] count:', problems.length, '| currentStreak:', stats.currentStreak, '| activeDays:', stats.activeDays);
+
     if (!stats.isValid) {
       return res.status(500).json({ success: false, error: 'Stats invariant violation', errors: stats.errors });
     }
@@ -103,8 +133,8 @@ exports.getStreak = async (req, res) => {
 // ─── GET /api/problems ────────────────────────────────────────────────────────
 // Query params: ?platform=LC | ?platform=CF | ?platform=ALL (default: ALL)
 exports.getAllProblems = async (req, res) => {
-  const { platform = 'LC', page, limit, sort = 'recent' } = req.query;
-  console.log(`[DEBUG] platform: ${platform}, sort: ${sort}, page: ${page}, limit: ${limit}`);
+  const { platform = 'ALL', page, limit, sort = 'recent' } = req.query;
+  console.log(`[DEBUG] getAllProblems platform: ${platform}, sort: ${sort}`);
 
   try {
     const p = page ? parseInt(page, 10) || 1 : 1;
@@ -149,6 +179,7 @@ exports.getAllProblems = async (req, res) => {
               999999
             ]
           },
+          index: { $ifNull: ['$index', ''] },
           // Ensure safe defaults for other fields
           title: { $ifNull: ['$title', 'Untitled Problem'] },
           difficulty: { $ifNull: ['$difficulty', 'Medium'] },
@@ -216,13 +247,13 @@ exports.getProblem = async (req, res) => {
     let problem;
     
     // Try finding by exact ID first (new string format)
-    problem = await Problem.findOne({ id: idParam, isDeleted: { $ne: true } });
+    problem = await Problem.findOne({ $or: [{ uniqueId: idParam }, { id: idParam }], isDeleted: { $ne: true } });
     
     // Fallback: try parsing as number for old LeetCode IDs
     if (!problem) {
       const numericId = parseInt(idParam, 10);
       if (!isNaN(numericId)) {
-        problem = await Problem.findOne({ id: numericId, isDeleted: { $ne: true } });
+        problem = await Problem.findOne({ $or: [{ uniqueId: `LC-${numericId}` }, { id: `LC-${numericId}` }], isDeleted: { $ne: true } });
       }
     }
     
@@ -254,10 +285,13 @@ exports.createProblem = async (req, res) => {
     }
     
     // Format ID based on platform (e.g., 'LC-1' or 'CF-123A')
-    const formattedId = id.toString().startsWith(platform) ? id : `${platform}-${id}`;
+    const formattedId = id.toString().toUpperCase().startsWith(platform.toUpperCase())
+      ? id.toString()
+      : `${platform.toUpperCase()}-${id}`;
+    const uniqueId = formattedId;
     
     // Check including soft-deleted — if deleted, block re-creation (user intent lock)
-    const exists = await Problem.findOne({ id: formattedId });
+    const exists = await Problem.findOne({ uniqueId });
     if (exists && exists.isDeleted) {
       return res.status(409).json({ success: false, error: `Problem ${formattedId} was previously deleted. Deletion is permanent.` });
     }
@@ -289,7 +323,8 @@ exports.createProblem = async (req, res) => {
     const problemIdNum = numericExtract ? parseInt(numericExtract[0], 10) : null;
 
     const problem = await Problem.create({
-      id: formattedId,
+      uniqueId,
+      id: uniqueId,
       problemIdNum,
       platform: platform.toUpperCase(),
       title,
@@ -348,21 +383,21 @@ exports.updateProblem = async (req, res) => {
     if (updates.leetcodeLink && !updates.platformLink) updates.platformLink = updates.leetcodeLink;
 
     // Find problem by ID (try string first, then numeric fallback)
-    let before = await Problem.findOne({ id: idParam });
+    let before = await Problem.findOne({ $or: [{ uniqueId: idParam }, { id: idParam }] });
     if (!before) {
       const numericId = parseInt(idParam, 10);
       if (!isNaN(numericId)) {
-        before = await Problem.findOne({ id: numericId });
+        before = await Problem.findOne({ $or: [{ uniqueId: `LC-${numericId}` }, { id: `LC-${numericId}` }] });
       }
     }
     
     if (!before) return res.status(404).json({ success: false, error: 'Problem not found' });
     if (before.isDeleted) return res.status(410).json({ success: false, error: 'Problem was deleted and cannot be modified' });
 
-    const searchId = before.id; // Use the actual ID from the found document
+    const searchUniqueId = before.uniqueId || before.id; // stable key
 
     const problem = await Problem.findOneAndUpdate(
-      { id: searchId }, updates, { returnDocument: 'after', runValidators: true }
+      { uniqueId: searchUniqueId }, updates, { returnDocument: 'after', runValidators: true }
     );
 
     let streakData = null;
@@ -379,11 +414,11 @@ exports.updateProblem = async (req, res) => {
 
 // Helper: Find problem by ID (supports both string and numeric)
 async function findProblemById(idParam) {
-  let problem = await Problem.findOne({ id: idParam });
+  let problem = await Problem.findOne({ $or: [{ uniqueId: idParam }, { id: idParam }] });
   if (!problem) {
     const numericId = parseInt(idParam, 10);
     if (!isNaN(numericId)) {
-      problem = await Problem.findOne({ id: numericId });
+      problem = await Problem.findOne({ $or: [{ uniqueId: `LC-${numericId}` }, { id: `LC-${numericId}` }] });
     }
   }
   return problem;

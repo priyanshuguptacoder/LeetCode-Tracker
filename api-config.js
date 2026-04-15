@@ -14,8 +14,12 @@ const API_BASE_URL = isLocalhost ? LOCAL_API_URL : PRODUCTION_API_URL;
 
 // ─── API ─────────────────────────────────────────────────────────────────────
 const api = {
-  getAllProblems: async (platform = 'ALL') => {
-    const params = `?platform=${platform}`;
+  getAllProblems: async (opts = {}) => {
+    // Accept either a plain string (legacy) or an options object { platform, sort }
+    const platform = (typeof opts === 'string' ? opts : opts.platform) || 'ALL';
+    const sort     = (typeof opts === 'object' && opts.sort) ? opts.sort : 'recent';
+    const params   = `?platform=${platform}&sort=${sort}`;
+    console.log('[API] getAllProblems', params, '→', `${API_BASE_URL}/problems${params}`);
     const r = await fetch(`${API_BASE_URL}/problems${params}`);
     if (!r.ok) throw new Error('Failed to fetch problems');
     return r.json();
@@ -106,6 +110,15 @@ const api = {
     if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Sync failed'); }
     return r.json();
   },
+  syncAll: async () => {
+    const r = await fetch(`${API_BASE_URL}/sync/all`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || e.message || 'Sync all failed'); }
+    return r.json();
+  },
   syncCalendar: async () => {
     const r = await fetch(`${API_BASE_URL}/problem/sync/calendar`, { method: 'POST' });
     if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Calendar sync failed'); }
@@ -172,3 +185,4 @@ const api = {
 
 window.API = api;
 window.API_BASE_URL = API_BASE_URL;
+console.log('[API] Base URL:', API_BASE_URL);

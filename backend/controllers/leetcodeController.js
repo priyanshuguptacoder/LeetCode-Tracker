@@ -231,10 +231,12 @@ function calculateNextRevision(fromDate, revisionCount) {
 }
 
 async function syncToProblemCollection(sub) {
-  const existing = await Problem.findOne({ id: sub.problemId });
+  // Canonical unified identity
+  const problemIdNum = Number(sub.problemId);
+  const uniqueId = `LC-${problemIdNum}`;
+  const existing = await Problem.findOne({ uniqueId });
 
   // Extract numeric ID for sorting - CRITICAL for numeric ordering
-  const problemIdNum = Number(sub.problemId);
 
   const update = {
     $set: {
@@ -247,21 +249,26 @@ async function syncToProblemCollection(sub) {
       providerTitle:   'LeetCode',
       platform:        'LC',
       problemIdNum:    problemIdNum,     // ENSURE numeric field for sorting
+      uniqueId,
+      id: uniqueId,
       ...(sub.notes && { notes: sub.notes }),
     },
   };
 
   // Apply solved fields if new doc OR previously unsolved (e.g. Targeted problems)
   if (!existing || !existing.solved) {
-    update.$set.solved        = true;
-    update.$set.solvedDate    = sub.dateSolved;
+    update.$set.solved         = true;
+    update.$set.solvedDate     = sub.dateSolved;
     update.$set.nextRevisionAt = calculateNextRevision(sub.dateSolved, 0);
-    update.$set.revisionCount = 0;
-    update.$set.confidence    = 3;
+    update.$set.revisionCount  = 0;
+    update.$set.confidence     = 3;
+  } else if (existing.solved && !existing.solvedDate) {
+    // Existing doc is solved but solvedDate is null — backfill it (NEVER overwrite if already set)
+    update.$set.solvedDate = sub.dateSolved || existing.lastSubmittedAt || new Date();
   }
 
   await Problem.findOneAndUpdate(
-    { id: sub.problemId },
+    { uniqueId },
     update,
     { upsert: true, new: true }
   );
@@ -525,6 +532,15 @@ async function syncRecentSubmissions() {
           console.log(`[SYNC SKIP — INTENT LOCK] ${slug} — user deleted this problem`);
           skipped++;
           continue;
+        }
+        // Repair: if existing solved problem is missing solvedDate, backfill it now
+        if (existingProblem.solved && !existingProblem.solvedDate) {
+          const fallbackDate = existingProblem.lastSubmittedAt || sub.timestamp || new Date();
+          await Problem.updateOne(
+            { _id: existingProblem._id },
+            { $set: { solvedDate: fallbackDate } }
+          );
+          console.log(`[SYNC REPAIR] solvedDate backfilled for ${slug}`);
         }
         console.log(`[SYNC SKIPPED] ${slug} — already in DB`);
         skipped++;
@@ -855,11 +871,11 @@ exports.getRecentProblems = async (req, res) => {
     const problems = await Problem.find({
       solved: true,
       isDeleted: { $ne: true },
-      lastSubmittedAt: { $ne: null },
+      solvedDate: { $ne: null },
     })
-      .sort({ lastSubmittedAt: -1, _id: -1 })
-      .limit(9)
-      .select('id title difficulty topics leetcodeLink lastSubmittedAt solvedDate')
+      .sort({ solvedDate: -1, _id: -1 })
+      .limit(15)
+      .select('uniqueId id title difficulty topics platform leetcodeLink platformLink lastSubmittedAt solvedDate')
       .lean();
     res.json({ success: true, data: Array.isArray(problems) ? problems : [] });
   } catch (err) {
@@ -893,17 +909,28 @@ exports.getRecentAndToday = async (req, res) => {
     const now           = new Date();
     const startOfDayUTC = getUTCDayStart(now);
     const endOfDayUTC   = getUTCDayEnd(now);
-    const SELECT = 'id title difficulty topics leetcodeLink lastSubmittedAt solvedDate revisionCount lastRevisedAt isStriver targeted targetedAt needsRevision';
+    const SELECT = 'uniqueId id title difficulty topics platform leetcodeLink platformLink lastSubmittedAt solvedDate revisionCount lastRevisedAt isStriver targeted targetedAt needsRevision';
 
     const [recentSolved, todaySolved] = await Promise.all([
-      Problem.find({ solved: true, isDeleted: { $ne: true }, lastSubmittedAt: { $ne: null } })
-        .sort({ lastSubmittedAt: -1 })
-        .limit(9)
+      Problem.find({
+        solved: true,
+        isDeleted: { $ne: true },
+        $or: [{ solvedDate: { $ne: null } }, { lastSubmittedAt: { $ne: null } }],
+      })
+        .sort({ solvedDate: -1, lastSubmittedAt: -1 })
+        .limit(15)
         .select(SELECT)
         .lean(),
 
-      Problem.find({ solved: true, isDeleted: { $ne: true }, lastSubmittedAt: { $gte: startOfDayUTC, $lte: endOfDayUTC } })
-        .sort({ lastSubmittedAt: -1 })
+      Problem.find({
+        solved: true,
+        isDeleted: { $ne: true },
+        $or: [
+          { solvedDate: { $gte: startOfDayUTC, $lte: endOfDayUTC } },
+          { lastSubmittedAt: { $gte: startOfDayUTC, $lte: endOfDayUTC } },
+        ],
+      })
+        .sort({ solvedDate: -1, lastSubmittedAt: -1 })
         .select(SELECT)
         .lean(),
     ]);

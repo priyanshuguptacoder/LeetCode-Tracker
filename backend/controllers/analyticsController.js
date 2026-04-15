@@ -6,19 +6,35 @@ const { computeStats } = require('../utils/statsEngine');
 // Includes BOTH LC and CF platforms
 exports.getStreak = async (req, res) => {
   try {
+    const debugCount = await Problem.countDocuments({ solved: true, isDeleted: { $ne: true } });
+    console.log('[DEBUG] solved count:', debugCount);
+
     const [problems, settings] = await Promise.all([
       Problem.find(
-        { solved: true, isDeleted: { $ne: true }, solvedDate: { $ne: null } },
-        { solvedDate: 1, platform: 1 }
+        {
+          solved: true,
+          isDeleted: { $ne: true },
+          $or: [
+            { solvedDate: { $ne: null } },
+            { lastSubmittedAt: { $ne: null } },
+          ],
+        },
+        { solvedDate: 1, lastSubmittedAt: 1, platform: 1 }
       ).lean(),
       Settings.findOne({ key: 'global' }, { submissionCalendarDates: 1 }).lean(),
     ]);
+
+    // Normalize: use lastSubmittedAt as fallback if solvedDate is null
+    const normalized = problems.map(p => ({
+      ...p,
+      solvedDate: p.solvedDate || p.lastSubmittedAt,
+    }));
 
     const calendarDates = settings?.submissionCalendarDates?.length > 0
       ? settings.submissionCalendarDates
       : null;
 
-    const stats = computeStats(problems, calendarDates);
+    const stats = computeStats(normalized, calendarDates);
 
     // Debug log — visible in Render logs to diagnose streak issues
     const yesterdayUTC = new Date(Date.now() - 86400000).toISOString().split('T')[0];
@@ -58,7 +74,10 @@ exports.getRecentlySolved = async (req, res) => {
     const problems = await Problem.find({
       solved: true,
       isDeleted: { $ne: true },
-      solvedDate: { $ne: null },
+      $or: [
+        { solvedDate: { $ne: null } },
+        { lastSubmittedAt: { $ne: null } },
+      ],
       ...platformFilter
     })
       .sort({ solvedDate: -1 })
@@ -85,9 +104,17 @@ exports.getRecentlySolved = async (req, res) => {
 // GET /api/analytics/by-platform — returns stats grouped by platform
 exports.getByPlatform = async (req, res) => {
   try {
-    // Base condition: solvedDate exists (unified with all analytics)
     const stats = await Problem.aggregate([
-      { $match: { solved: true, isDeleted: { $ne: true }, solvedDate: { $ne: null } } },
+      {
+        $match: {
+          solved: true,
+          isDeleted: { $ne: true },
+          $or: [
+            { solvedDate: { $ne: null } },
+            { lastSubmittedAt: { $ne: null } },
+          ],
+        },
+      },
       {
         $group: {
           _id: '$platform',
@@ -158,27 +185,17 @@ exports.getContestStats = async (req, res) => {
     const Settings = require('../models/Settings');
     const settings = await Settings.findOne({ key: 'global' }).lean();
 
-    // SAFE EXTRACTION: All values default to null if missing
-    const contestStats = {
-      leetcode: {
-        rating: settings?.lcRating ?? null,
-        contestCount: settings?.lcContestCount ?? null,
-        globalRank: settings?.lcGlobalRank ?? null,
-        updatedAt: settings?.lcContestUpdatedAt ?? null,
-      },
-      codeforces: {
-        rating: settings?.cfRating ?? null,
-        maxRating: settings?.cfMaxRating ?? null,
-        rank: settings?.cfRank ?? null,
-        maxRank: settings?.cfMaxRank ?? null,
-        contestCount: settings?.cfContestCount ?? null,
-        updatedAt: settings?.cfContestUpdatedAt ?? null,
-      },
-    };
-
     res.json({
       success: true,
-      data: contestStats,
+      data: {
+        lcRating: settings?.lcRating ?? null,
+        lcContestCount: settings?.lcContestCount ?? null,
+        lcGlobalRank: settings?.lcGlobalRank ?? null,
+        cfRating: settings?.cfRating ?? null,
+        cfMaxRating: settings?.cfMaxRating ?? null,
+        cfRank: settings?.cfRank ?? null,
+        cfContestCount: settings?.cfContestCount ?? null,
+      },
     });
   } catch (err) {
     // SAFE FALLBACK: Return nulls on error
@@ -186,8 +203,13 @@ exports.getContestStats = async (req, res) => {
       success: false,
       error: err.message,
       data: {
-        leetcode: { rating: null, contestCount: null, globalRank: null, updatedAt: null },
-        codeforces: { rating: null, maxRating: null, rank: null, maxRank: null, contestCount: null, updatedAt: null },
+        lcRating: null,
+        lcContestCount: null,
+        lcGlobalRank: null,
+        cfRating: null,
+        cfMaxRating: null,
+        cfRank: null,
+        cfContestCount: null,
       },
     });
   }

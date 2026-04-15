@@ -2,6 +2,7 @@ const { syncCodeforcesProblems } = require('../services/codeforcesService');
 const { getSyncLock } = require('../controllers/codeforcesController');
 const Problem = require('../models/Problem');
 const Submission = require('../models/Submission');
+const { upsertSolvedProblem } = require('../services/problemUpsertService');
 
 /**
  * Background Task: Sync Codeforces Submissions
@@ -23,49 +24,36 @@ async function runAutoSync() {
   const startTime = Date.now();
 
   try {
-    const { insertable } = await syncCodeforcesProblems(handle);
-    
-    if (insertable.length > 0) {
-      const problemOps = insertable.map(p => ({
-        updateOne: {
-          filter: { id: p.id },
-          update: { $setOnInsert: p },
-          upsert: true,
-        },
-      }));
+    const syncResult = await syncCodeforcesProblems(handle);
+    const problems = Array.isArray(syncResult?.problems) ? syncResult.problems : [];
 
-      const submissionOps = insertable.map(p => ({
-        updateOne: {
-          filter: { problemId: p.id },
-          update: {
-            $setOnInsert: {
-              problemId: p.id,
-              platform: 'CF',
-              slug: p.id.toLowerCase(),
-              title: p.title,
-              difficulty: p.difficulty,
-              tags: p.tags,
-              link: p.platformLink,
-              dateSolved: p.solvedDate,
-              first_solved_at: p.solvedDate,
-              last_updated_at: p.solvedDate,
-              sources: ['api'],
-              isDeleted: false
-            }
-          },
-          upsert: true
-        }
-      }));
+    let inserted = 0, updated = 0, skippedOlder = 0, skippedDeleted = 0, errors = 0;
 
-      const [pRes, sRes] = await Promise.all([
-        Problem.bulkWrite(problemOps, { ordered: false }),
-        Submission.bulkWrite(submissionOps, { ordered: false })
-      ]);
-
-      console.log(`[CRON] Sync success: ${pRes.upsertedCount} new problems, ${sRes.upsertedCount} new submissions`);
-    } else {
-      console.log('[CRON] Sync complete: No new submissions found');
+    for (const p of problems) {
+      try {
+        const r = await upsertSolvedProblem({
+          uniqueId: p.uniqueId,
+          platform: 'CF',
+          title: p.title,
+          difficulty: p.difficulty,
+          topics: p.tags || [],
+          platformLink: p.platformLink,
+          contestId: p.contestId,
+          index: p.index,
+          rating: p.rating,
+          lastSubmittedAt: p.lastSubmittedAt,
+          solvedDate: p.solvedDate,
+        });
+        if (r.action === 'inserted') inserted++;
+        else if (r.action === 'updated') updated++;
+        else if (r.action === 'skipped_older') skippedOlder++;
+        else if (r.action === 'skipped_deleted') skippedDeleted++;
+      } catch (_) {
+        errors++;
+      }
     }
+
+    console.log(`[CRON] Sync finished: inserted=${inserted} updated=${updated} skippedOlder=${skippedOlder} skippedDeleted=${skippedDeleted} errors=${errors}`);
   } catch (err) {
     console.error(`[CRON] Sync failed: ${err.message}`);
   } finally {

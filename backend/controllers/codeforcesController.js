@@ -8,8 +8,8 @@ const Submission = require('../models/Submission');
 const {
   syncCodeforcesProblems,
   fetchUserInfo,
-  filterNewProblems,
 } = require('../services/codeforcesService');
+const { upsertSolvedProblem } = require('../services/problemUpsertService');
 
 let syncLock = false;
 let lastSyncTime = 0;
@@ -48,78 +48,45 @@ exports.syncCodeforces = async (req, res) => {
       return res.status(502).json({ success: false, error: syncResult.error });
     }
 
-    // 2. Find existing CF problems in DB to avoid duplicates
-    const existingProblems = await Problem.find(
-      { platform: 'CF', isDeleted: { $ne: true } },
-      { id: 1 }
-    ).lean();
-
-    const newProblems = filterNewProblems(syncResult.problems, existingProblems);
-
-    // 3. Also check soft-deleted problems — respect user intent lock
-    const deletedProblems = await Problem.find(
-      { platform: 'CF', isDeleted: true },
-      { id: 1 }
-    ).lean();
-    const deletedIds = new Set(deletedProblems.map(p => p.id));
-    const insertable = newProblems.filter(p => !deletedIds.has(p.id));
-
-    // 4. Bulk insert new problems
+    // 2. Upsert every solved problem by uniqueId (idempotent; no duplicates ever)
+    // Rules enforced in upsertSolvedProblem:
+    // - never overwrite solvedDate if already exists
+    // - only update if incoming lastSubmittedAt is newer
+    // - respect isDeleted intent lock
     let insertedCount = 0;
+    let updatedCount = 0;
+    let skippedDeleted = 0;
+    let skippedOlder = 0;
     const errors = [];
 
-    if (insertable.length > 0) {
-      const problemOps = insertable.map(p => ({
-        updateOne: {
-          filter: { id: p.id },
-          update: { $setOnInsert: p },
-          upsert: true,
-        },
-      }));
-
-      const submissionOps = insertable.map(p => ({
-        updateOne: {
-          filter: { problemId: p.id },
-          update: {
-            $setOnInsert: {
-              problemId: p.id,
-              platform: 'CF',
-              slug: p.id.toLowerCase(),
-              title: p.title,
-              difficulty: p.difficulty,
-              tags: p.tags,
-              link: p.platformLink,
-              dateSolved: p.solvedDate,
-              first_solved_at: p.solvedDate,
-              last_updated_at: p.solvedDate,
-              sources: ['api'],
-              isDeleted: false
-            }
-          },
-          upsert: true
-        }
-      }));
-
+    for (const p of (syncResult.problems || [])) {
       try {
-        const [bulkProblem, bulkSubmission] = await Promise.all([
-          Problem.bulkWrite(problemOps, { ordered: false }),
-          Submission.bulkWrite(submissionOps, { ordered: false })
-        ]);
-        insertedCount = bulkProblem.upsertedCount || 0;
-        console.log(`[CF SYNC] Inserted ${insertedCount} new problems and ${bulkSubmission.upsertedCount || 0} submissions`);
-      } catch (bulkErr) {
-        // Partial success — some may have been inserted
-        console.error('[CF SYNC] Bulk write error:', bulkErr.message);
-        errors.push(bulkErr.message);
-        insertedCount = bulkErr.result?.nUpserted || 0;
+        const r = await upsertSolvedProblem({
+          uniqueId: p.uniqueId,
+          platform: 'CF',
+          title: p.title,
+          difficulty: p.difficulty,
+          topics: p.tags || [],
+          platformLink: p.platformLink,
+          contestId: p.contestId,
+          index: p.index,
+          rating: p.rating,
+          lastSubmittedAt: p.lastSubmittedAt,
+          solvedDate: p.solvedDate, // MUST exist for solved CF problems
+        });
+        if (r.action === 'inserted') insertedCount++;
+        else if (r.action === 'updated') updatedCount++;
+        else if (r.action === 'skipped_deleted') skippedDeleted++;
+        else if (r.action === 'skipped_older') skippedOlder++;
+      } catch (e) {
+        errors.push(e.message);
       }
     }
 
-    const skippedIntentLock = newProblems.length - insertable.length;
     const totalCF = await Problem.countDocuments({ platform: 'CF', isDeleted: { $ne: true } });
 
     const endTime = Date.now();
-    console.log(`[CF SYNC STATS] handle=${syncResult.handle} | uniqueAC=${syncResult.uniqueAccepted} | inserted=${insertedCount} | time=${endTime - startTime}ms`);
+    console.log(`[CF SYNC STATS] handle=${syncResult.handle} | uniqueAC=${syncResult.uniqueAccepted} | inserted=${insertedCount} updated=${updatedCount} skippedOlder=${skippedOlder} skippedDeleted=${skippedDeleted} | time=${endTime - startTime}ms`);
     lastSyncTime = Date.now();
 
     res.json({
@@ -129,10 +96,10 @@ exports.syncCodeforces = async (req, res) => {
       maxRating: syncResult.maxRating,
       totalFetched: syncResult.totalFetched,
       uniqueAccepted: syncResult.uniqueAccepted,
-      newProblems: insertable.length,
       inserted: insertedCount,
-      skippedExisting: syncResult.uniqueAccepted - newProblems.length,
-      skippedDeleted: skippedIntentLock,
+      updated: updatedCount,
+      skippedOlder,
+      skippedDeleted,
       totalCFInDB: totalCF,
       errors,
     });
@@ -147,9 +114,9 @@ exports.syncCodeforces = async (req, res) => {
       maxRating: null,
       totalFetched: 0,
       uniqueAccepted: 0,
-      newProblems: 0,
       inserted: 0,
-      skippedExisting: 0,
+      updated: 0,
+      skippedOlder: 0,
       skippedDeleted: 0,
       totalCFInDB: 0,
       errors: [err.message]
