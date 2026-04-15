@@ -30,9 +30,6 @@ exports.syncCodeforces = async (req, res) => {
     return res.status(429).json({ success: false, error: `Codeforces sync is on cooldown. Try again in ${Math.ceil((COOLDOWN_MS - (now - lastSyncTime))/1000)}s` });
   }
 
-  syncLock = true;
-  const startTime = Date.now();
-  
   const handle = req.body.handle || process.env.CF_HANDLE;
   if (!handle) {
     return res.status(400).json({
@@ -40,6 +37,9 @@ exports.syncCodeforces = async (req, res) => {
       error: 'Codeforces handle is required. Pass { "handle": "..." } in body or set CF_HANDLE env var.',
     });
   }
+
+  syncLock = true;
+  const startTime = Date.now();
 
   try {
     // 1. Fetch & transform from CF API
@@ -189,10 +189,11 @@ exports.getCodeforcesStats = async (req, res) => {
       byDifficulty[p.difficulty] = (byDifficulty[p.difficulty] || 0) + 1;
 
       // Group by raw rating buckets (800, 900, ..., 3500)
-      const ratingBucket = p.rawDifficulty ? Math.floor(p.rawDifficulty / 100) * 100 : 'unrated';
+      const ratingValue = p.rating || p.rawDifficulty;
+      const ratingBucket = ratingValue ? Math.floor(Number(ratingValue) / 100) * 100 : 'unrated';
       byRating[ratingBucket] = (byRating[ratingBucket] || 0) + 1;
 
-      (p.tags || []).forEach(t => {
+      (p.topics || []).forEach(t => {
         byTag[t] = (byTag[t] || 0) + 1;
       });
     });

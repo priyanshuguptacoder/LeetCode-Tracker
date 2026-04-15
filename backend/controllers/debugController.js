@@ -246,7 +246,7 @@ exports.countCheck = async (req, res) => {
 
     // Duplicates in Problem collection
     const probDupes = await Problem.aggregate([
-      { $group: { _id: '$id', count: { $sum: 1 } } },
+      { $group: { _id: '$uniqueId', count: { $sum: 1 } } },
       { $match: { count: { $gt: 1 } } },
     ]);
 
@@ -317,13 +317,14 @@ exports.frontendCheck = async (req, res) => {
 // ─── POST /api/debug/manual-test ─────────────────────────────────────────────
 exports.manualTest = async (req, res) => {
   const TEST_ID    = 99999;
+  const TEST_UID   = `LC-${TEST_ID}`;
   const TEST_TITLE = 'Debug Test Problem';
   const log        = [];
   const timings    = {};
 
   const cleanup = async () => {
     await Submission.deleteOne({ problemId: TEST_ID });
-    await Problem.deleteOne({ id: TEST_ID });
+    await Problem.deleteOne({ uniqueId: TEST_UID });
   };
   const step = (msg) => { log.push(msg); console.log(msg); };
 
@@ -377,7 +378,7 @@ exports.manualTest = async (req, res) => {
     if (!doc.notes?.includes('Updated note')) throw new Error('Notes not updated');
     step(`[DB] Notes updated ✅`);
 
-    const problemDoc = await Problem.findOne({ id: TEST_ID });
+    const problemDoc = await Problem.findOne({ uniqueId: TEST_UID });
     if (!problemDoc) throw new Error('Problem collection not synced');
     step(`[DB] Problem collection synced ✅`);
 
@@ -445,10 +446,11 @@ exports.runAll = async (req, res) => {
 
   // 6. Manual insert (seed directly — no real API call in tests)
   const TEST_ID   = 88888;
+  const TEST_UID  = `LC-${TEST_ID}`;
   const TEST_SLUG = 'run-all-test';
   const cleanup   = async () => {
     await Submission.deleteOne({ problemId: TEST_ID });
-    await Problem.deleteOne({ id: TEST_ID });
+    await Problem.deleteOne({ uniqueId: TEST_UID });
   };
   try {
     await cleanup();
@@ -550,7 +552,7 @@ exports.validate = async (req, res) => {
   const cleanReal   = () => Submission.deleteOne({ slug: REAL_SLUG });
   const cleanManual = () => Promise.all([
     Submission.deleteOne({ slug: MANUAL_SLUG }),
-    Problem.deleteOne({ id: TEST_MANUAL_ID }),
+    Problem.deleteOne({ uniqueId: `LC-${TEST_MANUAL_ID}` }),
   ]);
 
   try {
@@ -885,7 +887,7 @@ exports.cleanupCFIds = async (req, res) => {
         }
       } else {
         seen.set(normalizedId, p);
-        if (p.id !== normalizedId) {
+        if (p.uniqueId !== normalizedId || p.id !== normalizedId) {
           ArrayUpdates.push({ id: p._id, canonicalId: normalizedId });
         }
       }
@@ -894,7 +896,7 @@ exports.cleanupCFIds = async (req, res) => {
     // execute
     if (toDelete.length > 0) await Problem.deleteMany({ _id: { $in: toDelete } });
     for (const item of ArrayUpdates) {
-      await Problem.updateOne({ _id: item.id }, { $set: { id: item.canonicalId } });
+      await Problem.updateOne({ _id: item.id }, { $set: { uniqueId: item.canonicalId, id: item.canonicalId } });
     }
 
     res.json({
@@ -918,7 +920,7 @@ exports.backfillProblemIdNums = async (req, res) => {
     for (const p of problems) {
       if (p.problemIdNum != null) continue;
       
-      const match = p.id.toString().match(/(\d+)/);
+      const match = (p.uniqueId || '').toString().match(/(\d+)/);
       if (match) {
         p.problemIdNum = parseInt(match[0], 10);
         await p.save();
@@ -1174,7 +1176,7 @@ exports.backfillAll = async (req, res) => {
 
       // Fix problemIdNum - ensure it's a Number
       if (p.problemIdNum == null || typeof p.problemIdNum !== 'number') {
-        const match = p.id?.toString().match(/(\d+)/);
+        const match = p.uniqueId?.toString().match(/(\d+)/);
         if (match) {
           p.problemIdNum = parseInt(match[0], 10);
           needsSave = true;
@@ -1192,7 +1194,7 @@ exports.backfillAll = async (req, res) => {
       // Fix platform field
       if (!p.platform) {
         // Detect from ID format
-        if (p.id?.startsWith('CF-')) {
+        if (p.uniqueId?.startsWith('CF-')) {
           p.platform = 'CF';
         } else {
           p.platform = 'LC';
@@ -1228,14 +1230,14 @@ exports.backfillAll = async (req, res) => {
         try {
           await p.save();
         } catch (err) {
-          stats.errors.push({ id: p.id, error: err.message });
+          stats.errors.push({ uniqueId: p.uniqueId, error: err.message });
         }
       }
     }
 
     // ─── PHASE 2: Remove duplicates (group by uniqueId, keep latest) ─────────
     const duplicates = await Problem.aggregate([
-      { $group: { _id: '$id', count: { $sum: 1 }, docs: { $push: '$$ROOT' } } },
+      { $group: { _id: '$uniqueId', count: { $sum: 1 }, docs: { $push: '$$ROOT' } } },
       { $match: { count: { $gt: 1 } } }
     ]);
 
@@ -1253,7 +1255,7 @@ exports.backfillAll = async (req, res) => {
           await Problem.deleteOne({ _id: sorted[i]._id });
           stats.duplicatesRemoved++;
         } catch (err) {
-          stats.errors.push({ id: sorted[i].id, error: err.message });
+          stats.errors.push({ uniqueId: sorted[i].uniqueId, error: err.message });
         }
       }
     }

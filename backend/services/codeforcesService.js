@@ -252,8 +252,8 @@ async function syncCodeforcesProblems(handle) {
  * @returns {Array} New problems not in DB
  */
 function filterNewProblems(cfProblems, existingProblems) {
-  const existingIds = new Set(existingProblems.map(p => p.id));
-  return cfProblems.filter(p => !existingIds.has(p.id));
+  const existingIds = new Set(existingProblems.map(p => p.uniqueId));
+  return cfProblems.filter(p => !existingIds.has(p.uniqueId));
 }
 
 module.exports = {

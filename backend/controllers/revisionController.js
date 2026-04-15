@@ -93,8 +93,16 @@ exports.getStats = async (req, res) => {
 };
 
 // POST /api/revision/update
+function normalizeUniqueId(id) {
+  const raw = String(id || '').trim();
+  if (!raw) return '';
+  if (/^(LC|CF)-/i.test(raw)) return raw.toUpperCase();
+  if (/^\d+$/.test(raw)) return `LC-${raw}`;
+  return raw.toUpperCase();
+}
+
 // Body: { problemId, feedback }  feedback: 'easy' | 'medium' | 'hard'
-// NOTE: problemId is the STRING id (e.g., "LC-1", "CF-123A")
+// NOTE: problemId must be the canonical uniqueId (e.g., "LC-1", "CF-1772A")
 exports.update = async (req, res) => {
   const { problemId, feedback } = req.body;
   if (!problemId || !['easy', 'medium', 'hard'].includes(feedback)) {
@@ -104,10 +112,10 @@ exports.update = async (req, res) => {
     });
   }
   try {
-    // Find by string id (NOT parseInt - id is like "LC-1" or "CF-123A")
-    const problem = await Problem.findOne({ id: problemId.toString() });
+    const uniqueId = normalizeUniqueId(problemId);
+    const problem = await Problem.findOne({ uniqueId, isDeleted: { $ne: true } });
     if (!problem) {
-      return res.status(404).json({ success: false, error: 'Problem not found' });
+      return res.status(404).json({ success: false, error: `Problem not found for uniqueId ${uniqueId}` });
     }
     const updated = await updateRevision(problem, feedback);
     res.json({ success: true, data: updated });

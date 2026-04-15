@@ -139,10 +139,10 @@ function ProblemCard({ p, variant, onRevise, revisingId, formatDate, onUserDiffC
           <button
             className="pc-btn pc-btn-untarget"
             onClick={() => onTarget && onTarget(p.number)}
-            disabled={targetingId === p.number}
+            disabled={targetingId === p.uniqueId}
             title="Remove from targeted"
           >
-            {targetingId === p.number ? '⏳' : '✕ Remove'}
+            {targetingId === p.uniqueId ? '⏳' : '✕ Remove'}
           </button>
         )}
       </div>
@@ -756,7 +756,7 @@ function App() {
   // All streak/activeDays/consistency are computed from problem dates.
   // ============================================
 
-  const [apiProblems, setApiProblems] = useState([]);
+  const [problems, setProblems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState(null);
   const [striverId, setStriverId] = useState(null);
@@ -771,9 +771,9 @@ function App() {
   const [selectedProblemId, setSelectedProblemId] = useState(null);
   const [suggestions, setSuggestions] = useState([]);
 
-  // Ref to always access latest apiProblems without stale closure issues
-  const apiProblemsRef = useRef([]);
-  useEffect(() => { apiProblemsRef.current = apiProblems; }, [apiProblems]);
+  // Ref to always access latest problems without stale closure issues
+  const problemsRef = useRef([]);
+  useEffect(() => { problemsRef.current = problems; }, [problems]);
 
   // ── DB-backed streak state ────────────────────────────────────────────────
   const [dbStreak, setDbStreak] = useState({
@@ -892,9 +892,9 @@ function App() {
   const getTopicsForProblem = (p) => {
     // Safe string conversion — never call .replace() on non-string
     const safeUniqueId = typeof p.uniqueId === 'string' ? p.uniqueId
-      : typeof p.id === 'string' ? p.id
-      : String(p.uniqueId || p.id || '');
+      : String(p.uniqueId || '');
     if (!safeUniqueId && !p.problemIdNum && !p.topics?.length) return ['Miscellaneous'];
+    if (p.platform === 'CF' && p.topics?.length) return p.topics;
     const num = p.problemIdNum || parseInt(safeUniqueId.replace(/\D/g, ''), 10) || 0;
     if (TOPIC_MAP[num]) return TOPIC_MAP[num];
     if (p.topics && p.topics.length > 0) return p.topics;
@@ -912,58 +912,79 @@ function App() {
     return num ? `#${num}` : (p.uniqueId || '');
   };
 
+  const getProblemNumber = (uniqueId) => {
+    if (!uniqueId) return Infinity;
+    const parts = String(uniqueId).split('-');
+    if (parts.length < 2) return Infinity;
+    const num = parseInt(parts[1], 10);
+    return isNaN(num) ? Infinity : num;
+  };
+
+  const getProblemUniqueId = (number) => {
+    const problem = problemsRef.current.find(p => String(p.number) === String(number) || String(p.uniqueId) === String(number));
+    return problem?.uniqueId || null;
+  };
+
   // Transform MongoDB schema → frontend schema
   const transformProblems = (data) => (data || []).map(p => {
-    if (!p) return null;
+    const source = p || {};
     // Hard assertions — log corrupt docs but never skip them
-    if (!p.uniqueId && !p.id) { console.error('[TRANSFORM] doc with no uniqueId/id', p); }
-    if (!p.platform) { console.warn('[TRANSFORM] doc missing platform, defaulting to LC:', p.uniqueId || p.id || p.problemIdNum); }
-    const solvedDateISO = p.solvedDate
-      ? toLocalDateStr(new Date(p.solvedDate))
-      : parseDDMMM(p.date);
-    const topics = getTopicsForProblem(p);
-    const status = p.solved ? 'Done' : p.inProgress ? 'In Progress' : 'Not Started';
+    if (!source.uniqueId) { console.error('[TRANSFORM] doc with no uniqueId', source); }
+    if (!source.platform) { console.warn('[TRANSFORM] doc missing platform, defaulting to LC:', source.uniqueId || source.problemIdNum); }
+    const normalizedPlatform = (() => {
+      const raw = String(source.platform || '').trim();
+      if (raw === 'LeetCode') return 'LC';
+      if (raw === 'Codeforces') return 'CF';
+      return raw.toUpperCase() === 'CF' ? 'CF' : 'LC';
+    })();
+    const uniqueId = String(source.uniqueId || (normalizedPlatform === 'LC' && source.problemIdNum ? `LC-${source.problemIdNum}` : '') || '');
+    const solvedDateISO = source.solvedDate
+      ? toLocalDateStr(new Date(source.solvedDate))
+      : parseDDMMM(source.date);
+    const topics = getTopicsForProblem({ ...source, uniqueId, platform: normalizedPlatform });
+    const status = source.solved ? 'Done' : source.inProgress ? 'In Progress' : 'Not Started';
 
     return {
-      ...p,
-      // Normalize IDs to strings defensively
-      uniqueId: String(p.uniqueId || p.id || ''),
-      id: String(p.id || p.uniqueId || ''),
+      ...source,
+      uniqueId,
       // number: stable key used by handlers — LC=numeric, CF=uniqueId string
       number: (() => {
-        const rawId = String(p.uniqueId || p.id || '');
-        if (p.platform === 'CF' || rawId.startsWith('CF-')) {
+        const rawId = uniqueId;
+        if (normalizedPlatform === 'CF' || rawId.startsWith('CF-')) {
           return rawId;
         }
-        if (p.problemIdNum) return p.problemIdNum;
+        if (source.problemIdNum) return source.problemIdNum;
         // Extract from uniqueId "LC-63" → 63, or legacy numeric id "63" → 63
         const m = rawId.match(/^(?:LC-)?(\d+)$/);
         return m ? parseInt(m[1], 10) : (parseInt(rawId, 10) || 0);
       })(),
-      platform: p.platform || 'LC',
+      platform: normalizedPlatform,
       status,
-      userDifficulty: p.userDifficulty || p.difficulty || 'Medium',
+      userDifficulty: source.userDifficulty || source.difficulty || 'Medium',
       topics: topics,
-      pattern: topics[0] || (p.pattern || 'Miscellaneous'),
-      link: p.platformLink || p.leetcodeLink || p.link || '',
-      providerTitle: p?.providerTitle || (p.platform === 'CF' ? 'Codeforces' : 'LeetCode'),
+      pattern: topics[0] || (source.pattern || 'Miscellaneous'),
+      link: source.platformLink || source.leetcodeLink || source.link || '',
+      providerTitle: source?.providerTitle || (normalizedPlatform === 'CF' ? 'Codeforces' : 'LeetCode'),
       _solvedDateISO: solvedDateISO,
-      submittedAt: p.submittedAt || p.solvedDate || null,
-      targeted: p.targeted || false,
-      isStriver: p.isStriver || false,
-      confidence: p.confidence ?? 3,
-      nextRevisionAt: p.nextRevisionAt || null,
-      needsRevision: p.needsRevision || false,
-      solveTime: p.solveTime || null,
-      hintsUsed: p.hintsUsed || false,
-      wrongAttempts: p.wrongAttempts || 0,
-      mistakeType: p.mistakeType || null,
-      lastRevisionSuccess: p.lastRevisionSuccess ?? null,
-      lastRevisionTime: p.lastRevisionTime || null,
-      consecutiveSuccess: p.consecutiveSuccess || 0,
-      failureLoopFlagged: p.failureLoopFlagged || false,
+      submittedAt: source.submittedAt || source.solvedDate || null,
+      targeted: source.targeted || false,
+      isStriver: source.isStriver || false,
+      isTLE: source.isTLE || false,
+      revisionCount: source.revisionCount ?? 0,
+      lastRevisedAt: source.lastRevisedAt || null,
+      confidence: source.confidence ?? 3,
+      nextRevisionAt: source.nextRevisionAt || null,
+      needsRevision: source.needsRevision || false,
+      solveTime: source.solveTime || null,
+      hintsUsed: source.hintsUsed || false,
+      wrongAttempts: source.wrongAttempts || 0,
+      mistakeType: source.mistakeType || null,
+      lastRevisionSuccess: source.lastRevisionSuccess ?? null,
+      lastRevisionTime: source.lastRevisionTime || null,
+      consecutiveSuccess: source.consecutiveSuccess || 0,
+      failureLoopFlagged: source.failureLoopFlagged || false,
     };
-  }).filter(Boolean);
+  });
 
   // Fetch problems + streak from API on mount
   useEffect(() => {
@@ -973,7 +994,7 @@ function App() {
         // Always fetch ALL problems — filteredProblems handles platform display
         const probRes = await window.API.getAllProblems({ platform: 'ALL' });
         if (probRes.success) {
-          setApiProblems(transformProblems(probRes.data));
+          setProblems(transformProblems(probRes.data));
         }
         setLoading(false);
         // Fetch streak independently — never block problem display on streak failure
@@ -1490,22 +1511,22 @@ function App() {
   // DATA LAYER
   // ============================================
 
-  const allProblems = apiProblems;
+  const allProblems = problems;
 
-  // ── Derive solvedDates directly from apiProblems (always fresh, no async lag) ──
+  // ── Derive solvedDates directly from problems (always fresh, no async lag) ──
   // SINGLE SOURCE OF TRUTH for all streak/active days/analytics.
   // Never stored in state — always computed. Refresh page → correct stats.
   const solvedDates = React.useMemo(() => {
     const map = {};
     // Sort by date to ensure if multiple problems are solved on same day, the latest one is kept in map (though date is key)
-    const sorted = [...apiProblems].sort((a,b) => new Date(a.submittedAt || a._solvedDateISO) - new Date(b.submittedAt || b._solvedDateISO));
+    const sorted = [...problems].sort((a,b) => new Date(a.submittedAt || a._solvedDateISO) - new Date(b.submittedAt || b._solvedDateISO));
     sorted.forEach(p => {
       if (p.status === 'Done' && p._solvedDateISO) {
         map[p.number] = p._solvedDateISO;
       }
     });
     return map;
-  }, [apiProblems]);
+  }, [problems]);
 
   // Unified global activity days for streak calculation
   const globalActivityDays = React.useMemo(() => {
@@ -1586,7 +1607,7 @@ function App() {
         window.API.getRevisionList(),
       ]);
       if (probRes.status === 'fulfilled' && probRes.value.success)
-        setApiProblems(transformProblems(probRes.value.data));
+        setProblems(transformProblems(probRes.value.data));
       if (recentTodayRes.status === 'fulfilled' && recentTodayRes.value.success) {
         setRecentProblems(recentTodayRes.value.recentSolved || []);
         setTodayProblems(recentTodayRes.value.todaySolved || []);
@@ -1671,7 +1692,7 @@ function App() {
         if (response.success) {
           if (response.streak) setDbStreak(response.streak);
           const allProblemsResponse = await window.API.getAllProblems();
-          setApiProblems(transformProblems(allProblemsResponse.data));
+          setProblems(transformProblems(allProblemsResponse.data));
           // Refresh recent/today if problem was solved
           if (formData.type === 'Solved') {
             try {
@@ -1706,8 +1727,10 @@ function App() {
   const handleMistakeTypeConfirm = async (mistakeType) => {
     if (!mistakeModal) return;
     try {
-      await window.API.setMistakeType(mistakeModal.number, mistakeType);
-      setApiProblems(prev => prev.map(p =>
+      const uid = getProblemUniqueId(mistakeModal.number);
+      if (!uid) throw new Error('Problem uniqueId not found');
+      await window.API.setMistakeType(uid, mistakeType);
+      setProblems(prev => prev.map(p =>
         p.number === mistakeModal.number ? { ...p, mistakeType } : p
       ));
       showNotification(`Root cause saved: ${mistakeType.replace(/_/g, ' ')}`, 'success');
@@ -1725,17 +1748,19 @@ function App() {
   const handleStatusChange = async (number, newStatus) => {
     requireAdmin(async () => {
       try {
+        const uid = getProblemUniqueId(number);
+        if (!uid) throw new Error('Problem uniqueId not found');
         const today = toLocalDateStr(new Date());
         const updateData = {
           solved: newStatus === 'Done',
           inProgress: newStatus === 'In Progress',
           solvedDate: newStatus === 'Done' ? today : null
         };
-        const response = await window.API.updateProblem(number, updateData);
+        const response = await window.API.updateProblem(uid, updateData);
         if (response.success) {
           if (response.streak) setDbStreak(response.streak);
           const allProblemsResponse = await window.API.getAllProblems();
-          setApiProblems(transformProblems(allProblemsResponse.data));
+          setProblems(transformProblems(allProblemsResponse.data));
           // Refresh recent/today if problem was marked as solved
           if (newStatus === 'Done') {
             try {
@@ -1757,10 +1782,12 @@ function App() {
   const handleUserDifficultyChange = async (number, newDifficulty) => {
     requireAdmin(async () => {
       try {
-        const response = await window.API.updateProblem(number, { userDifficulty: newDifficulty });
+        const uid = getProblemUniqueId(number);
+        if (!uid) throw new Error('Problem uniqueId not found');
+        const response = await window.API.updateProblem(uid, { userDifficulty: newDifficulty });
         if (response.success) {
           const allProblemsResponse = await window.API.getAllProblems();
-          setApiProblems(transformProblems(allProblemsResponse.data));
+          setProblems(transformProblems(allProblemsResponse.data));
           showNotification(`✓ Difficulty → ${newDifficulty}`, 'success');
         }
       } catch (error) {
@@ -1770,7 +1797,8 @@ function App() {
   };
 
   const handleDelete = (number, isCustom) => {
-    const problem = apiProblemsRef.current.find(p => String(p.number) === String(number));
+    const problem = problemsRef.current.find(p => String(p.number) === String(number));
+    const uid = problem?.uniqueId;
     const doDelete = async () => {
       const tableRow = document.querySelector(`[data-problem-number="${number}"]`);
       if (tableRow) {
@@ -1779,10 +1807,11 @@ function App() {
         tableRow.style.transform = 'translateX(-16px)';
       }
       try {
-        const response = await window.API.deleteProblem(number);
+        if (!uid) throw new Error('Problem uniqueId not found');
+        const response = await window.API.deleteProblem(uid);
         if (response.success) {
           // Remove from local state — all useMemo stats recompute automatically
-          setApiProblems(prev => prev.filter(p => String(p.number) !== String(number)));
+          setProblems(prev => prev.filter(p => String(p.number) !== String(number)));
           // Refetch streak from backend (single source of truth after soft-delete + rebuild)
           if (problem && problem.status === 'Done') {
             try {
@@ -1834,7 +1863,7 @@ function App() {
 
   const handleRevise = (number) => {
     requireAdmin(() => {
-      const problem = apiProblemsRef.current.find(p => String(p.number) === String(number));
+      const problem = problemsRef.current.find(p => String(p.number) === String(number));
       if (!problem) return;
       setRevisionModal(problem);
     });
@@ -1848,9 +1877,9 @@ function App() {
     try {
       revisingIdRef.current = String(problem.number);
       setRevisingId(problem.number);
-      const res = await window.API.reviseProblem(problem.number, { timeTaken, hintsUsed, success });
+      const res = await window.API.reviseProblem(problem.uniqueId, { timeTaken, hintsUsed, success });
       if (res.success) {
-        setApiProblems(prev => prev.map(p =>
+        setProblems(prev => prev.map(p =>
           String(p.number) === String(problem.number)
             ? {
               ...p,
@@ -1887,9 +1916,11 @@ function App() {
       try {
         unrevisingIdRef.current = String(number);
         setUnrevisingId(number);
-        const res = await window.API.unreviseProblem(number);
+        const uid = getProblemUniqueId(number);
+        if (!uid) throw new Error('Problem uniqueId not found');
+        const res = await window.API.unreviseProblem(uid);
         if (res.success) {
-          setApiProblems(prev => prev.map(p =>
+          setProblems(prev => prev.map(p =>
             String(p.number) === String(number)
               ? {
                 ...p,
@@ -1915,19 +1946,19 @@ function App() {
 
   const handleToggleTarget = (number) => {
     requireAdmin(async () => {
-      const problem = apiProblemsRef.current.find(p => String(p.number) === String(number));
-      const uid = problem?.uniqueId || problem?.id;
+      const problem = problemsRef.current.find(p => String(p.number) === String(number));
+      const uid = problem?.uniqueId;
       if (!uid || targetingId === uid) return;
       // Optimistic update
       const prev = problem.targeted;
-      setApiProblems(ps => ps.map(p =>
+      setProblems(ps => ps.map(p =>
         String(p.number) === String(number) ? { ...p, targeted: !prev } : p
       ));
       try {
         setTargetingId(uid);
         const res = await window.API.toggleTarget(uid);
         if (res.success) {
-          setApiProblems(ps => ps.map(p =>
+          setProblems(ps => ps.map(p =>
             String(p.number) === String(number)
               ? { ...p, targeted: res.data.targeted, targetedAt: res.data.targetedAt }
               : p
@@ -1937,12 +1968,12 @@ function App() {
             'success'
           );
         } else {
-          setApiProblems(ps => ps.map(p =>
+          setProblems(ps => ps.map(p =>
             String(p.number) === String(number) ? { ...p, targeted: prev } : p
           ));
         }
       } catch (err) {
-        setApiProblems(ps => ps.map(p =>
+        setProblems(ps => ps.map(p =>
           String(p.number) === String(number) ? { ...p, targeted: prev } : p
         ));
         showNotification(`❌ ${err.message}`, 'error');
@@ -1973,7 +2004,7 @@ function App() {
     if (pendingScrollId == null) return;
     // rAF ensures we're after the paint
     const raf = requestAnimationFrame(() => {
-      const row = document.querySelector(`[data-problem-number="${pendingScrollId}"]`);
+      const row = document.querySelector(`[data-problem-id="${pendingScrollId}"], [data-problem-number="${pendingScrollId}"]`);
       if (row) {
         row.scrollIntoView({ behavior: 'smooth', block: 'center' });
         row.classList.add('highlight-row');
@@ -2008,14 +2039,14 @@ function App() {
   // ============================================
   const handleToggleStriver = (number) => {
     requireAdmin(async () => {
-      const problem = apiProblemsRef.current.find(p => String(p.number) === String(number));
+      const problem = problemsRef.current.find(p => String(p.number) === String(number));
       // Striver is LC-only
       if (!problem || problem.platform !== 'LC') return;
-      const uid = problem?.uniqueId || problem?.id;
+      const uid = problem?.uniqueId;
       if (!uid || striverId === uid) return;
       // Optimistic update — flip immediately, revert on error
       const prev = problem.isStriver;
-      setApiProblems(ps => ps.map(p =>
+      setProblems(ps => ps.map(p =>
         String(p.number) === String(number) ? { ...p, isStriver: !prev } : p
       ));
       try {
@@ -2023,19 +2054,19 @@ function App() {
         const res = await window.API.toggleStriver(uid);
         if (res.success) {
           // Confirm with server value
-          setApiProblems(ps => ps.map(p =>
+          setProblems(ps => ps.map(p =>
             String(p.number) === String(number) ? { ...p, isStriver: res.data.isStriver } : p
           ));
           window.API.getStriverStats().then(r => { if (r.success) setStriverStats(prev => ({ ...prev, ...r.data })); }).catch(() => {});
           showNotification(res.data.isStriver ? '📘 Added to Striver' : '✅ Removed from Striver', 'success');
         } else {
           // Revert
-          setApiProblems(ps => ps.map(p =>
+          setProblems(ps => ps.map(p =>
             String(p.number) === String(number) ? { ...p, isStriver: prev } : p
           ));
         }
       } catch (err) {
-        setApiProblems(ps => ps.map(p =>
+        setProblems(ps => ps.map(p =>
           String(p.number) === String(number) ? { ...p, isStriver: prev } : p
         ));
         showNotification(`❌ ${err.message}`, 'error');
@@ -2050,31 +2081,31 @@ function App() {
   // ============================================
   const handleToggleTLE = (number) => {
     requireAdmin(async () => {
-      const problem = apiProblemsRef.current.find(p => String(p.number) === String(number));
+      const problem = problemsRef.current.find(p => String(p.number) === String(number));
       // TLE is CF-only
       if (!problem || problem.platform !== 'CF') return;
-      const uid = problem?.uniqueId || problem?.id;
+      const uid = problem?.uniqueId;
       if (!uid || tleId === uid) return;
       const prev = problem.isTLE;
-      setApiProblems(ps => ps.map(p =>
+      setProblems(ps => ps.map(p =>
         String(p.number) === String(number) ? { ...p, isTLE: !prev } : p
       ));
       try {
         setTleId(uid);
         const res = await window.API.toggleTLE(uid);
         if (res.success) {
-          setApiProblems(ps => ps.map(p =>
+          setProblems(ps => ps.map(p =>
             String(p.number) === String(number) ? { ...p, isTLE: res.data.isTLE } : p
           ));
           window.API.getTLEStats().then(r => { if (r.success) setTleStats(prev => ({ ...prev, ...r.data })); }).catch(() => {});
           showNotification(res.data.isTLE ? '🏆 Added to TLE sheet' : '✅ Removed from TLE sheet', 'success');
         } else {
-          setApiProblems(ps => ps.map(p =>
+          setProblems(ps => ps.map(p =>
             String(p.number) === String(number) ? { ...p, isTLE: prev } : p
           ));
         }
       } catch (err) {
-        setApiProblems(ps => ps.map(p =>
+        setProblems(ps => ps.map(p =>
           String(p.number) === String(number) ? { ...p, isTLE: prev } : p
         ));
         showNotification(`❌ ${err.message}`, 'error');
@@ -2093,7 +2124,7 @@ function App() {
         window.API.getAllProblems(),
         window.API.getStreak(),
       ]);
-      if (probRes.success) setApiProblems(transformProblems(probRes.data));
+      if (probRes.success) setProblems(transformProblems(probRes.data));
       if (streakRes.success) setDbStreak(streakRes.data);
     } catch (err) {
       console.error('Align failed:', err);
@@ -2462,7 +2493,7 @@ function App() {
     return (revisionList || []).map(p => {
       // Match by uniqueId or by numeric problemIdNum for LC
       const local = allProblems.find(ap =>
-        ap.uniqueId === (p.uniqueId || p.id) ||
+        ap.uniqueId === p.uniqueId ||
         (ap.problemIdNum && p.problemIdNum && ap.problemIdNum === p.problemIdNum)
       ) || {};
       const solvedDateStr = p.solvedDate ? toLocalDateStr(new Date(p.solvedDate)) : null;
@@ -2481,7 +2512,7 @@ function App() {
         daysSinceSolved,
         neverRevised,
         confidenceLevel,
-        number: local.number || p.problemIdNum || p.uniqueId || p.id,
+        number: local.number || p.problemIdNum || p.uniqueId,
         link: p.platformLink || p.leetcodeLink || local.link || '',
       };
     });
@@ -2567,7 +2598,8 @@ function App() {
 
   const filteredProblems = React.useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase();
-    return allProblems.filter(problem => {
+    console.log("Before filter:", allProblems.length);
+    const filtered = allProblems.filter(problem => {
       let matchesSearch;
       if (q === '') {
         matchesSearch = true;
@@ -2615,6 +2647,8 @@ function App() {
 
       return matchesSearch && matchesDifficulty && matchesPattern && matchesStatus && matchesSelectedFilter && matchesPlatform;
     });
+    console.log("After filter:", filtered.length);
+    return filtered;
   }, [allProblems, debouncedSearch, difficultyFilter, patternFilter, statusFilter, selectedFilter, platformFilter]);
 
   // Animate table count when filtered problems change
@@ -2651,7 +2685,7 @@ function App() {
   }, []);
 
   // (auto-update for new month/day removed — state.lastUpdate no longer exists;
-  //  monthly stats recompute automatically from apiProblems via useMemo)
+  //  monthly stats recompute automatically from problems via useMemo)
 
   // Periodic sync — keeps problems + streak fresh across devices
   useEffect(() => {
@@ -2661,7 +2695,7 @@ function App() {
           window.API.getAllProblems(),
           window.API.getStreak(),
         ]);
-        if (probRes.success) setApiProblems(transformProblems(probRes.data));
+        if (probRes.success) setProblems(transformProblems(probRes.data));
         if (streakRes.success) setDbStreak(streakRes.data);
         // Refresh suggestions too
         try {
@@ -3332,36 +3366,37 @@ function App() {
 
             // Merge backend data with full problem data from allProblems for extra fields
             const enrichProblem = (p) => {
-              if (!p) return null;
-              const probId = String(p.uniqueId || p.id || p.number || '');
+              const source = p || {};
+              const probId = String(source.uniqueId || source.number || '');
               const isCF =
-                p.platform === 'CF' ||
+                source.platform === 'CF' ||
                 probId.startsWith('CF-') ||
                 /^[0-9]+[A-Za-z]+$/.test(probId);
               // Match by uniqueId first, then by numeric problemIdNum for LC
               const full = allProblems.find(ap =>
                 ap.uniqueId === probId ||
-                ap.uniqueId === (p.uniqueId || p.id) ||
-                (ap.problemIdNum && p.problemIdNum && ap.problemIdNum === p.problemIdNum)
+                ap.uniqueId === source.uniqueId ||
+                (ap.problemIdNum && source.problemIdNum && ap.problemIdNum === source.problemIdNum)
               ) || {};
               const defaultLink = isCF
-                ? `https://codeforces.com/problemset/problem/${p.contestId || full.contestId}/${p.index || full.index}`
-                : `https://leetcode.com/problems/${p.problemIdNum || probId}/`;
+                ? `https://codeforces.com/problemset/problem/${source.contestId || full.contestId}/${source.index || full.index}`
+                : `https://leetcode.com/problems/${source.problemIdNum || probId}/`;
               return {
-                ...p,
-                number: full.number || p.problemIdNum || probId,
-                platform: p.platform || full.platform || (isCF ? 'CF' : 'LC'),
-                isStriver: full.isStriver ?? p.isStriver ?? false,
-                targeted: full.targeted ?? p.targeted ?? false,
-                revisionCount: full.revisionCount ?? p.revisionCount ?? 0,
-                lastRevisedAt: full.lastRevisedAt ?? p.lastRevisedAt ?? null,
-                link: p.platformLink || p.leetcodeLink || full.link || defaultLink,
-                providerTitle: p?.providerTitle || full?.providerTitle || (isCF ? 'Codeforces' : 'LeetCode'),
+                ...source,
+                uniqueId: full.uniqueId || source.uniqueId || probId,
+                number: full.number || source.problemIdNum || probId,
+                platform: source.platform || full.platform || (isCF ? 'CF' : 'LC'),
+                isStriver: full.isStriver ?? source.isStriver ?? false,
+                targeted: full.targeted ?? source.targeted ?? false,
+                revisionCount: full.revisionCount ?? source.revisionCount ?? 0,
+                lastRevisedAt: full.lastRevisedAt ?? source.lastRevisedAt ?? null,
+                link: source.platformLink || source.leetcodeLink || full.link || defaultLink,
+                providerTitle: source?.providerTitle || full?.providerTitle || (isCF ? 'Codeforces' : 'LeetCode'),
               };
             };
 
-            const enrichedRecent = (recentProblems || []).map(enrichProblem).filter(Boolean);
-            const enrichedToday = (todayProblems || []).map(enrichProblem).filter(Boolean);
+            const enrichedRecent = (recentProblems || []).map(enrichProblem);
+            const enrichedToday = (todayProblems || []).map(enrichProblem);
 
             // Status badge for recently solved cards
             const solveStatus = (lastSubmittedAt) => {
@@ -3417,7 +3452,7 @@ function App() {
                         const diff = (p.difficulty || 'medium').toLowerCase();
                         const isRevisited = (p.revisionCount || 0) > 0;
                         return (
-                          <React.Fragment key={p._id || p.number}>
+                          <React.Fragment key={p.uniqueId}>
                             {idx > 0 && <div className="tp-divider" />}
                             <div className="tp-item">
                               <div className="tp-item-left">
@@ -3472,7 +3507,7 @@ function App() {
                         const status = solveStatus(p.lastSubmittedAt);
                         return (
                           <div
-                            key={p._id || p.number}
+                            key={p.uniqueId}
                             className="pc-card pc-card-clickable"
                             onClick={() => handleCardClick(p.number)}
                           >
@@ -3510,7 +3545,7 @@ function App() {
                               <button
                                 className={`pc-btn-toggle ${p.isStriver ? 'active' : ''}`}
                                 onClick={(e) => handleButtonClick(e, 'striver', p.number)}
-                                disabled={striverId === p.number}
+                                disabled={striverId === p.uniqueId}
                                 title={p.isStriver ? 'Striver Active' : 'Add to Striver'}
                               >
                                 <span className="toggle-icon">📘</span>
@@ -3518,7 +3553,7 @@ function App() {
                               <button
                                 className={`pc-btn-toggle ${p.targeted ? 'active' : ''}`}
                                 onClick={(e) => handleButtonClick(e, 'target', p.number)}
-                                disabled={targetingId === p.number}
+                                disabled={targetingId === p.uniqueId}
                                 title={p.targeted ? 'Target Active' : 'Add to Targeted'}
                               >
                                 <span className="toggle-icon">🎯</span>
@@ -3863,8 +3898,8 @@ function App() {
                 <tbody>
                   {filteredProblems.length > 0 ? (
                     filteredProblems.map((problem, index) => (
-                      <tr key={problem._id || problem.id} data-problem-number={problem.number}
-                        className={selectedProblemId === problem.number ? 'highlight-row' : ''}
+                      <tr key={problem.uniqueId} data-problem-number={problem.number} data-problem-id={problem.uniqueId}
+                        className={selectedProblemId === problem.uniqueId || selectedProblemId === String(problem.number) ? 'highlight-row' : ''}
                       >
                         <td className="problem-number">{index + 1}</td>
                         <td className="problem-title">
@@ -3946,29 +3981,29 @@ function App() {
                             <button
                               className={`btn-target${problem.targeted ? ' active' : ''}`}
                               onClick={() => handleToggleTarget(problem.number)}
-                              disabled={targetingId === (problem.uniqueId || problem.id)}
+                              disabled={targetingId === problem.uniqueId}
                               title={problem.targeted ? 'Remove from Targeted' : 'Add to Targeted'}
                             >
-                              {targetingId === (problem.uniqueId || problem.id) ? '⏳' : '🎯'}
+                              {targetingId === problem.uniqueId ? '⏳' : '🎯'}
                             </button>
                             {(problem.platform === 'LC') && (
                               <button
                                 className={`btn-striver${problem.isStriver ? ' active' : ''}`}
                                 onClick={() => handleToggleStriver(problem.number)}
-                                disabled={striverId === (problem.uniqueId || problem.id)}
+                                disabled={striverId === problem.uniqueId}
                                 title={problem.isStriver ? 'Remove from Striver' : 'Mark as Striver'}
                               >
-                                {striverId === (problem.uniqueId || problem.id) ? '⏳' : '📘'}
+                                {striverId === problem.uniqueId ? '⏳' : '📘'}
                               </button>
                             )}
                             {(problem.platform === 'CF') && (
                               <button
                                 className={`btn-tle${problem.isTLE ? ' active' : ''}`}
                                 onClick={() => handleToggleTLE(problem.number)}
-                                disabled={tleId === (problem.uniqueId || problem.id)}
+                                disabled={tleId === problem.uniqueId}
                                 title={problem.isTLE ? 'Remove from TLE sheet' : 'Add to TLE sheet'}
                               >
-                                {tleId === (problem.uniqueId || problem.id) ? '⏳' : '🏆'}
+                                {tleId === problem.uniqueId ? '⏳' : '🏆'}
                               </button>
                             )}
                             <button
@@ -4013,7 +4048,7 @@ function App() {
             <div className="problems-mobile">
               {filteredProblems.length > 0 ? (
                 filteredProblems.map(problem => (
-                  <div key={problem._id || problem.id} className="pm-card" data-problem-number={problem.number}>
+                  <div key={problem.uniqueId} className="pm-card" data-problem-number={problem.number} data-problem-id={problem.uniqueId}>
                     {/* Row 1: badges */}
                     <div className="pm-top">
                       <span className={`badge badge-${(problem.difficulty || 'medium').toLowerCase()}`}>
@@ -4093,29 +4128,29 @@ function App() {
                       <button
                         className={`btn-target${problem.targeted ? ' active' : ''}`}
                         onClick={() => handleToggleTarget(problem.number)}
-                        disabled={targetingId === (problem.uniqueId || problem.id)}
+                        disabled={targetingId === problem.uniqueId}
                         title={problem.targeted ? 'Remove from Targeted' : 'Add to Targeted'}
                       >
-                        {targetingId === (problem.uniqueId || problem.id) ? '⏳' : '🎯'}
+                        {targetingId === problem.uniqueId ? '⏳' : '🎯'}
                       </button>
                       {(problem.platform === 'LC') && (
                         <button
                           className={`btn-striver${problem.isStriver ? ' active' : ''}`}
                           onClick={() => handleToggleStriver(problem.number)}
-                          disabled={striverId === (problem.uniqueId || problem.id)}
+                          disabled={striverId === problem.uniqueId}
                           title={problem.isStriver ? 'Remove from Striver' : 'Mark as Striver'}
                         >
-                          {striverId === (problem.uniqueId || problem.id) ? '⏳' : '📘'}
+                          {striverId === problem.uniqueId ? '⏳' : '📘'}
                         </button>
                       )}
                       {(problem.platform === 'CF') && (
                         <button
                           className={`btn-tle${problem.isTLE ? ' active' : ''}`}
                           onClick={() => handleToggleTLE(problem.number)}
-                          disabled={tleId === (problem.uniqueId || problem.id)}
+                          disabled={tleId === problem.uniqueId}
                           title={problem.isTLE ? 'Remove from TLE sheet' : 'Add to TLE sheet'}
                         >
-                          {tleId === (problem.uniqueId || problem.id) ? '⏳' : '🏆'}
+                          {tleId === problem.uniqueId ? '⏳' : '🏆'}
                         </button>
                       )}
                       <button
