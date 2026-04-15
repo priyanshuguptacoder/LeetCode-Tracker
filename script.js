@@ -930,9 +930,15 @@ function App() {
       uniqueId: String(p.uniqueId || p.id || ''),
       id: String(p.id || p.uniqueId || ''),
       // number: stable key used by handlers — LC=numeric, CF=uniqueId string
-      number: (p.platform === 'CF')
+      number: (p.platform === 'CF' || (p.uniqueId || p.id || '').startsWith('CF-'))
         ? String(p.uniqueId || p.id || '')
-        : (p.problemIdNum || 0),
+        : (() => {
+            if (p.problemIdNum) return p.problemIdNum;
+            // Extract from uniqueId "LC-63" → 63, or legacy numeric id "63" → 63
+            const uid = String(p.uniqueId || p.id || '');
+            const m = uid.match(/^(?:LC-)?(\d+)$/);
+            return m ? parseInt(m[1], 10) : (p.id ? parseInt(p.id, 10) || uid : 0);
+          })(),
       platform: p.platform || 'LC',
       status,
       userDifficulty: p.userDifficulty || p.difficulty || 'Medium',
@@ -2453,8 +2459,11 @@ function App() {
   const intelligentRevision = React.useMemo(() => {
     const now = new Date();
     return (revisionList || []).map(p => {
-      // Merge with local allProblems for live isStriver/targeted/confidence state
-      const local = allProblems.find(ap => String(ap.number) === String(p.uniqueId || p.id)) || {};
+      // Match by uniqueId or by numeric problemIdNum for LC
+      const local = allProblems.find(ap =>
+        ap.uniqueId === (p.uniqueId || p.id) ||
+        (ap.problemIdNum && p.problemIdNum && ap.problemIdNum === p.problemIdNum)
+      ) || {};
       const solvedDateStr = p.solvedDate ? toLocalDateStr(new Date(p.solvedDate)) : null;
       const daysSinceSolved = solvedDateStr
         ? Math.max(1, Math.ceil((now - parseLocalDate(solvedDateStr)) / 86400000))
@@ -2465,14 +2474,13 @@ function App() {
       return {
         ...p,
         ...local,
-        // Keep backend values for revision-specific fields
         nextRevisionAt: p.nextRevisionAt,
         revisionCount: p.revisionCount ?? local.revisionCount ?? 0,
         failureLoopFlagged: p.failureLoopFlagged ?? local.failureLoopFlagged ?? false,
         daysSinceSolved,
         neverRevised,
         confidenceLevel,
-        number: p.uniqueId || p.id || p.number,
+        number: local.number || p.problemIdNum || p.uniqueId || p.id,
         link: p.platformLink || p.leetcodeLink || local.link || '',
       };
     });
@@ -3329,13 +3337,18 @@ function App() {
                 p.platform === 'CF' ||
                 probId.startsWith('CF-') ||
                 /^[0-9]+[A-Za-z]+$/.test(probId);
-              const full = allProblems.find(ap => String(ap.number) === probId) || {};
+              // Match by uniqueId first, then by numeric problemIdNum for LC
+              const full = allProblems.find(ap =>
+                ap.uniqueId === probId ||
+                ap.uniqueId === (p.uniqueId || p.id) ||
+                (ap.problemIdNum && p.problemIdNum && ap.problemIdNum === p.problemIdNum)
+              ) || {};
               const defaultLink = isCF
                 ? `https://codeforces.com/problemset/problem/${p.contestId || full.contestId}/${p.index || full.index}`
-                : `https://leetcode.com/problems/${probId}/`;
+                : `https://leetcode.com/problems/${p.problemIdNum || probId}/`;
               return {
                 ...p,
-                number: probId,
+                number: full.number || p.problemIdNum || probId,
                 platform: p.platform || full.platform || (isCF ? 'CF' : 'LC'),
                 isStriver: full.isStriver ?? p.isStriver ?? false,
                 targeted: full.targeted ?? p.targeted ?? false,
