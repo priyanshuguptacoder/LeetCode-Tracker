@@ -32,15 +32,28 @@ const allowedOrigins = [
   "http://localhost:5500"
 ];
 
-app.use(cors({
-  origin: allowedOrigins,
+const corsOptions = {
+  origin: (origin, callback) => {
+    // 1. Allow non-browser requests (Postman, curl, servers)
+    if (!origin) return callback(null, true);
+    
+    // 2. Check if origin is in our whitelist
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.warn(`[CORS] Blocked request from unauthorized origin: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   credentials: true,
   allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"]
-}));
+};
+
+app.use(cors(corsOptions));
 
 // Explicit preflight handling
-app.options("*", cors());
+app.options("*", cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
