@@ -212,32 +212,32 @@ exports.getStreakByPlatform = async (req, res) => {
     const calcStreak = (dateSet) => {
       if (dateSet.size === 0) return { currentStreak: 0, maxStreak: 0, activeDays: 0 };
 
-      const sorted = [...dateSet].sort();
+      const sorted = Array.from(dateSet).sort();
       const activeDays = sorted.length;
 
-      // Max streak — full scan
-      let maxStreak = 1, temp = 1;
-      for (let i = 1; i < sorted.length; i++) {
-        const diff = Math.round(
-          (new Date(sorted[i] + 'T00:00:00Z') - new Date(sorted[i - 1] + 'T00:00:00Z')) / 86400000
-        );
-        if (diff === 1) { temp++; maxStreak = Math.max(maxStreak, temp); }
-        else temp = 1;
-      }
-      maxStreak = Math.max(maxStreak, temp);
-
-      // Current streak — walk back from today (streak alive if solved today OR yesterday)
-      const todayKey     = new Date().toISOString().split('T')[0];
-      const yesterdayKey = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-      const startKey = dateSet.has(todayKey) ? todayKey : (dateSet.has(yesterdayKey) ? yesterdayKey : null);
       let currentStreak = 0;
-      if (startKey) {
-        let cursor = new Date(startKey + 'T00:00:00Z');
-        while (dateSet.has(cursor.toISOString().split('T')[0])) {
-          currentStreak++;
-          cursor.setUTCDate(cursor.getUTCDate() - 1);
+      let maxStreak = 0;
+      let prevDate = null;
+
+      for (let date of sorted) {
+        if (!prevDate) {
+          currentStreak = 1;
+        } else {
+          const diff = Math.round((new Date(date) - new Date(prevDate)) / 86400000);
+          if (diff === 1) {
+            currentStreak++;
+          } else {
+            currentStreak = 1;
+          }
         }
+        maxStreak = Math.max(maxStreak, currentStreak);
+        prevDate = date;
       }
+
+      const todayKey = new Date().toISOString().split('T')[0];
+      const yesterdayKey = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+      const alive = dateSet.has(todayKey) || dateSet.has(yesterdayKey);
+      if (!alive) currentStreak = 0;
 
       return { currentStreak, maxStreak, activeDays };
     };

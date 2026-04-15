@@ -52,22 +52,23 @@ function computeStats(problems, calendarDates = null) {
   const todayKey = getUTCDayKey(new Date());
 
   // Step 1: build canonical UTC day set
-  // Prefer calendarDates (LeetCode submission calendar) when available.
   const daySet = new Set();
-
+  
   if (Array.isArray(calendarDates) && calendarDates.length > 0) {
     for (const k of calendarDates) {
       if (k && k <= todayKey) daySet.add(k);
     }
     console.log(`[STATS ENGINE] using submissionCalendar (${calendarDates.length} dates)`);
-  } else {
-    for (const p of problems) {
-      if (!p.solvedDate) continue;
-      const key = getUTCDayKey(p.solvedDate);
-      if (key <= todayKey) daySet.add(key);
-    }
-    console.log(`[STATS ENGINE] using problem solvedDates (${problems.length} problems)`);
   }
+
+  // ALWAYS merge problem dates so Codeforces isn't excluded
+  for (const p of problems) {
+    if (!p.solvedDate && !p.lastSubmittedAt) continue;
+    const key = new Date(p.solvedDate || p.lastSubmittedAt).toISOString().split("T")[0];
+    if (key <= todayKey) daySet.add(key);
+  }
+  
+  console.log(`[STATS ENGINE] processed problem dates (${problems.length} problems)`);
 
   const days       = [...daySet].sort();
   const activeDays = daySet.size;
@@ -94,37 +95,30 @@ function computeStats(problems, calendarDates = null) {
   // Step 4: gap detection
   const gaps = detectGaps(days);
 
-  // Step 5: max streak — full sequence scan
-  let maxStreak = 1, temp = 1;
-  for (let i = 1; i < days.length; i++) {
-    if (isNextDay(days[i - 1], days[i])) {
-      temp++;
-      maxStreak = Math.max(maxStreak, temp);
-    } else {
-      temp = 1;
-    }
-  }
-  maxStreak = Math.max(maxStreak, 1);
-
-  // Step 6: current streak — walk back from today OR yesterday (UTC)
-  // A streak is still alive if the user solved yesterday but not yet today.
-  // Only break if the last active day was 2+ days ago.
-  const yesterdayKey = getUTCDayKey(new Date(Date.now() - 86400000));
-  const startCursor = daySet.has(todayKey) ? todayKey : (daySet.has(yesterdayKey) ? yesterdayKey : null);
-
+  // Step 5: streak logic
   let currentStreak = 0;
-  if (startCursor) {
-    let cursor = new Date(startCursor + 'T00:00:00Z');
-    while (true) {
-      const key = getUTCDayKey(cursor);
-      if (daySet.has(key)) {
+  let maxStreak = 0;
+  let prevDate = null;
+
+  for (let date of days) {
+    if (!prevDate) {
+      currentStreak = 1;
+    } else {
+      const diff = Math.round((new Date(date) - new Date(prevDate)) / 86400000);
+      if (diff === 1) {
         currentStreak++;
-        cursor.setUTCDate(cursor.getUTCDate() - 1);
       } else {
-        break;
+        currentStreak = 1;
       }
     }
+    maxStreak = Math.max(maxStreak, currentStreak);
+    prevDate = date;
   }
+
+  // Step 6: today check
+  const yesterdayKey = getUTCDayKey(new Date(Date.now() - 86400000));
+  const alive = daySet.has(todayKey) || daySet.has(yesterdayKey);
+  if (!alive) currentStreak = 0;
 
   // Step 7: consistency
   const consistency = daysTracked > 0 ? Math.round((activeDays / daysTracked) * 100) : 0;

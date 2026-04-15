@@ -617,35 +617,39 @@ function computeStreakFromDates(dateStrings) {
   const now = new Date();
   const todayKey = now.toISOString().split('T')[0];
 
-  const daySet = new Set(dateStrings.filter(Boolean).filter(k => k <= todayKey));
-  const activeDays = daySet.size;
+  function normalizeDate(dateStr) {
+    return new Date(dateStr).toISOString().split("T")[0];
+  }
+
+  const activeDaysSet = new Set(dateStrings.filter(Boolean).map(d => normalizeDate(d)));
+  const activeDays = activeDaysSet.size;
+
   if (activeDays === 0) return { activeDays: 0, currentStreak: 0, maxStreak: 0 };
 
-  const unique = [...daySet].sort();
-
-  // Longest streak
-  let maxStreak = 1, tempStreak = 1;
-  for (let i = 1; i < unique.length; i++) {
-    const diff = Math.round(
-      (new Date(unique[i] + 'T00:00:00Z') - new Date(unique[i - 1] + 'T00:00:00Z')) / 86400000
-    );
-    if (diff === 1) { tempStreak++; maxStreak = Math.max(maxStreak, tempStreak); }
-    else { maxStreak = Math.max(maxStreak, tempStreak); tempStreak = 1; }
-  }
-  maxStreak = Math.max(maxStreak, tempStreak);
-
-  // Current streak — alive if solved today OR yesterday
-  const yesterdayKey = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-  const startCursor = daySet.has(todayKey) ? todayKey : (daySet.has(yesterdayKey) ? yesterdayKey : null);
+  const sortedDays = Array.from(activeDaysSet).sort();
   let currentStreak = 0;
-  if (startCursor) {
-    let cursor = new Date(startCursor + 'T00:00:00Z');
-    while (true) {
-      const key = cursor.toISOString().split('T')[0];
-      if (daySet.has(key)) { currentStreak++; cursor = new Date(cursor - 86400000); }
-      else break;
+  let maxStreak = 0;
+  let prevDate = null;
+
+  for (let date of sortedDays) {
+    if (!prevDate) {
+      currentStreak = 1;
+    } else {
+      const diff = Math.round((new Date(date) - new Date(prevDate)) / (1000 * 60 * 60 * 24));
+      if (diff === 1) {
+        currentStreak++;
+      } else {
+        currentStreak = 1;
+      }
     }
+    maxStreak = Math.max(maxStreak, currentStreak);
+    prevDate = date;
   }
+
+  const today = new Date().toISOString().split("T")[0];
+  const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+  const alive = activeDaysSet.has(today) || activeDaysSet.has(yesterday);
+  if (!alive) currentStreak = 0;
 
   return { activeDays, currentStreak, maxStreak };
 }
@@ -777,9 +781,9 @@ function App() {
 
   // ── DB-backed streak state ────────────────────────────────────────────────
   const [dbStreak, setDbStreak] = useState({
-    currentStreak: 0,
-    maxStreak: 0,
-    activeDays: 0,
+    global: { currentStreak: 0, maxStreak: 0, activeDays: 0 },
+    lc: { currentStreak: 0, maxStreak: 0, activeDays: 0 },
+    cf: { currentStreak: 0, maxStreak: 0, activeDays: 0 },
     lastSolvedDate: null,
     isSetup: false,
   });
@@ -902,15 +906,22 @@ function App() {
   };
 
   // ── Display ID: separate from title, used in table and mobile card ──────────
-  const getDisplayId = (p) => {
-    if (p.platform === 'CF') {
-      const cid = p.contestId || '';
-      const idx = p.index || '';
-      return cid && idx ? `${cid}${idx}` : (p.uniqueId || '');
+  function getDisplayId(p) {
+    if (p.platform === "LC") {
+      return `#${p.problemIdNum}`;
     }
-    const num = p.problemIdNum;
-    return num ? `#${num}` : (p.uniqueId || '');
-  };
+
+    if (p.platform === "CF") {
+      return `${p.contestId}${p.index}`;
+    }
+
+    return "";
+  }
+
+  function cleanTitle(title) {
+    if (!title) return "";
+    return title.replace(/^\d+\s+/, "");
+  }
 
   const getProblemNumber = (uniqueId) => {
     if (!uniqueId) return Infinity;
@@ -2327,9 +2338,9 @@ function App() {
   }, [coachingMetrics, easyCount, mediumCount, hardCount]);
 
   // Streak display — always from dbStreak (computed from problem dates on backend)
-  const displayCurrentStreak = dbStreak.currentStreak ?? 0;
-  const displayMaxStreak = dbStreak.maxStreak ?? 0;
-  const displayActiveDays = dbStreak.activeDays ?? 0;
+  const displayCurrentStreak = dbStreak?.global?.currentStreak ?? 0;
+  const displayMaxStreak = dbStreak?.global?.maxStreak ?? 0;
+  const displayActiveDays = dbStreak?.global?.activeDays ?? 0;
 
   // Advanced Analytics
   const consistencyScore = React.useMemo(() => {
@@ -2648,7 +2659,26 @@ function App() {
       return matchesSearch && matchesDifficulty && matchesPattern && matchesStatus && matchesSelectedFilter && matchesPlatform;
     });
     console.log("After filter:", filtered.length);
-    return filtered;
+    const sortedProblems = [...filtered].sort((a, b) => {
+      if (a.platform !== b.platform) {
+        return String(a.platform).localeCompare(String(b.platform));
+      }
+
+      if (a.platform === "LC") {
+        return a.problemIdNum - b.problemIdNum;
+      }
+
+      if (a.platform === "CF") {
+        if (a.contestId !== b.contestId) {
+          return a.contestId - b.contestId;
+        }
+        return String(a.index).localeCompare(String(b.index));
+      }
+
+      return 0;
+    });
+
+    return sortedProblems;
   }, [allProblems, debouncedSearch, difficultyFilter, patternFilter, statusFilter, selectedFilter, platformFilter]);
 
   // Animate table count when filtered problems change
@@ -3901,13 +3931,10 @@ function App() {
                       <tr key={problem.uniqueId} data-problem-number={problem.number} data-problem-id={problem.uniqueId}
                         className={selectedProblemId === problem.uniqueId || selectedProblemId === String(problem.number) ? 'highlight-row' : ''}
                       >
-                        <td className="problem-number">{index + 1}</td>
+                        <td className="problem-number">{getDisplayId(problem)}</td>
                         <td className="problem-title">
                           <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
-                            <span className="problem-id-badge" style={{ fontSize: '0.75rem', fontWeight: 700, opacity: 0.55, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
-                              {getDisplayId(problem)}
-                            </span>
-                            <span>{problem.title}</span>
+                            <span>{cleanTitle(problem.title)}</span>
                           </div>
                         </td>
                         <td>
@@ -4066,7 +4093,7 @@ function App() {
                       <span className="problem-id-badge" style={{ fontSize: '0.72rem', fontWeight: 700, opacity: 0.5, marginRight: '5px', fontVariantNumeric: 'tabular-nums' }}>
                         {getDisplayId(problem)}
                       </span>
-                      {problem.title}
+                      {cleanTitle(problem.title)}
                     </div>
 
                     {/* Row 3: revision count */}

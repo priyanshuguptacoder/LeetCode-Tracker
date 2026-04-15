@@ -22,7 +22,7 @@ function StreakDashboard() {
   return React.createElement(
     'div', { className: 'streak-dashboard' },
     React.createElement('span', { className: 'streak-flame' }, '🔥'),
-    React.createElement('span', { className: 'streak-count' }, data.currentStreak),
-    React.createElement('span', { className: 'streak-label' }, data.currentStreak === 1 ? 'day streak' : 'day streak'),
+    React.createElement('span', { className: 'streak-count' }, data.global?.currentStreak ?? 0),
+    React.createElement('span', { className: 'streak-label' }, data.global?.currentStreak === 1 ? 'day streak' : 'day streak'),
   );
 }
