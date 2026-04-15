@@ -930,15 +930,16 @@ function App() {
       uniqueId: String(p.uniqueId || p.id || ''),
       id: String(p.id || p.uniqueId || ''),
       // number: stable key used by handlers — LC=numeric, CF=uniqueId string
-      number: (p.platform === 'CF' || (p.uniqueId || p.id || '').startsWith('CF-'))
-        ? String(p.uniqueId || p.id || '')
-        : (() => {
-            if (p.problemIdNum) return p.problemIdNum;
-            // Extract from uniqueId "LC-63" → 63, or legacy numeric id "63" → 63
-            const uid = String(p.uniqueId || p.id || '');
-            const m = uid.match(/^(?:LC-)?(\d+)$/);
-            return m ? parseInt(m[1], 10) : (p.id ? parseInt(p.id, 10) || uid : 0);
-          })(),
+      number: (() => {
+        const rawId = String(p.uniqueId || p.id || '');
+        if (p.platform === 'CF' || rawId.startsWith('CF-')) {
+          return rawId;
+        }
+        if (p.problemIdNum) return p.problemIdNum;
+        // Extract from uniqueId "LC-63" → 63, or legacy numeric id "63" → 63
+        const m = rawId.match(/^(?:LC-)?(\d+)$/);
+        return m ? parseInt(m[1], 10) : (parseInt(rawId, 10) || 0);
+      })(),
       platform: p.platform || 'LC',
       status,
       userDifficulty: p.userDifficulty || p.difficulty || 'Medium',
