@@ -27,7 +27,8 @@ const app  = express();
 const PORT = process.env.PORT || 5001;
 
 const allowedOrigins = [
-  process.env.FRONTEND_URL || "https://competativeprogrammingtrackerpriyanshu.vercel.app",
+  "https://competativeprogrammingtrackerpriyanshu.vercel.app",
+  ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
   "http://localhost:3000",
   "http://localhost:5500"
 ].map(o => o.replace(/\/+$/, '')); // normalize: strip trailing slashes
