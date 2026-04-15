@@ -817,14 +817,19 @@ function App() {
   useEffect(() => { apiProblemsRef.current = apiProblems; }, [apiProblems]);
 
   // ── DB-backed streak state ────────────────────────────────────────────────
-  // Source of truth lives in MongoDB Settings document.
-  // Fetched on mount, updated after every createProblem/updateProblem (solved).
   const [dbStreak, setDbStreak] = useState({
     currentStreak: 0,
     maxStreak: 0,
     activeDays: 0,
     lastSolvedDate: null,
     isSetup: false,
+  });
+
+  // ── Per-platform streak (LC / CF / combined) ──────────────────────────────
+  const [platformStreak, setPlatformStreak] = useState({
+    combined: { currentStreak: 0, maxStreak: 0, activeDays: 0 },
+    lc:       { currentStreak: 0, maxStreak: 0, activeDays: 0 },
+    cf:       { currentStreak: 0, maxStreak: 0, activeDays: 0 },
   });
 
   // ── Contest Stats state ────────────────────────────────────────────────────
@@ -1007,10 +1012,11 @@ function App() {
         }
         // Non-blocking secondary fetches
         try {
-          const [sugRes, recentTodayRes, contestRes] = await Promise.allSettled([
+          const [sugRes, recentTodayRes, contestRes, platformStreakRes] = await Promise.allSettled([
             window.API.getSuggestions(),
             window.API.getRecentAndToday(),
             window.API.getContestStats(),
+            window.API.getStreakByPlatform(),
           ]);
           if (sugRes.status === 'fulfilled' && sugRes.value.success) setSuggestions(sugRes.value.data || []);
           if (recentTodayRes.status === 'fulfilled' && recentTodayRes.value.success) {
@@ -1019,6 +1025,9 @@ function App() {
           }
           if (contestRes.status === 'fulfilled' && contestRes.value.success) {
             setContestStats(contestRes.value.data);
+          }
+          if (platformStreakRes.status === 'fulfilled' && platformStreakRes.value.success) {
+            setPlatformStreak(platformStreakRes.value.data);
           }
         } catch (_) { }
       } catch (error) {
@@ -1063,6 +1072,7 @@ function App() {
   const [statusFilter, setStatusFilter] = useState('All');
   const [platformFilter, setPlatformFilter] = useState('ALL'); // 'ALL' | 'LC' | 'CF'
   const [sortOrder, setSortOrder] = useState('recent'); // 'recent' | 'problem'
+  const [viewMode, setViewMode] = useState('ALL'); // 'ALL' | 'STRIVER' | 'TLE'
   const [showModal, setShowModal] = useState(false);
   const [notification, setNotification] = useState(null);
   const [syncing, setSyncing] = useState(false);
@@ -2055,8 +2065,9 @@ function App() {
     setDifficultyFilter('All');
     setPatternFilter('All');
     setStatusFilter('All');
-    setSelectedFilter(null); // also clear DifficultyNavbar filter
-    setPlatformFilter('ALL'); // also clear platform filter
+    setSelectedFilter(null);
+    setPlatformFilter('ALL');
+    setViewMode('ALL');
 
     showNotification('✨ All filters cleared', 'success');
   };
@@ -2065,7 +2076,7 @@ function App() {
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
-        if (searchTerm || debouncedSearch || difficultyFilter !== 'All' || patternFilter !== 'All' || statusFilter !== 'All' || selectedFilter !== null) {
+        if (searchTerm || debouncedSearch || difficultyFilter !== 'All' || patternFilter !== 'All' || statusFilter !== 'All' || selectedFilter !== null || viewMode !== 'ALL') {
           handleClearAllFilters();
         }
       }
@@ -2493,10 +2504,10 @@ function App() {
   // Filters
   const patterns = ['All', ...new Set(allProblems.map(p => p.pattern))].sort();
 
-  // Reset status filter when switching platforms
+  // Reset viewMode when switching away from CF (TLE only applies to CF)
   useEffect(() => {
-    if (platformFilter !== 'CF' && statusFilter === 'TLE') setStatusFilter('All');
-  }, [platformFilter, statusFilter]);
+    if (platformFilter !== 'CF' && viewMode === 'TLE') setViewMode('ALL');
+  }, [platformFilter, viewMode]);
 
   const filteredProblems = React.useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase();
@@ -2528,7 +2539,6 @@ function App() {
         statusFilter === 'All' ||
         (statusFilter === 'Targeted' ? problem.targeted === true :
           statusFilter === 'Striver' ? problem.isStriver === true :
-          statusFilter === 'TLE' ? problem.isTLE === true :
             problem.status === statusFilter);
 
       // selectedFilter from DifficultyNavbar
@@ -2544,9 +2554,15 @@ function App() {
       const matchesPlatform =
         platformFilter === 'ALL' || problem.platform === platformFilter;
 
-      return matchesSearch && matchesDifficulty && matchesPattern && matchesStatus && matchesSelectedFilter && matchesPlatform;
+      // View mode filter (Striver / TLE sheet — independent of status)
+      const matchesViewMode =
+        viewMode === 'ALL' ||
+        (viewMode === 'STRIVER' ? problem.isStriver === true :
+          viewMode === 'TLE' ? problem.isTLE === true : true);
+
+      return matchesSearch && matchesDifficulty && matchesPattern && matchesStatus && matchesSelectedFilter && matchesPlatform && matchesViewMode;
     });
-  }, [allProblems, debouncedSearch, difficultyFilter, patternFilter, statusFilter, selectedFilter, platformFilter]);
+  }, [allProblems, debouncedSearch, difficultyFilter, patternFilter, statusFilter, selectedFilter, platformFilter, viewMode]);
 
   // Animate table count when filtered problems change
   useEffect(() => {
@@ -2846,6 +2862,25 @@ function App() {
                   <div className="streak-value">{displayActiveDays}</div>
                   <div className="streak-label">Active Days</div>
                 </div>
+              </div>
+
+              {/* Per-platform streak breakdown */}
+              <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
+                {[
+                  { label: '💻 LC', streak: platformStreak.lc.currentStreak, days: platformStreak.lc.activeDays },
+                  { label: '🏆 CF', streak: platformStreak.cf.currentStreak, days: platformStreak.cf.activeDays },
+                ].map(p => (
+                  <div key={p.label} style={{
+                    flex: 1, minWidth: 90,
+                    background: 'var(--bg-tertiary)',
+                    borderRadius: 8, padding: '8px 10px',
+                    fontSize: '0.78rem', color: 'var(--text-secondary)',
+                  }}>
+                    <div style={{ fontWeight: 700, marginBottom: 4 }}>{p.label}</div>
+                    <div>🔥 {p.streak}d streak</div>
+                    <div>📅 {p.days} active days</div>
+                  </div>
+                ))}
               </div>
 
               {/* Today Status */}
@@ -3666,6 +3701,33 @@ function App() {
           </div>
 
           {/* Filters */}
+          {/* View Mode Toggle — Striver / TLE sheet (independent of status filter) */}
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+            {[
+              { key: 'ALL',     label: '📋 All' },
+              { key: 'STRIVER', label: '📘 Striver' },
+              { key: 'TLE',     label: '🏆 TLE Sheet' },
+            ].map(v => (
+              <button
+                key={v.key}
+                onClick={() => setViewMode(v.key)}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '8px',
+                  border: viewMode === v.key ? '1.5px solid var(--primary)' : '1.5px solid var(--border)',
+                  background: viewMode === v.key ? 'rgba(99,102,241,0.15)' : 'var(--bg-tertiary)',
+                  color: viewMode === v.key ? 'var(--primary)' : 'var(--text-secondary)',
+                  fontWeight: viewMode === v.key ? 700 : 500,
+                  fontSize: '0.82rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                {v.label}
+              </button>
+            ))}
+          </div>
+
           {/* Platform Filter Tabs */}
           <div className="platform-tabs" style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
             {[
@@ -3757,7 +3819,6 @@ function App() {
                   <option>Done</option>
                   <option>Targeted</option>
                   <option>Striver</option>
-                  <option>TLE</option>
                 </select>
               </div>
               {(searchTerm || difficultyFilter !== 'All' || patternFilter !== 'All' || statusFilter !== 'All' || selectedFilter !== null || platformFilter !== 'ALL') && (

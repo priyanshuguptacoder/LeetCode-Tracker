@@ -5,13 +5,15 @@ const {
   getRecentlySolved,
   getByPlatform,
   getTargeted,
-  getContestStats
+  getContestStats,
+  getStreakByPlatform,
 } = require('../controllers/analyticsController');
 
-router.get('/streak', getStreak);               // GET /api/analytics/streak
-router.get('/recently-solved', getRecentlySolved); // GET /api/analytics/recently-solved
-router.get('/by-platform', getByPlatform);        // GET /api/analytics/by-platform
-router.get('/targeted', getTargeted);             // GET /api/analytics/targeted
-router.get('/contest', getContestStats);          // GET /api/analytics/contest
+router.get('/streak', getStreak);
+router.get('/streak-by-platform', getStreakByPlatform);  // GET /api/analytics/streak-by-platform
+router.get('/recently-solved', getRecentlySolved);
+router.get('/by-platform', getByPlatform);
+router.get('/targeted', getTargeted);
+router.get('/contest', getContestStats);
 
 module.exports = router;

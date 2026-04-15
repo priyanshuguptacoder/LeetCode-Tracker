@@ -181,6 +181,11 @@ const api = {
     if (!r.ok) throw new Error('Failed to fetch contest stats');
     return r.json();
   },
+  getStreakByPlatform: async () => {
+    const r = await fetch(`${API_BASE_URL}/analytics/streak-by-platform`);
+    if (!r.ok) throw new Error('Failed to fetch streak by platform');
+    return r.json();
+  },
 };
 
 window.API = api;

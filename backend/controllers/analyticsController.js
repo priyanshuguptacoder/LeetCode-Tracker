@@ -178,7 +178,62 @@ exports.getTargeted = async (req, res) => {
   }
 };
 
-// GET /api/analytics/contest — returns contest stats from BOTH platforms
+// GET /api/analytics/streak-by-platform — LC streak, CF streak, combined streak
+exports.getStreakByPlatform = async (req, res) => {
+  try {
+    const [allProblems, settings] = await Promise.all([
+      Problem.find(
+        {
+          solved: true,
+          isDeleted: { $ne: true },
+          $or: [{ solvedDate: { $ne: null } }, { lastSubmittedAt: { $ne: null } }],
+        },
+        { solvedDate: 1, lastSubmittedAt: 1, platform: 1 }
+      ).lean(),
+      Settings.findOne({ key: 'global' }, { submissionCalendarDates: 1 }).lean(),
+    ]);
+
+    // Normalize dates
+    const normalize = (p) => ({ ...p, solvedDate: p.solvedDate || p.lastSubmittedAt });
+    const normalized = allProblems.map(normalize);
+
+    const lcProblems = normalized.filter(p => p.platform === 'LC');
+    const cfProblems = normalized.filter(p => p.platform === 'CF');
+
+    const calendarDates = settings?.submissionCalendarDates?.length > 0
+      ? settings.submissionCalendarDates
+      : null;
+
+    // Combined uses calendar dates if available (most accurate)
+    const combined = computeStats(normalized, calendarDates);
+    // Per-platform always uses solvedDates (no calendar for CF)
+    const lc = computeStats(lcProblems, null);
+    const cf = computeStats(cfProblems, null);
+
+    res.json({
+      success: true,
+      data: {
+        combined: {
+          currentStreak: combined.currentStreak,
+          maxStreak:     combined.maxStreak,
+          activeDays:    combined.activeDays,
+        },
+        lc: {
+          currentStreak: lc.currentStreak,
+          maxStreak:     lc.maxStreak,
+          activeDays:    lc.activeDays,
+        },
+        cf: {
+          currentStreak: cf.currentStreak,
+          maxStreak:     cf.maxStreak,
+          activeDays:    cf.activeDays,
+        },
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
 // SAFETY: Returns null for missing values, never crashes UI
 exports.getContestStats = async (req, res) => {
   try {
