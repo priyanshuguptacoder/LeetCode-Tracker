@@ -57,10 +57,9 @@ const corsOptions = {
   allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"]
 };
 
+// ─── Middleware ──────────────────────────────────────────────────────────────
 app.use(cors(corsOptions));
-
-// Explicit preflight handling
-app.options("*", cors(corsOptions));
+app.options("*", cors(corsOptions)); // Enable preflight for all routes
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
