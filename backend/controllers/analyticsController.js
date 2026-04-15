@@ -179,6 +179,8 @@ exports.getTargeted = async (req, res) => {
 };
 
 // GET /api/analytics/streak-by-platform — LC streak, CF streak, combined streak
+// GET /api/analytics/streak-by-platform — LC streak, CF streak, combined streak
+// Uses lastSubmittedAt as the authoritative date field for per-platform calculation.
 exports.getStreakByPlatform = async (req, res) => {
   try {
     const [allProblems, settings] = await Promise.all([
@@ -186,48 +188,87 @@ exports.getStreakByPlatform = async (req, res) => {
         {
           solved: true,
           isDeleted: { $ne: true },
-          $or: [{ solvedDate: { $ne: null } }, { lastSubmittedAt: { $ne: null } }],
+          $or: [{ lastSubmittedAt: { $ne: null } }, { solvedDate: { $ne: null } }],
         },
-        { solvedDate: 1, lastSubmittedAt: 1, platform: 1 }
+        { lastSubmittedAt: 1, solvedDate: 1, platform: 1 }
       ).lean(),
       Settings.findOne({ key: 'global' }, { submissionCalendarDates: 1 }).lean(),
     ]);
 
-    // Normalize dates
-    const normalize = (p) => ({ ...p, solvedDate: p.solvedDate || p.lastSubmittedAt });
-    const normalized = allProblems.map(normalize);
+    // Build a UTC date-set from lastSubmittedAt (most recent submission per problem)
+    const buildDateSet = (list) => {
+      const set = new Set();
+      const todayKey = new Date().toISOString().split('T')[0];
+      for (const p of list) {
+        const raw = p.lastSubmittedAt || p.solvedDate;
+        if (!raw) continue;
+        const key = new Date(raw).toISOString().split('T')[0];
+        if (key <= todayKey) set.add(key);
+      }
+      return set;
+    };
 
-    const lcProblems = normalized.filter(p => p.platform === 'LC');
-    const cfProblems = normalized.filter(p => p.platform === 'CF');
+    // Calculate current streak, max streak, active days from a date set
+    const calcStreak = (dateSet) => {
+      if (dateSet.size === 0) return { currentStreak: 0, maxStreak: 0, activeDays: 0 };
 
+      const sorted = [...dateSet].sort();
+      const activeDays = sorted.length;
+
+      // Max streak — full scan
+      let maxStreak = 1, temp = 1;
+      for (let i = 1; i < sorted.length; i++) {
+        const diff = Math.round(
+          (new Date(sorted[i] + 'T00:00:00Z') - new Date(sorted[i - 1] + 'T00:00:00Z')) / 86400000
+        );
+        if (diff === 1) { temp++; maxStreak = Math.max(maxStreak, temp); }
+        else temp = 1;
+      }
+      maxStreak = Math.max(maxStreak, temp);
+
+      // Current streak — walk back from today (streak alive if solved today OR yesterday)
+      const todayKey     = new Date().toISOString().split('T')[0];
+      const yesterdayKey = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+      const startKey = dateSet.has(todayKey) ? todayKey : (dateSet.has(yesterdayKey) ? yesterdayKey : null);
+      let currentStreak = 0;
+      if (startKey) {
+        let cursor = new Date(startKey + 'T00:00:00Z');
+        while (dateSet.has(cursor.toISOString().split('T')[0])) {
+          currentStreak++;
+          cursor.setUTCDate(cursor.getUTCDate() - 1);
+        }
+      }
+
+      return { currentStreak, maxStreak, activeDays };
+    };
+
+    const lcProblems = allProblems.filter(p => p.platform === 'LC');
+    const cfProblems = allProblems.filter(p => p.platform === 'CF');
+
+    const lcStats       = calcStreak(buildDateSet(lcProblems));
+    const cfStats       = calcStreak(buildDateSet(cfProblems));
+
+    // Combined: prefer LeetCode submission calendar (most accurate for LC days)
     const calendarDates = settings?.submissionCalendarDates?.length > 0
       ? settings.submissionCalendarDates
       : null;
 
-    // Combined uses calendar dates if available (most accurate)
-    const combined = computeStats(normalized, calendarDates);
-    // Per-platform always uses solvedDates (no calendar for CF)
-    const lc = computeStats(lcProblems, null);
-    const cf = computeStats(cfProblems, null);
+    let combinedStats;
+    if (calendarDates) {
+      // Merge calendar dates with CF submission dates for true combined streak
+      const cfDateSet = buildDateSet(cfProblems);
+      const mergedSet = new Set([...calendarDates, ...cfDateSet]);
+      combinedStats = calcStreak(mergedSet);
+    } else {
+      combinedStats = calcStreak(buildDateSet(allProblems));
+    }
 
     res.json({
       success: true,
       data: {
-        combined: {
-          currentStreak: combined.currentStreak,
-          maxStreak:     combined.maxStreak,
-          activeDays:    combined.activeDays,
-        },
-        lc: {
-          currentStreak: lc.currentStreak,
-          maxStreak:     lc.maxStreak,
-          activeDays:    lc.activeDays,
-        },
-        cf: {
-          currentStreak: cf.currentStreak,
-          maxStreak:     cf.maxStreak,
-          activeDays:    cf.activeDays,
-        },
+        combined: combinedStats,
+        lc:       lcStats,
+        cf:       cfStats,
       },
     });
   } catch (err) {

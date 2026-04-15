@@ -429,7 +429,7 @@ function RevisionModeModal({ problem, onComplete, onClose }) {
 
             <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
               <strong style={{ color: 'var(--primary)' }}>
-                #{problem.number} {problem.title}
+                {problem.title}
               </strong>
             </p>
 
@@ -651,16 +651,23 @@ function computeStreakFromDates(dateStrings) {
 }
 
 // ProgressCard — unified Striver / TLE sheet progress display
-function ProgressCard({ title, data }) {
-  if (!data) return null;
+// Always renders — never returns null even if data is missing
+function ProgressCard({ data }) {
+  const safe = {
+    easy:        data?.easy        ?? 0,
+    medium:      data?.medium      ?? 0,
+    hard:        data?.hard        ?? 0,
+    total:       data?.total       ?? 0,
+    totalInSheet: data?.totalInSheet ?? null,
+  };
   const rows = [
-    { label: 'Easy',   cls: 'easy',   value: data.easy },
-    { label: 'Medium', cls: 'medium', value: data.medium },
-    { label: 'Hard',   cls: 'hard',   value: data.hard },
+    { label: 'Easy',   cls: 'easy',   value: safe.easy },
+    { label: 'Medium', cls: 'medium', value: safe.medium },
+    { label: 'Hard',   cls: 'hard',   value: safe.hard },
   ];
-  const totalLabel = data.totalInSheet != null
-    ? `${data.total} / ${data.totalInSheet}`
-    : String(data.total);
+  const totalLabel = safe.totalInSheet != null
+    ? `${safe.total} / ${safe.totalInSheet}`
+    : String(safe.total);
   return (
     <div className="striver-stats">
       {rows.map(r => (
@@ -672,7 +679,7 @@ function ProgressCard({ title, data }) {
       ))}
       <div className="striver-stat-row striver-total-row">
         <span className="striver-dot total"></span>
-        <span className="striver-label">{data.totalInSheet != null ? 'Solved / Sheet' : 'Total Solved'}</span>
+        <span className="striver-label">{safe.totalInSheet != null ? 'Solved / Sheet' : 'Total Solved'}</span>
         <span className="striver-value striver-total">{totalLabel}</span>
       </div>
     </div>
@@ -689,16 +696,25 @@ function ContestStats({ stats }) {
   if (!stats) return null;
 
   const lc = {
-    rating: stats.lcRating,
-    globalRank: stats.lcGlobalRank,
-    contestCount: stats.lcContestCount,
+    rating:       stats.lcRating       != null ? Math.floor(stats.lcRating)       : null,
+    globalRank:   stats.lcGlobalRank   ?? null,
+    contestCount: stats.lcContestCount ?? null,
   };
   const cf = {
-    rating: stats.cfRating,
-    maxRating: stats.cfMaxRating,
-    rank: stats.cfRank,
-    contestCount: stats.cfContestCount,
+    rating:       stats.cfRating       != null ? Math.floor(stats.cfRating)       : null,
+    maxRating:    stats.cfMaxRating     != null ? Math.floor(stats.cfMaxRating)    : null,
+    rank:         stats.cfRank         ?? null,
+    contestCount: stats.cfContestCount ?? null,
   };
+
+  const Row = ({ label, value }) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>{label}</span>
+      <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>
+        {value != null ? (typeof value === 'number' ? value.toLocaleString() : value) : 'N/A'}
+      </span>
+    </div>
+  );
 
   return (
     <div className="analytics-card" style={{ minHeight: 'auto' }}>
@@ -706,47 +722,26 @@ function ContestStats({ stats }) {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
         {/* LeetCode */}
         <div style={{ padding: '12px', background: 'var(--bg-tertiary)', borderRadius: '8px' }}>
-          <div style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '8px', fontSize: '0.9rem' }}>
+          <div style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '10px', fontSize: '0.88rem' }}>
             💻 LeetCode
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.85rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>Rating:</span>
-              <span style={{ fontWeight: 600 }}>{lc.rating ?? 'N/A'}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>Global Rank:</span>
-              <span style={{ fontWeight: 600 }}>{lc.globalRank ?? 'N/A'}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>Contests:</span>
-              <span style={{ fontWeight: 600 }}>{lc.contestCount ?? 'N/A'}</span>
-            </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+            <Row label="Rating"      value={lc.rating} />
+            <Row label="Global Rank" value={lc.globalRank} />
+            <Row label="Contests"    value={lc.contestCount} />
           </div>
         </div>
 
         {/* Codeforces */}
         <div style={{ padding: '12px', background: 'var(--bg-tertiary)', borderRadius: '8px' }}>
-          <div style={{ fontWeight: 700, color: '#a78bfa', marginBottom: '8px', fontSize: '0.9rem' }}>
+          <div style={{ fontWeight: 700, color: '#a78bfa', marginBottom: '10px', fontSize: '0.88rem' }}>
             🏆 Codeforces
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.85rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>Rating:</span>
-              <span style={{ fontWeight: 600 }}>{cf.rating ?? 'N/A'}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>Max Rating:</span>
-              <span style={{ fontWeight: 600 }}>{cf.maxRating ?? 'N/A'}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>Rank:</span>
-              <span style={{ fontWeight: 600 }}>{cf.rank ?? 'N/A'}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>Contests:</span>
-              <span style={{ fontWeight: 600 }}>{cf.contestCount ?? 'N/A'}</span>
-            </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+            <Row label="Rating"     value={cf.rating} />
+            <Row label="Max Rating" value={cf.maxRating} />
+            <Row label="Rank"       value={cf.rank} />
+            <Row label="Contests"   value={cf.contestCount} />
           </div>
         </div>
       </div>
@@ -768,6 +763,7 @@ function App() {
   const [tleId, setTleId] = useState(null);
   const [recentProblems, setRecentProblems] = useState([]);
   const [todayProblems, setTodayProblems] = useState([]);
+  const [revisionList, setRevisionList] = useState([]);
   const [syncStatus, setSyncStatus] = useState('checking');
 
   // ── Difficulty navbar + suggestion state — declared early to avoid hook-order issues
@@ -970,13 +966,14 @@ function App() {
         }
         // Non-blocking secondary fetches
         try {
-          const [sugRes, recentTodayRes, contestRes, platformStreakRes, striverRes, tleRes] = await Promise.allSettled([
+          const [sugRes, recentTodayRes, contestRes, platformStreakRes, striverRes, tleRes, revisionRes] = await Promise.allSettled([
             window.API.getSuggestions(),
             window.API.getRecentAndToday(),
             window.API.getContestStats(),
             window.API.getStreakByPlatform(),
             window.API.getStriverStats(),
             window.API.getTLEStats(),
+            window.API.getRevisionList(),
           ]);
           if (sugRes.status === 'fulfilled' && sugRes.value.success) setSuggestions(sugRes.value.data || []);
           if (recentTodayRes.status === 'fulfilled' && recentTodayRes.value.success) {
@@ -990,10 +987,13 @@ function App() {
             setPlatformStreak(platformStreakRes.value.data);
           }
           if (striverRes.status === 'fulfilled' && striverRes.value.success) {
-            setStriverStats(striverRes.value.data);
+            setStriverStats(prev => ({ ...prev, ...striverRes.value.data }));
           }
           if (tleRes.status === 'fulfilled' && tleRes.value.success) {
-            setTleStats(tleRes.value.data);
+            setTleStats(prev => ({ ...prev, ...tleRes.value.data }));
+          }
+          if (revisionRes.status === 'fulfilled' && revisionRes.value.success) {
+            setRevisionList(revisionRes.value.data || []);
           }
         } catch (_) { }
       } catch (error) {
@@ -1561,7 +1561,7 @@ function App() {
       }
 
       // Refetch after sync — do NOT clear state first (prevents flicker)
-      const [probRes, recentTodayRes, streakRes, platformStreakRes, contestRes, striverRes, tleRes] = await Promise.allSettled([
+      const [probRes, recentTodayRes, streakRes, platformStreakRes, contestRes, striverRes, tleRes, revisionRes] = await Promise.allSettled([
         window.API.getAllProblems(),
         window.API.getRecentAndToday(),
         window.API.getStreak(),
@@ -1569,6 +1569,7 @@ function App() {
         window.API.getContestStats(),
         window.API.getStriverStats(),
         window.API.getTLEStats(),
+        window.API.getRevisionList(),
       ]);
       if (probRes.status === 'fulfilled' && probRes.value.success)
         setApiProblems(transformProblems(probRes.value.data));
@@ -1583,9 +1584,11 @@ function App() {
       if (contestRes.status === 'fulfilled' && contestRes.value.success)
         setContestStats(contestRes.value.data);
       if (striverRes.status === 'fulfilled' && striverRes.value.success)
-        setStriverStats(striverRes.value.data);
+        setStriverStats(prev => ({ ...prev, ...striverRes.value.data }));
       if (tleRes.status === 'fulfilled' && tleRes.value.success)
-        setTleStats(tleRes.value.data);
+        setTleStats(prev => ({ ...prev, ...tleRes.value.data }));
+      if (revisionRes.status === 'fulfilled' && revisionRes.value.success)
+        setRevisionList(revisionRes.value.data || []);
 
       showNotification('✅ Sync All complete', 'success');
     } catch (err) {
@@ -1933,16 +1936,15 @@ function App() {
 
   // ── Click suggestion / targeted card → scroll + highlight table row ─────
   const handleClickSuggestion = (problemId) => {
-    // Clear all filters first so the row will be in the DOM
+    const safeId = String(problemId);
     setSelectedFilter(null);
     setDifficultyFilter('All');
     setStatusFilter('All');
     setPatternFilter('All');
     setSearchTerm('');
     setDebouncedSearch('');
-    // Signal the scroll effect to fire after React re-renders
-    setPendingScrollId(problemId);
-    setSelectedProblemId(problemId);
+    setPendingScrollId(safeId);
+    setSelectedProblemId(safeId);
   };
 
   // ── Fire scroll after filters have cleared and DOM has updated ───────────
@@ -2003,7 +2005,7 @@ function App() {
           setApiProblems(ps => ps.map(p =>
             String(p.number) === String(number) ? { ...p, isStriver: res.data.isStriver } : p
           ));
-          window.API.getStriverStats().then(r => { if (r.success) setStriverStats(r.data); }).catch(() => {});
+          window.API.getStriverStats().then(r => { if (r.success) setStriverStats(prev => ({ ...prev, ...r.data })); }).catch(() => {});
           showNotification(res.data.isStriver ? '📘 Added to Striver' : '✅ Removed from Striver', 'success');
         } else {
           // Revert
@@ -2043,7 +2045,7 @@ function App() {
           setApiProblems(ps => ps.map(p =>
             String(p.number) === String(number) ? { ...p, isTLE: res.data.isTLE } : p
           ));
-          window.API.getTLEStats().then(r => { if (r.success) setTleStats(r.data); }).catch(() => {});
+          window.API.getTLEStats().then(r => { if (r.success) setTleStats(prev => ({ ...prev, ...r.data })); }).catch(() => {});
           showNotification(res.data.isTLE ? '🏆 Added to TLE sheet' : '✅ Removed from TLE sheet', 'success');
         } else {
           setApiProblems(ps => ps.map(p =>
@@ -2119,9 +2121,10 @@ function App() {
   // DYNAMIC ANALYTICS CALCULATIONS
   // ============================================
 
-  // ── Striver + TLE stats — fetched from backend, not computed locally ──────
-  const [striverStats, setStriverStats] = useState({ easy: 0, medium: 0, hard: 0, total: 0 });
-  const [tleStats, setTleStats] = useState({ easy: 0, medium: 0, hard: 0, total: 0, totalInSheet: 0 });
+  // ── Striver + TLE stats — fetched from backend, locked shape (never undefined) ──
+  const DEFAULT_STATS = { easy: 0, medium: 0, hard: 0, total: 0 };
+  const [striverStats, setStriverStats] = useState(DEFAULT_STATS);
+  const [tleStats, setTleStats] = useState({ ...DEFAULT_STATS, totalInSheet: 0 });
 
   const totalSolved   = allProblems.filter(p => p.status === 'Done').length;
   const totalProblems = allProblems.length;
@@ -2432,36 +2435,34 @@ function App() {
   // Only shows problems where nextRevisionAt <= now (due for revision).
   // New solves get nextRevisionAt = solvedAt + 1 day, so they don't appear immediately.
   // Sub-sections: Due Now (overdue) | Upcoming (not yet due, shown for awareness)
-  // Sort: nextRevisionAt ASC (most urgent first)
-  // Cap: max 9.
-  // ============================================
+  // ── Revision list — from backend (balanced 6 LC + 3 CF, sorted by urgency) ──
   const intelligentRevision = React.useMemo(() => {
     const now = new Date();
-
-    return allProblems
-      .filter(p => {
-        if (p.status !== 'Done') return false;
-        if (!p.nextRevisionAt) return false;           // not scheduled yet
-        return new Date(p.nextRevisionAt) <= now;      // only due problems
-      })
-      .map(p => {
-        const solvedDateStr = solvedDates[p.number];
-        const daysSinceSolved = solvedDateStr
-          ? Math.max(1, Math.ceil((now - parseLocalDate(solvedDateStr)) / 86400000))
-          : null;
-        const conf = p.confidence ?? 3;
-        const confidenceLevel = conf <= 1 ? 'LOW' : conf <= 3 ? 'MEDIUM' : 'HIGH';
-        const neverRevised = (p.revisionCount || 0) === 0;
-        return { ...p, daysSinceSolved, neverRevised, confidenceLevel };
-      })
-      .sort((a, b) => {
-        // Most urgent (earliest nextRevisionAt) first
-        const aNext = a.nextRevisionAt ? new Date(a.nextRevisionAt).getTime() : 0;
-        const bNext = b.nextRevisionAt ? new Date(b.nextRevisionAt).getTime() : 0;
-        return aNext - bNext;
-      })
-      .slice(0, 9);
-  }, [allProblems, solvedDates]);
+    return (revisionList || []).map(p => {
+      // Merge with local allProblems for live isStriver/targeted/confidence state
+      const local = allProblems.find(ap => String(ap.number) === String(p.uniqueId || p.id)) || {};
+      const solvedDateStr = p.solvedDate ? toLocalDateStr(new Date(p.solvedDate)) : null;
+      const daysSinceSolved = solvedDateStr
+        ? Math.max(1, Math.ceil((now - parseLocalDate(solvedDateStr)) / 86400000))
+        : null;
+      const conf = local.confidence ?? p.confidence ?? 3;
+      const confidenceLevel = conf <= 1 ? 'LOW' : conf <= 3 ? 'MEDIUM' : 'HIGH';
+      const neverRevised = (p.revisionCount || 0) === 0;
+      return {
+        ...p,
+        ...local,
+        // Keep backend values for revision-specific fields
+        nextRevisionAt: p.nextRevisionAt,
+        revisionCount: p.revisionCount ?? local.revisionCount ?? 0,
+        failureLoopFlagged: p.failureLoopFlagged ?? local.failureLoopFlagged ?? false,
+        daysSinceSolved,
+        neverRevised,
+        confidenceLevel,
+        number: p.uniqueId || p.id || p.number,
+        link: p.platformLink || p.leetcodeLink || local.link || '',
+      };
+    });
+  }, [revisionList, allProblems, solvedDates]);
 
   // ============================================
   // TARGETED PROBLEMS — manually marked by user
@@ -3195,26 +3196,23 @@ function App() {
           {/* Contest Stats — directly below streak + monthly planner */}
           <ContestStats stats={contestStats} />
 
-          {/* Striver Progress — LC only. TLE Sheet — CF only. Both shown on ALL. */}
-          {(platformFilter === 'ALL' || platformFilter === 'LC') && (
-            <div className="analytics-card striver-card fade-up fade-up-4">
-              <h3 className="card-title">📘 Striver Progress</h3>
-              <ProgressCard data={striverStats} />
-              {striverStats.total === 0 && (
-                <div className="striver-empty">Click 📘 on any LC problem to mark it as Striver</div>
-              )}
-            </div>
-          )}
+          {/* Striver Progress — always visible */}
+          <div className="analytics-card striver-card fade-up fade-up-4">
+            <h3 className="card-title">📘 Striver Progress</h3>
+            <ProgressCard data={striverStats} />
+            {striverStats.total === 0 && (
+              <div className="striver-empty">Click 📘 on any LC problem to mark it as Striver</div>
+            )}
+          </div>
 
-          {(platformFilter === 'ALL' || platformFilter === 'CF') && (
-            <div className="analytics-card striver-card fade-up fade-up-4">
-              <h3 className="card-title">🏆 TLE Sheet Progress</h3>
-              <ProgressCard data={tleStats} />
-              {tleStats.totalInSheet === 0 && (
-                <div className="striver-empty">No CF problems match the TLE Sheet criteria yet.</div>
-              )}
-            </div>
-          )}
+          {/* TLE Sheet Progress — always visible */}
+          <div className="analytics-card striver-card fade-up fade-up-4">
+            <h3 className="card-title">🏆 TLE Sheet Progress</h3>
+            <ProgressCard data={tleStats} />
+            {(tleStats.totalInSheet ?? 0) === 0 && (
+              <div className="striver-empty">No CF problems match the TLE Sheet criteria yet.</div>
+            )}
+          </div>
 
           {/* Needs Revision — Spaced Repetition Queue */}
           {(() => {
@@ -3312,16 +3310,25 @@ function App() {
             // Merge backend data with full problem data from allProblems for extra fields
             const enrichProblem = (p) => {
               if (!p) return null;
-              const full = allProblems.find(ap => ap.number === (p.id || p.number)) || {};
+              const probId = String(p.uniqueId || p.id || p.number || '');
+              const isCF =
+                p.platform === 'CF' ||
+                probId.startsWith('CF-') ||
+                /^[0-9]+[A-Za-z]+$/.test(probId);
+              const full = allProblems.find(ap => String(ap.number) === probId) || {};
+              const defaultLink = isCF
+                ? `https://codeforces.com/problemset/problem/${p.contestId || full.contestId}/${p.index || full.index}`
+                : `https://leetcode.com/problems/${probId}/`;
               return {
                 ...p,
-                number: p.id || p.number,
+                number: probId,
+                platform: p.platform || full.platform || (isCF ? 'CF' : 'LC'),
                 isStriver: full.isStriver ?? p.isStriver ?? false,
                 targeted: full.targeted ?? p.targeted ?? false,
                 revisionCount: full.revisionCount ?? p.revisionCount ?? 0,
                 lastRevisedAt: full.lastRevisedAt ?? p.lastRevisedAt ?? null,
-                link: p.leetcodeLink || full.link || `https://leetcode.com/problems/${p.id}/`,
-                providerTitle: p?.providerTitle || full?.providerTitle || 'LeetCode',
+                link: p.platformLink || p.leetcodeLink || full.link || defaultLink,
+                providerTitle: p?.providerTitle || full?.providerTitle || (isCF ? 'Codeforces' : 'LeetCode'),
               };
             };
 
@@ -3834,14 +3841,13 @@ function App() {
                       >
                         <td className="problem-number">{index + 1}</td>
                         <td className="problem-title">
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontSize: '0.8rem', opacity: 0.6 }}>
-                              {problem.platform === 'CF'
-                                ? problem.number  /* already "CF-1700A" */
-                                : `#${problem.number}`}
-                            </span>
-                            <span>{problem.title}</span>
-                          </div>
+                          <span
+                            title={problem.platform === 'CF'
+                              ? `${problem.number} · ${problem.title}`
+                              : `#${problem.number} · ${problem.title}`}
+                          >
+                            {problem.title}
+                          </span>
                         </td>
                         <td>
                           <span className={`badge badge-${(problem.difficulty || 'medium').toLowerCase()}`}>
@@ -3982,11 +3988,8 @@ function App() {
               {filteredProblems.length > 0 ? (
                 filteredProblems.map(problem => (
                   <div key={problem._id || problem.id} className="pm-card" data-problem-number={problem.number}>
-                    {/* Row 1: number + badges */}
+                    {/* Row 1: badges */}
                     <div className="pm-top">
-                      <span className="pm-number">
-                        {problem.platform === 'CF' ? problem.number : `#${problem.number}`}
-                      </span>
                       <span className={`badge badge-${(problem.difficulty || 'medium').toLowerCase()}`}>
                         {problem.difficulty}
                       </span>
@@ -3998,7 +4001,12 @@ function App() {
                     </div>
 
                     {/* Row 2: title */}
-                    <div className="pm-title">{problem.title}</div>
+                    <div
+                      className="pm-title"
+                      title={problem.platform === 'CF' ? `${problem.number}` : `#${problem.number}`}
+                    >
+                      {problem.title}
+                    </div>
 
                     {/* Row 3: revision count */}
                     <div className="pm-meta">

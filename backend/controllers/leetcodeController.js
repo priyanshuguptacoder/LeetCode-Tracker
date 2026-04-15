@@ -915,10 +915,10 @@ exports.getRecentAndToday = async (req, res) => {
       Problem.find({
         solved: true,
         isDeleted: { $ne: true },
-        $or: [{ solvedDate: { $ne: null } }, { lastSubmittedAt: { $ne: null } }],
+        $or: [{ lastSubmittedAt: { $ne: null } }, { solvedDate: { $ne: null } }],
       })
-        .sort({ solvedDate: -1, lastSubmittedAt: -1 })
-        .limit(15)
+        .sort({ lastSubmittedAt: -1 })
+        .limit(9)
         .select(SELECT)
         .lean(),
 

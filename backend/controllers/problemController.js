@@ -558,16 +558,42 @@ exports.deleteProblem = async (req, res) => {
 };
 
 // ─── GET /api/problems/revision-list ─────────────────────────────────────────
-// Only problems where nextRevisionAt <= now (due for revision)
+// Returns up to 9 due-for-revision problems: 6 LC + 3 CF (balanced).
+// Edge-case fill: if one platform is short, fill from the other.
 exports.getRevisionList = async (req, res) => {
   try {
     const now = new Date();
-    const problems = await Problem.find({ solved: true, isDeleted: { $ne: true } });
-    const list = problems.filter(p => {
-      if (!p.nextRevisionAt) return false;
-      return now >= new Date(p.nextRevisionAt);
-    });
-    res.json({ success: true, count: (list || []).length, data: list || [] });
+
+    // Fetch all due problems sorted by oldest revision first (most urgent)
+    const all = await Problem.find({
+      solved: true,
+      isDeleted: { $ne: true },
+      needsRevision: true,
+      $or: [
+        { nextRevisionAt: { $lte: now } },
+        { nextRevisionAt: null },          // never scheduled → also due
+      ],
+    })
+      .sort({ lastRevisedAt: 1, solvedDate: 1 })
+      .lean();
+
+    const lc = all.filter(p => p.platform === 'LC');
+    const cf = all.filter(p => p.platform === 'CF');
+
+    let lcSelected = lc.slice(0, 6);
+    let cfSelected = cf.slice(0, 3);
+
+    // Fill gaps from the other platform
+    if (lcSelected.length < 6) {
+      cfSelected = cf.slice(0, Math.min(cf.length, 9 - lcSelected.length));
+    }
+    if (cfSelected.length < 3) {
+      lcSelected = lc.slice(0, Math.min(lc.length, 9 - cfSelected.length));
+    }
+
+    const result = [...lcSelected, ...cfSelected].slice(0, 9);
+
+    res.json({ success: true, count: result.length, data: result });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to fetch revision list', message: err.message });
   }
