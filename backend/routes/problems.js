@@ -13,6 +13,7 @@ const {
   untargetProblem,
   toggleStriver,
   getStriverStats,
+  getTLEStats,
   markStriverProblems,
   getStats,
   getSettings,
@@ -31,6 +32,7 @@ router.get('/streak', getStreak);
 router.post('/streak/reset', resetStreakAuto);
 router.get('/streak/validate', validateStreak);
 router.get('/striver-stats', getStriverStats);
+router.get('/tle-stats', getTLEStats);
 router.get('/revision-list', getRevisionList);
 router.get('/suggestions', getSuggestions);
 router.post('/mark-striver', markStriverProblems);

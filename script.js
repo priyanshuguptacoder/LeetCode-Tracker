@@ -650,27 +650,33 @@ function computeStreakFromDates(dateStrings) {
   return { activeDays, currentStreak, maxStreak };
 }
 
-// Compute striver stats from a problems array (pure, no side effects).
-function computeStriverStats(problems) {
-  const solved = problems.filter(p => p.isStriver && p.status === 'Done');
-  return {
-    easy: solved.filter(p => p.difficulty === 'Easy').length,
-    medium: solved.filter(p => p.difficulty === 'Medium').length,
-    hard: solved.filter(p => p.difficulty === 'Hard').length,
-    total: solved.length,
-  };
-}
-
-function computeTLEStats(problems) {
-  const tle = problems.filter(p => p.isTLE);
-  const solved = tle.filter(p => p.status === 'Done');
-  return {
-    easy: solved.filter(p => p.difficulty === 'Easy').length,
-    medium: solved.filter(p => p.difficulty === 'Medium').length,
-    hard: solved.filter(p => p.difficulty === 'Hard').length,
-    total: solved.length,
-    totalInSheet: tle.length,
-  };
+// ProgressCard — unified Striver / TLE sheet progress display
+function ProgressCard({ title, data }) {
+  if (!data) return null;
+  const rows = [
+    { label: 'Easy',   cls: 'easy',   value: data.easy },
+    { label: 'Medium', cls: 'medium', value: data.medium },
+    { label: 'Hard',   cls: 'hard',   value: data.hard },
+  ];
+  const totalLabel = data.totalInSheet != null
+    ? `${data.total} / ${data.totalInSheet}`
+    : String(data.total);
+  return (
+    <div className="striver-stats">
+      {rows.map(r => (
+        <div key={r.label} className="striver-stat-row">
+          <span className={`striver-dot ${r.cls}`}></span>
+          <span className="striver-label">{r.label}</span>
+          <span className="striver-value">{r.value}</span>
+        </div>
+      ))}
+      <div className="striver-stat-row striver-total-row">
+        <span className="striver-dot total"></span>
+        <span className="striver-label">{data.totalInSheet != null ? 'Solved / Sheet' : 'Total Solved'}</span>
+        <span className="striver-value striver-total">{totalLabel}</span>
+      </div>
+    </div>
+  );
 }
 
 // WeaknessRadar removed — Topic Mastery section deleted
@@ -912,15 +918,6 @@ function App() {
     const topics = getTopicsForProblem(p);
     const status = p.solved ? 'Done' : p.inProgress ? 'In Progress' : 'Not Started';
 
-    // Compute TLE flag: CF problems in 1200–1800 rating band OR with key competitive topics
-    const cfRating = Number(p.rawDifficulty || p.rating || 0);
-    const isTLE = p.platform === 'CF' && (
-      (cfRating >= 1200 && cfRating <= 1800) ||
-      (Array.isArray(topics) && topics.some(t =>
-        ['dp', 'graphs', 'greedy', 'binary search'].includes((t || '').toLowerCase())
-      ))
-    );
-
     return {
       ...p,
       // Normalize IDs to strings defensively
@@ -932,7 +929,6 @@ function App() {
         : (p.problemIdNum || parseInt(String(p.uniqueId || p.id || '').replace(/\D/g, ''), 10) || p.number || 0),
       platform: p.platform || 'LC',
       status,
-      isTLE,
       userDifficulty: p.userDifficulty || p.difficulty || 'Medium',
       topics: topics,
       pattern: topics[0] || (p.pattern || 'Miscellaneous'),
@@ -977,11 +973,13 @@ function App() {
         }
         // Non-blocking secondary fetches
         try {
-          const [sugRes, recentTodayRes, contestRes, platformStreakRes] = await Promise.allSettled([
+          const [sugRes, recentTodayRes, contestRes, platformStreakRes, striverRes, tleRes] = await Promise.allSettled([
             window.API.getSuggestions(),
             window.API.getRecentAndToday(),
             window.API.getContestStats(),
             window.API.getStreakByPlatform(),
+            window.API.getStriverStats(),
+            window.API.getTLEStats(),
           ]);
           if (sugRes.status === 'fulfilled' && sugRes.value.success) setSuggestions(sugRes.value.data || []);
           if (recentTodayRes.status === 'fulfilled' && recentTodayRes.value.success) {
@@ -993,6 +991,12 @@ function App() {
           }
           if (platformStreakRes.status === 'fulfilled' && platformStreakRes.value.success) {
             setPlatformStreak(platformStreakRes.value.data);
+          }
+          if (striverRes.status === 'fulfilled' && striverRes.value.success) {
+            setStriverStats(striverRes.value.data);
+          }
+          if (tleRes.status === 'fulfilled' && tleRes.value.success) {
+            setTleStats(tleRes.value.data);
           }
         } catch (_) { }
       } catch (error) {
@@ -1560,11 +1564,13 @@ function App() {
       }
 
       // Refetch after sync — do NOT clear state first (prevents flicker)
-      const [probRes, recentTodayRes, streakRes, contestRes] = await Promise.allSettled([
+      const [probRes, recentTodayRes, streakRes, contestRes, striverRes, tleRes] = await Promise.allSettled([
         window.API.getAllProblems(),
         window.API.getRecentAndToday(),
         window.API.getStreak(),
         window.API.getContestStats(),
+        window.API.getStriverStats(),
+        window.API.getTLEStats(),
       ]);
       if (probRes.status === 'fulfilled' && probRes.value.success)
         setApiProblems(transformProblems(probRes.value.data));
@@ -1576,6 +1582,10 @@ function App() {
         setDbStreak(streakRes.value.data);
       if (contestRes.status === 'fulfilled' && contestRes.value.success)
         setContestStats(contestRes.value.data);
+      if (striverRes.status === 'fulfilled' && striverRes.value.success)
+        setStriverStats(striverRes.value.data);
+      if (tleRes.status === 'fulfilled' && tleRes.value.success)
+        setTleStats(tleRes.value.data);
 
       showNotification('✅ Sync All complete', 'success');
     } catch (err) {
@@ -2057,9 +2067,9 @@ function App() {
   // DYNAMIC ANALYTICS CALCULATIONS
   // ============================================
 
-  // ── Derived: striver stats — always computed from apiProblems, never stored in state ──
-  const striverStats = React.useMemo(() => computeStriverStats(apiProblems), [apiProblems]);
-  const tleStats = React.useMemo(() => computeTLEStats(apiProblems), [apiProblems]);
+  // ── Striver + TLE stats — fetched from backend, not computed locally ──────
+  const [striverStats, setStriverStats] = useState({ easy: 0, medium: 0, hard: 0, total: 0 });
+  const [tleStats, setTleStats] = useState({ easy: 0, medium: 0, hard: 0, total: 0, totalInSheet: 0 });
 
   const totalSolved = allProblems.filter(p => p.status === 'Done').length;
   const totalProblems = allProblems.length;
@@ -3134,28 +3144,7 @@ function App() {
           {platformFilter !== 'CF' && (
             <div className="analytics-card striver-card fade-up fade-up-4">
               <h3 className="card-title">📘 Striver Progress</h3>
-              <div className="striver-stats">
-                <div className="striver-stat-row">
-                  <span className="striver-dot easy"></span>
-                  <span className="striver-label">Easy</span>
-                  <span className="striver-value">{striverStats.easy}</span>
-                </div>
-                <div className="striver-stat-row">
-                  <span className="striver-dot medium"></span>
-                  <span className="striver-label">Medium</span>
-                  <span className="striver-value">{striverStats.medium}</span>
-                </div>
-                <div className="striver-stat-row">
-                  <span className="striver-dot hard"></span>
-                  <span className="striver-label">Hard</span>
-                  <span className="striver-value">{striverStats.hard}</span>
-                </div>
-                <div className="striver-stat-row striver-total-row">
-                  <span className="striver-dot total"></span>
-                  <span className="striver-label">Total Solved</span>
-                  <span className="striver-value striver-total">{striverStats.total}</span>
-                </div>
-              </div>
+              <ProgressCard data={striverStats} />
               {striverStats.total === 0 && (
                 <div className="striver-empty">Click 📘 on any problem in the table to mark it as Striver</div>
               )}
@@ -3165,28 +3154,7 @@ function App() {
           {platformFilter !== 'LC' && (
             <div className="analytics-card striver-card fade-up fade-up-4">
               <h3 className="card-title">🏆 TLE Sheet Progress</h3>
-              <div className="striver-stats">
-                <div className="striver-stat-row">
-                  <span className="striver-dot easy"></span>
-                  <span className="striver-label">Easy</span>
-                  <span className="striver-value">{tleStats.easy}</span>
-                </div>
-                <div className="striver-stat-row">
-                  <span className="striver-dot medium"></span>
-                  <span className="striver-label">Medium</span>
-                  <span className="striver-value">{tleStats.medium}</span>
-                </div>
-                <div className="striver-stat-row">
-                  <span className="striver-dot hard"></span>
-                  <span className="striver-label">Hard</span>
-                  <span className="striver-value">{tleStats.hard}</span>
-                </div>
-                <div className="striver-stat-row striver-total-row">
-                  <span className="striver-dot total"></span>
-                  <span className="striver-label">Solved / Sheet</span>
-                  <span className="striver-value striver-total">{tleStats.total}/{tleStats.totalInSheet}</span>
-                </div>
-              </div>
+              <ProgressCard data={tleStats} />
               {tleStats.totalInSheet === 0 && (
                 <div className="striver-empty">No CF problems match the TLE Sheet criteria yet.</div>
               )}

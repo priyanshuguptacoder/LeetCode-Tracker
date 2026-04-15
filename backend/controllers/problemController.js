@@ -798,13 +798,19 @@ exports.alignProblems = async (req, res) => {
 // ─── PATCH /api/problems/:id/striver ─────────────────────────────────────────
 exports.toggleStriver = async (req, res) => {
   try {
-    const problem = await findProblemById(req.params.id);
-    if (!problem || problem.isDeleted) return res.status(404).json({ success: false, error: 'Problem not found' });
-
-    problem.isStriver = !problem.isStriver;
-    await problem.save();
-
-    res.json({ success: true, data: { id: problem.id, isStriver: problem.isStriver } });
+    const idParam = req.params.id;
+    // Support numeric IDs (63 → LC-63), string IDs (LC-63, CF-1700A)
+    const existing = await findProblemById(idParam);
+    if (!existing || existing.isDeleted) {
+      return res.status(404).json({ success: false, error: 'Problem not found' });
+    }
+    const newVal = !existing.isStriver;
+    const updated = await Problem.findOneAndUpdate(
+      { uniqueId: existing.uniqueId },
+      { $set: { isStriver: newVal } },
+      { new: true }
+    );
+    res.json({ success: true, data: { id: updated.id, isStriver: updated.isStriver } });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to toggle striver', message: err.message });
   }
@@ -866,6 +872,23 @@ exports.getStriverStats = async (req, res) => {
     res.json({ success: true, data: { easy, medium, hard, total: safeProblems.length } });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to fetch striver stats', message: err.message });
+  }
+};
+
+// ─── GET /api/problems/tle-stats ──────────────────────────────────────────────
+exports.getTLEStats = async (req, res) => {
+  try {
+    const all  = await Problem.find({ isTLE: true, isDeleted: { $ne: true } }).lean();
+    const solved = all.filter(p => p.solved);
+    const easy   = solved.filter(p => p.difficulty === 'Easy').length;
+    const medium = solved.filter(p => p.difficulty === 'Medium').length;
+    const hard   = solved.filter(p => p.difficulty === 'Hard').length;
+    res.json({
+      success: true,
+      data: { easy, medium, hard, total: solved.length, totalInSheet: all.length },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Failed to fetch TLE stats', message: err.message });
   }
 };
 

@@ -55,15 +55,21 @@ async function upsertSolvedProblem(incoming) {
     return { action: 'skipped_older', uniqueId };
   }
 
+  const TLE_TOPICS = ['dp', 'graphs', 'greedy', 'binary search'];
+  const cfRating = Number(rating || 0);
+  const isTLE = platform === 'CF' && (
+    (cfRating >= 1200 && cfRating <= 1800) ||
+    (Array.isArray(topics) && topics.some(t => TLE_TOPICS.includes((t || '').toLowerCase())))
+  );
+
   const set = {
     uniqueId,
-    id: uniqueId, // keep legacy alias aligned
+    id: uniqueId,
     platform,
     title,
     difficulty,
     topics,
     platformLink,
-    // legacy field compatibility for frontend/back-compat paths
     leetcodeLink: platformLink,
     lastSubmittedAt: incomingLast,
     submittedAt: incomingLast,
@@ -72,6 +78,7 @@ async function upsertSolvedProblem(incoming) {
     index,
     rating,
     problemIdNum,
+    isTLE,
     providerTitle: platform === 'CF' ? 'Codeforces' : 'LeetCode',
   };
 

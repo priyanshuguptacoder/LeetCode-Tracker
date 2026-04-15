@@ -284,6 +284,32 @@ mongoose
       console.warn('[BACKFILL] CF contestId backfill failed:', e.message);
     }
 
+    // Backfill: compute and store isTLE on all CF problems
+    try {
+      const Problem = require('./models/Problem');
+      const TLE_TOPICS = ['dp', 'graphs', 'greedy', 'binary search'];
+      const cfProblems = await Problem.find({ platform: 'CF' }, { _id: 1, rating: 1, rawDifficulty: 1, topics: 1 }).lean();
+      if (cfProblems.length > 0) {
+        const ops = cfProblems.map(doc => {
+          const r = Number(doc.rawDifficulty || doc.rating || 0);
+          const inBand = r >= 1200 && r <= 1800;
+          const hasTag = Array.isArray(doc.topics) && doc.topics.some(t =>
+            TLE_TOPICS.includes((t || '').toLowerCase())
+          );
+          return {
+            updateOne: {
+              filter: { _id: doc._id },
+              update: { $set: { isTLE: inBand || hasTag } },
+            },
+          };
+        });
+        const res = await Problem.bulkWrite(ops);
+        console.log(`[BACKFILL] isTLE set on ${res.modifiedCount}/${cfProblems.length} CF problems`);
+      }
+    } catch (e) {
+      console.warn('[BACKFILL] isTLE backfill failed:', e.message);
+    }
+
     // ONE-TIME: Hard-reset all CF problems and re-sync from scratch
     // Guarded by Settings flag 'cfHardResetDone' — runs exactly once per deployment cycle
     try {

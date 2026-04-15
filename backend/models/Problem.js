@@ -45,6 +45,7 @@ const problemSchema = new mongoose.Schema(
     targeted: { type: Boolean, default: false }, // manually marked as a goal
     targetedAt: { type: Date, default: null },   // when it was targeted
     isStriver: { type: Boolean, default: false }, // part of Striver sheet
+    isTLE: { type: Boolean, default: false },      // CF TLE sheet (rating 1200-1800 or key topics)
     // ── Revision Intelligence Engine ──────────────────────────────────────
     solveTime: { type: Number, default: null },       // minutes taken to solve
     hintsUsed: { type: Boolean, default: false },     // used hint while solving
@@ -78,6 +79,8 @@ problemSchema.index({ solved: 1 });
 problemSchema.index({ topics: 1 });
 problemSchema.index({ platform: 1, difficultyRating: 1 });
 problemSchema.index({ uniqueId: 1 }, { unique: true });
+problemSchema.index({ isTLE: 1 });
+problemSchema.index({ isStriver: 1 });
 
 // ── Global Filters ───────────────────────────────────────────────────────────
 problemSchema.pre(/^find/, function() {

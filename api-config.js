@@ -90,6 +90,11 @@ const api = {
     if (!r.ok) throw new Error('Failed to fetch striver stats');
     return r.json();
   },
+  getTLEStats: async () => {
+    const r = await fetch(`${API_BASE_URL}/problems/tle-stats`);
+    if (!r.ok) throw new Error('Failed to fetch TLE stats');
+    return r.json();
+  },
   getStreak: async () => {
     const r = await fetch(`${API_BASE_URL}/problems/streak`);
     if (!r.ok) throw new Error('Failed to fetch streak');
