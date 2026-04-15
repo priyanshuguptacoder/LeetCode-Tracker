@@ -784,8 +784,7 @@ function App() {
     isSetup: false,
   });
 
-  // ── Per-platform streak (LC / CF / combined) ──────────────────────────────
-  const [platformStreak, setPlatformStreak] = useState(null);
+  // ── Per-platform streak is embedded in dbStreak.lc / dbStreak.cf ────────────
 
   // ── Contest Stats state ────────────────────────────────────────────────────
   const [contestStats, setContestStats] = useState(null);
@@ -964,9 +963,8 @@ function App() {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const probRes = await window.API.getAllProblems({ 
-          platform: platformFilter,
-        });
+        // Always fetch ALL problems — filteredProblems handles platform display
+        const probRes = await window.API.getAllProblems({ platform: 'ALL' });
         if (probRes.success) {
           setApiProblems(transformProblems(probRes.data));
         }
@@ -980,11 +978,10 @@ function App() {
         }
         // Non-blocking secondary fetches
         try {
-          const [sugRes, recentTodayRes, contestRes, platformStreakRes, striverRes, tleRes, revisionRes] = await Promise.allSettled([
+          const [sugRes, recentTodayRes, contestRes, striverRes, tleRes, revisionRes] = await Promise.allSettled([
             window.API.getSuggestions(),
             window.API.getRecentAndToday(),
             window.API.getContestStats(),
-            window.API.getStreakByPlatform(),
             window.API.getStriverStats(),
             window.API.getTLEStats(),
             window.API.getRevisionList(),
@@ -996,9 +993,6 @@ function App() {
           }
           if (contestRes.status === 'fulfilled' && contestRes.value.success) {
             setContestStats(contestRes.value.data);
-          }
-          if (platformStreakRes.status === 'fulfilled' && platformStreakRes.value.success) {
-            setPlatformStreak(platformStreakRes.value.data);
           }
           if (striverRes.status === 'fulfilled' && striverRes.value.success) {
             setStriverStats(prev => ({ ...prev, ...striverRes.value.data }));
@@ -1017,7 +1011,7 @@ function App() {
       }
     };
     fetchData();
-  }, [platformFilter]);
+  }, []); // fetch once on mount — filteredProblems handles platform display
 
   // Check LeetCode session health on mount
   useEffect(() => {
@@ -1575,11 +1569,10 @@ function App() {
       }
 
       // Refetch after sync — do NOT clear state first (prevents flicker)
-      const [probRes, recentTodayRes, streakRes, platformStreakRes, contestRes, striverRes, tleRes, revisionRes] = await Promise.allSettled([
+      const [probRes, recentTodayRes, streakRes, contestRes, striverRes, tleRes, revisionRes] = await Promise.allSettled([
         window.API.getAllProblems(),
         window.API.getRecentAndToday(),
         window.API.getStreak(),
-        window.API.getStreakByPlatform(),
         window.API.getContestStats(),
         window.API.getStriverStats(),
         window.API.getTLEStats(),
@@ -1593,8 +1586,6 @@ function App() {
       }
       if (streakRes.status === 'fulfilled' && streakRes.value.success)
         setDbStreak(streakRes.value.data);
-      if (platformStreakRes.status === 'fulfilled' && platformStreakRes.value.success)
-        setPlatformStreak(platformStreakRes.value.data);
       if (contestRes.status === 'fulfilled' && contestRes.value.success)
         setContestStats(contestRes.value.data);
       if (striverRes.status === 'fulfilled' && striverRes.value.success)
