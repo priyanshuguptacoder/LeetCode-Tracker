@@ -103,25 +103,35 @@ exports.getStreak = async (req, res) => {
 // ─── GET /api/problems ────────────────────────────────────────────────────────
 // Query params: ?platform=LC | ?platform=CF | ?platform=ALL (default: ALL)
 exports.getAllProblems = async (req, res) => {
-  const { platform = 'LC', page, limit } = req.query;
-  console.log(`[DEBUG] platform: ${platform}, page: ${page}, limit: ${limit}`);
+  const { platform = 'LC', page, limit, sort = 'recent' } = req.query;
+  console.log(`[DEBUG] platform: ${platform}, sort: ${sort}, page: ${page}, limit: ${limit}`);
 
   try {
     const p = page ? parseInt(page, 10) || 1 : 1;
     const l = page ? (parseInt(limit, 10) || 50) : 0; 
     
     const platformFilter = platform !== 'ALL' ? { platform: platform.toUpperCase() } : {};
-    console.log(`[DEBUG] query: ${JSON.stringify(platformFilter)}`);
     
-    // Platform-specific stable sort
-    const sortOption = platform === 'CF' 
-      ? { contestId: 1, index: 1 } 
-      : (platform === 'LC' ? { id: 1 } : { lastSubmittedAt: -1, _id: -1 });
+    // ─── SORTING LOGIC ────────────────────────────────────────────────────────
+    let sortOption = {};
+    if (sort === 'recent') {
+      sortOption = { lastSubmittedAt: -1, _id: -1 };
+    } else {
+      // problem order
+      if (platform === 'CF') {
+        sortOption = { contestId: 1, index: 1 };
+      } else if (platform === 'LC') {
+        // Use problemIdNum for numeric sort
+        sortOption = { problemIdNum: 1, _id: 1 };
+      } else {
+        sortOption = { platform: 1, problemIdNum: 1, contestId: 1, index: 1 };
+      }
+    }
 
     const [rawProblems, rawTotal] = await Promise.all([
       Problem.find(platformFilter)
         .sort(sortOption)
-        .skip((p - 1) * l)
+        .skip(l > 0 ? (p - 1) * l : 0)
         .limit(l)
         .lean(),
       Problem.countDocuments(platformFilter)
@@ -239,8 +249,13 @@ exports.createProblem = async (req, res) => {
       nextRevisionAt.setUTCDate(nextRevisionAt.getUTCDate() + 1);
     }
 
+    // Extract numeric ID for sorting
+    const numericExtract = id.toString().match(/(\d+)/);
+    const problemIdNum = numericExtract ? parseInt(numericExtract[0], 10) : null;
+
     const problem = await Problem.create({
       id: formattedId,
+      problemIdNum,
       platform: platform.toUpperCase(),
       title,
       difficulty,
@@ -658,12 +673,17 @@ exports.alignProblems = async (req, res) => {
       const solvedDate = isSolved
         ? (p.solvedDate ? new Date(p.solvedDate) : parseDDMMMToDate(p.date))
         : null;
+      
+      const probId = p.id ?? p.number;
+      const numMatch = probId.toString().match(/(\d+)/);
+
       return {
         updateOne: {
-          filter: { id: parseInt(p.id ?? p.number) },
+          filter: { id: parseInt(probId) },
           update: {
             $set: {
-              id: parseInt(p.id ?? p.number),
+              id: parseInt(probId),
+              problemIdNum: numMatch ? parseInt(numMatch[0], 10) : null,
               title: p.title,
               difficulty: p.difficulty || 'Medium',
               topics: Array.isArray(p.topics) ? p.topics : [],

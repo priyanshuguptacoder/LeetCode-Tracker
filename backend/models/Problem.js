@@ -11,6 +11,8 @@ const problemSchema = new mongoose.Schema(
     // Codeforces explicit references
     contestId: { type: Number, default: null },
     index: { type: String, default: null },
+    // problemIdNum: numeric ID for stable numeric sorting (especially LeetCode)
+    problemIdNum: { type: Number, default: null, index: true },
     // rawDifficulty: original difficulty value (rating for CF, string for LC)
     rawDifficulty: { type: mongoose.Schema.Types.Mixed, default: null },
     // difficultyRating: normalized 1-5 scale for consistent comparison

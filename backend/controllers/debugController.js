@@ -908,3 +908,25 @@ exports.cleanupCFIds = async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 };
+
+// ─── GET /api/debug/backfill-ids ──────────────────────────────────────────────
+// Extracts numeric portion of ID (e.g. "LC-123" -> 123) for numeric sort
+exports.backfillProblemIdNums = async (req, res) => {
+  try {
+    const problems = await Problem.find({});
+    let updated = 0;
+    for (const p of problems) {
+      if (p.problemIdNum != null) continue;
+      
+      const match = p.id.toString().match(/(\d+)/);
+      if (match) {
+        p.problemIdNum = parseInt(match[0], 10);
+        await p.save();
+        updated++;
+      }
+    }
+    res.json({ success: true, total: problems.length, updated });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};

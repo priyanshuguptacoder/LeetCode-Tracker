@@ -12,6 +12,7 @@ const {
   validate,
   debugStats,
   cleanupCFIds,
+  backfillProblemIdNums,
 } = require('../controllers/debugController');
 
 router.get('/health',               health);
@@ -22,6 +23,7 @@ router.get('/debug/count-check',    countCheck);
 router.get('/debug/frontend-check', frontendCheck);
 router.get('/debug/stats',          debugStats);
 router.get('/debug/cleanup-cf-ids', cleanupCFIds);
+router.get('/debug/backfill-ids',   backfillProblemIdNums);
 router.post('/debug/manual-test',   manualTest);
 router.post('/debug/run-all',       runAll);
 router.post('/debug/validate',      validate);

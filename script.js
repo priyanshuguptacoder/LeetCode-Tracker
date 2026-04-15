@@ -891,7 +891,10 @@ function App() {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const probRes = await window.API.getAllProblems();
+        const probRes = await window.API.getAllProblems({ 
+          platform: platformFilter, 
+          sort: sortOrder 
+        });
         if (probRes.success) {
           setApiProblems(transformProblems(probRes.data));
         }
@@ -922,7 +925,7 @@ function App() {
       }
     };
     fetchData();
-  }, []);
+  }, [platformFilter, sortOrder]);
 
   // Check LeetCode session health on mount
   useEffect(() => {
@@ -956,6 +959,7 @@ function App() {
   const [patternFilter, setPatternFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
   const [platformFilter, setPlatformFilter] = useState('ALL'); // 'ALL' | 'LC' | 'CF'
+  const [sortOrder, setSortOrder] = useState('recent'); // 'recent' | 'problem'
   const [cfSyncing, setCfSyncing] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [notification, setNotification] = useState(null);
@@ -3682,6 +3686,22 @@ function App() {
                   </span>
                 )}
                 <span className="table-count">{filteredProblems.length} problems</span>
+              </div>
+              <div className="sort-toggle-group">
+                <button 
+                  className={`btn-sort-toggle ${sortOrder === 'recent' ? 'active' : ''}`}
+                  onClick={() => setSortOrder('recent')}
+                  title="Sort by recently solved"
+                >
+                  🕒 Recent
+                </button>
+                <button 
+                  className={`btn-sort-toggle ${sortOrder === 'problem' ? 'active' : ''}`}
+                  onClick={() => setSortOrder('problem')}
+                  title="Sort by problem ID / order"
+                >
+                  🔢 Problem Order
+                </button>
               </div>
             </div>
 
