@@ -91,6 +91,11 @@ function streakPayload(stats) {
 // ─── GET /api/problems/streak ─────────────────────────────────────────────────
 // ─── computeStreakForPlatform — reusable per-platform streak helper ───────────
 async function computeStreakForPlatform(platform = 'ALL', calendarDates = null) {
+  const VALID_PLATFORMS = ['LC', 'CF'];
+  if (platform !== 'ALL' && !VALID_PLATFORMS.includes(platform)) {
+    throw new Error(`Invalid platform: ${platform}. Must be LC, CF, or ALL.`);
+  }
+
   const filter = {
     solved: true,
     isDeleted: { $ne: true },
@@ -98,13 +103,32 @@ async function computeStreakForPlatform(platform = 'ALL', calendarDates = null) 
   };
   if (platform !== 'ALL') filter.platform = platform;
 
-  const rawProblems = await Problem.find(filter, { solvedDate: 1, lastSubmittedAt: 1 }).lean();
-  console.log(`[STREAK] platform=${platform} count=${rawProblems.length}`);
+  const rawProblems = await Problem.find(
+    filter,
+    { solvedDate: 1, lastSubmittedAt: 1, platform: 1, uniqueId: 1 }
+  ).lean();
 
-  const problems = rawProblems.map(p => ({
-    ...p,
-    solvedDate: p.solvedDate || p.lastSubmittedAt,
-  }));
+  // Data validation — skip corrupt docs, log them
+  let skipped = 0;
+  const problems = rawProblems
+    .filter(p => {
+      // Assert valid platform
+      if (p.platform && !VALID_PLATFORMS.includes(p.platform)) {
+        console.error(`[STREAK] Unknown platform "${p.platform}" on doc ${p.uniqueId} — skipping`);
+        skipped++;
+        return false;
+      }
+      // Skip docs with no usable date
+      if (!p.solvedDate && !p.lastSubmittedAt) {
+        console.error(`[STREAK] Doc ${p.uniqueId} has no solvedDate or lastSubmittedAt — skipping`);
+        skipped++;
+        return false;
+      }
+      return true;
+    })
+    .map(p => ({ ...p, solvedDate: p.solvedDate || p.lastSubmittedAt }));
+
+  console.log(`[STREAK] platform=${platform} total=${rawProblems.length} valid=${problems.length} skipped=${skipped}`);
 
   // Only use calendar dates for global/LC (calendar is LC-specific)
   const effectiveCal = (platform === 'ALL' || platform === 'LC') ? calendarDates : null;
@@ -127,6 +151,15 @@ exports.getStreak = async (req, res) => {
 
     if (!global.isValid) {
       return res.status(500).json({ success: false, error: 'Stats invariant violation', errors: global.errors });
+    }
+
+    // Consistency check — global streak must be >= each platform streak
+    // (global uses calendar which may include days not in problem solvedDates)
+    if (global.currentStreak < lc.currentStreak) {
+      console.warn(`[STREAK] Inconsistency: global(${global.currentStreak}) < lc(${lc.currentStreak})`);
+    }
+    if (global.currentStreak < cf.currentStreak) {
+      console.warn(`[STREAK] Inconsistency: global(${global.currentStreak}) < cf(${cf.currentStreak})`);
     }
 
     // Primary response shape (backward-compatible: top-level = global)
@@ -782,12 +815,15 @@ exports.alignProblems = async (req, res) => {
   }
 };
 
-// ─── PATCH /api/problems/:id/striver ─────────────────────────────────────────
+// ─── PATCH /api/problems/:id/striver — LC only ───────────────────────────────
 exports.toggleStriver = async (req, res) => {
   try {
     const existing = await findProblemById(req.params.id);
     if (!existing || existing.isDeleted) {
       return res.status(404).json({ success: false, error: 'Problem not found' });
+    }
+    if (existing.platform !== 'LC') {
+      return res.status(400).json({ success: false, error: 'Striver is only available for LeetCode problems' });
     }
     const updated = await Problem.findOneAndUpdate(
       { uniqueId: existing.uniqueId },
@@ -800,12 +836,15 @@ exports.toggleStriver = async (req, res) => {
   }
 };
 
-// ─── PATCH /api/problems/:id/tle ─────────────────────────────────────────────
+// ─── PATCH /api/problems/:id/tle — CF only ───────────────────────────────────
 exports.toggleTLE = async (req, res) => {
   try {
     const existing = await findProblemById(req.params.id);
     if (!existing || existing.isDeleted) {
       return res.status(404).json({ success: false, error: 'Problem not found' });
+    }
+    if (existing.platform !== 'CF') {
+      return res.status(400).json({ success: false, error: 'TLE sheet is only available for Codeforces problems' });
     }
     const updated = await Problem.findOneAndUpdate(
       { uniqueId: existing.uniqueId },
