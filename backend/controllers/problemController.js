@@ -168,8 +168,26 @@ exports.getAllProblems = async (req, res) => {
     const problems = Array.isArray(rawProblems) ? rawProblems : [];
     const total    = typeof rawTotal === 'number' ? rawTotal : 0;
 
+    // ─── DATA INTEGRITY LOG — visible in Render logs ──────────────────────────
+    if (problems.length > 0) {
+      const sample = problems.slice(0, 5).map(p => ({
+        id: p.uniqueId,
+        problemIdNum: p.problemIdNum ?? null,
+        contestId: p.contestId ?? null,
+        index: p.index ?? null,
+      }));
+      console.log(`[SORT CHECK] platform=${plat} first5:`, JSON.stringify(sample));
+    }
+
     const data = problems.map(p => {
       if (!p) return null;
+      // Validate data integrity — log any dirty docs
+      if (p.platform === 'LC' && typeof p.problemIdNum !== 'number') {
+        console.error('[INVALID LC DATA] missing numeric problemIdNum:', p.uniqueId);
+      }
+      if (p.platform === 'CF' && (!p.contestId || !p.index)) {
+        console.error('[INVALID CF DATA] missing contestId or index:', p.uniqueId);
+      }
       if (!p.providerTitle) p.providerTitle = p.platform === 'CF' ? 'Codeforces' : 'LeetCode';
       if (!p.leetcodeLink && p.platformLink) p.leetcodeLink = p.platformLink;
       return p;
@@ -480,6 +498,25 @@ exports.unreviseProblem = async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to unrevise', message: err.message });
+  }
+};
+
+// ─── PATCH /api/problems/:id/target — unified toggle (replaces separate target/untarget) ──
+exports.toggleTarget = async (req, res) => {
+  try {
+    const existing = await findProblemById(req.params.id);
+    if (!existing || existing.isDeleted) {
+      return res.status(404).json({ success: false, error: 'Problem not found' });
+    }
+    const newVal = !existing.targeted;
+    const updated = await Problem.findOneAndUpdate(
+      { uniqueId: existing.uniqueId },
+      { $set: { targeted: newVal, targetedAt: newVal ? new Date() : null } },
+      { new: true }
+    );
+    res.json({ success: true, data: { id: updated.id, uniqueId: updated.uniqueId, targeted: updated.targeted, targetedAt: updated.targetedAt } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Failed to toggle target', message: err.message });
   }
 };
 

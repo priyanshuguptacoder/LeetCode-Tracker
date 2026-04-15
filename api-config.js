@@ -70,13 +70,18 @@ const api = {
     return r.json();
   },
   targetProblem: async (id) => {
-    const r = await fetch(`${API_BASE_URL}/problems/${id}/target`, { method: 'POST' });
+    const r = await fetch(`${API_BASE_URL}/problems/${encodeURIComponent(id)}/target`, { method: 'POST' });
     if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Failed to target problem'); }
     return r.json();
   },
   untargetProblem: async (id) => {
-    const r = await fetch(`${API_BASE_URL}/problems/${id}/untarget`, { method: 'POST' });
+    const r = await fetch(`${API_BASE_URL}/problems/${encodeURIComponent(id)}/untarget`, { method: 'POST' });
     if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Failed to untarget problem'); }
+    return r.json();
+  },
+  toggleTarget: async (id) => {
+    const r = await fetch(`${API_BASE_URL}/problems/${encodeURIComponent(id)}/target`, { method: 'PATCH' });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Failed to toggle target'); }
     return r.json();
   },
   toggleStriver: async (id) => {

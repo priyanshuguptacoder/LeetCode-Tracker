@@ -902,9 +902,23 @@ function App() {
     return [p.pattern || 'Miscellaneous'];
   };
 
+  // ── Display ID: separate from title, used in table and mobile card ──────────
+  const getDisplayId = (p) => {
+    if (p.platform === 'CF') {
+      const cid = p.contestId || '';
+      const idx = p.index || '';
+      return cid && idx ? `${cid}${idx}` : (p.uniqueId || '');
+    }
+    const num = p.problemIdNum;
+    return num ? `#${num}` : (p.uniqueId || '');
+  };
+
   // Transform MongoDB schema → frontend schema
   const transformProblems = (data) => (data || []).map(p => {
     if (!p) return null;
+    // Hard assertions — skip corrupt docs rather than silently display garbage
+    if (!p.uniqueId && !p.id) { console.error('[TRANSFORM] skipping doc with no uniqueId/id', p); return null; }
+    if (!p.platform) { console.error('[TRANSFORM] skipping doc with no platform', p.uniqueId || p.id); return null; }
     const solvedDateISO = p.solvedDate
       ? toLocalDateStr(new Date(p.solvedDate))
       : parseDDMMM(p.date);
@@ -916,10 +930,10 @@ function App() {
       // Normalize IDs to strings defensively
       uniqueId: String(p.uniqueId || p.id || ''),
       id: String(p.id || p.uniqueId || ''),
-      // number: for LC use numeric problemIdNum; for CF use uniqueId string (e.g. "CF-1700A")
+      // number: stable key used by handlers — LC=numeric, CF=uniqueId string
       number: (p.platform === 'CF')
         ? String(p.uniqueId || p.id || '')
-        : (p.problemIdNum || parseInt(String(p.uniqueId || p.id || '').replace(/\D/g, ''), 10) || p.number || 0),
+        : (p.problemIdNum || 0),
       platform: p.platform || 'LC',
       status,
       userDifficulty: p.userDifficulty || p.difficulty || 'Medium',
@@ -1036,7 +1050,7 @@ function App() {
   const [difficultyFilter, setDifficultyFilter] = useState('All');
   const [patternFilter, setPatternFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
-  const [platformFilter, setPlatformFilter] = useState('ALL'); // 'ALL' | 'LC' | 'CF'
+  const [platformFilter, setPlatformFilter] = useState('LC'); // 'LC' | 'CF'
   const [viewMode, setViewMode] = useState('ALL'); // 'ALL' | 'STRIVER' | 'TLE' (kept for future use)
   const [showModal, setShowModal] = useState(false);
   const [notification, setNotification] = useState(null);
@@ -1903,17 +1917,19 @@ function App() {
 
   const handleToggleTarget = (number) => {
     requireAdmin(async () => {
-      if (targetingId === number) return;
-      // Use ref to get fresh state even after admin modal delay
       const problem = apiProblemsRef.current.find(p => String(p.number) === String(number));
-      const isCurrentlyTargeted = problem?.targeted || false;
+      const uid = problem?.uniqueId || problem?.id;
+      if (!uid || targetingId === uid) return;
+      // Optimistic update
+      const prev = problem.targeted;
+      setApiProblems(ps => ps.map(p =>
+        String(p.number) === String(number) ? { ...p, targeted: !prev } : p
+      ));
       try {
-        setTargetingId(number);
-        const res = isCurrentlyTargeted
-          ? await window.API.untargetProblem(number)
-          : await window.API.targetProblem(number);
+        setTargetingId(uid);
+        const res = await window.API.toggleTarget(uid);
         if (res.success) {
-          setApiProblems(prev => prev.map(p =>
+          setApiProblems(ps => ps.map(p =>
             String(p.number) === String(number)
               ? { ...p, targeted: res.data.targeted, targetedAt: res.data.targetedAt }
               : p
@@ -1922,8 +1938,15 @@ function App() {
             res.data.targeted ? '🎯 Added to Targeted' : '✅ Removed from Targeted',
             'success'
           );
+        } else {
+          setApiProblems(ps => ps.map(p =>
+            String(p.number) === String(number) ? { ...p, targeted: prev } : p
+          ));
         }
       } catch (err) {
+        setApiProblems(ps => ps.map(p =>
+          String(p.number) === String(number) ? { ...p, targeted: prev } : p
+        ));
         showNotification(`❌ ${err.message}`, 'error');
       } finally {
         setTargetingId(null);
@@ -2098,7 +2121,7 @@ function App() {
     setPatternFilter('All');
     setStatusFilter('All');
     setSelectedFilter(null);
-    setPlatformFilter('ALL');
+    setPlatformFilter('LC');
     setViewMode('ALL');
 
     showNotification('✨ All filters cleared', 'success');
@@ -2586,9 +2609,8 @@ function App() {
               selectedFilter === 'solved' ? problem.status === 'Done' :
                 false);
 
-      // Platform filter
-      const matchesPlatform =
-        platformFilter === 'ALL' || problem.platform === platformFilter;
+      // Platform filter — always active (no ALL option)
+      const matchesPlatform = problem.platform === platformFilter;
 
       return matchesSearch && matchesDifficulty && matchesPattern && matchesStatus && matchesSelectedFilter && matchesPlatform;
     });
@@ -3691,13 +3713,11 @@ function App() {
             </div>
           </div>
 
-          {/* Filters */}
           {/* Platform Filter Tabs */}
           <div className="platform-tabs" style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
             {[
-              { key: 'ALL', label: '🌐 All', count: allProblems.length },
-              { key: 'LC',  label: '💻 LeetCode', count: allProblems.filter(p => p.platform === 'LC').length },
-              { key: 'CF',  label: '🏆 Codeforces', count: allProblems.filter(p => p.platform === 'CF').length },
+              { key: 'LC', label: '💻 LeetCode',   count: allProblems.filter(p => p.platform === 'LC').length },
+              { key: 'CF', label: '🏆 Codeforces', count: allProblems.filter(p => p.platform === 'CF').length },
             ].map(tab => (
               <button
                 key={tab.key}
@@ -3786,7 +3806,7 @@ function App() {
                   <option>TLE</option>
                 </select>
               </div>
-              {(searchTerm || difficultyFilter !== 'All' || patternFilter !== 'All' || statusFilter !== 'All' || selectedFilter !== null || platformFilter !== 'ALL') && (
+              {(searchTerm || difficultyFilter !== 'All' || patternFilter !== 'All' || statusFilter !== 'All' || selectedFilter !== null || platformFilter !== 'LC') && (
                 <div className="filter-group filter-clear-group">
                   <label>&nbsp;</label>
                   <button
@@ -3841,13 +3861,12 @@ function App() {
                       >
                         <td className="problem-number">{index + 1}</td>
                         <td className="problem-title">
-                          <span
-                            title={problem.platform === 'CF'
-                              ? `${problem.number} · ${problem.title}`
-                              : `#${problem.number} · ${problem.title}`}
-                          >
-                            {problem.title}
-                          </span>
+                          <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                            <span className="problem-id-badge" style={{ fontSize: '0.75rem', fontWeight: 700, opacity: 0.55, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
+                              {getDisplayId(problem)}
+                            </span>
+                            <span>{problem.title}</span>
+                          </div>
                         </td>
                         <td>
                           <span className={`badge badge-${(problem.difficulty || 'medium').toLowerCase()}`}>
@@ -3920,10 +3939,10 @@ function App() {
                             <button
                               className={`btn-target${problem.targeted ? ' active' : ''}`}
                               onClick={() => handleToggleTarget(problem.number)}
-                              disabled={targetingId === problem.number}
+                              disabled={targetingId === (problem.uniqueId || problem.id)}
                               title={problem.targeted ? 'Remove from Targeted' : 'Add to Targeted'}
                             >
-                              {targetingId === problem.number ? '⏳' : '🎯'}
+                              {targetingId === (problem.uniqueId || problem.id) ? '⏳' : '🎯'}
                             </button>
                             {(problem.platform === 'LC') && (
                               <button
@@ -4000,11 +4019,11 @@ function App() {
                       {problem.isStriver && <span className="pm-tag pm-tag-striver">📘</span>}
                     </div>
 
-                    {/* Row 2: title */}
-                    <div
-                      className="pm-title"
-                      title={problem.platform === 'CF' ? `${problem.number}` : `#${problem.number}`}
-                    >
+                    {/* Row 2: title with ID badge */}
+                    <div className="pm-title">
+                      <span className="problem-id-badge" style={{ fontSize: '0.72rem', fontWeight: 700, opacity: 0.5, marginRight: '5px', fontVariantNumeric: 'tabular-nums' }}>
+                        {getDisplayId(problem)}
+                      </span>
                       {problem.title}
                     </div>
 
@@ -4067,10 +4086,10 @@ function App() {
                       <button
                         className={`btn-target${problem.targeted ? ' active' : ''}`}
                         onClick={() => handleToggleTarget(problem.number)}
-                        disabled={targetingId === problem.number}
+                        disabled={targetingId === (problem.uniqueId || problem.id)}
                         title={problem.targeted ? 'Remove from Targeted' : 'Add to Targeted'}
                       >
-                        {targetingId === problem.number ? '⏳' : '🎯'}
+                        {targetingId === (problem.uniqueId || problem.id) ? '⏳' : '🎯'}
                       </button>
                       {(problem.platform === 'LC') && (
                         <button
