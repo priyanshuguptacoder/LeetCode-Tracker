@@ -44,6 +44,9 @@ const settingsSchema = new mongoose.Schema(
     lcContestCount: { type: Number, default: null },
     lcGlobalRank: { type: Number, default: null },
     lcContestUpdatedAt: { type: Date, default: null },
+
+    // ── One-time migration flags ───────────────────────────────────────────────
+    cfHardResetDone: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

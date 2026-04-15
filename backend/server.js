@@ -284,6 +284,26 @@ mongoose
       console.warn('[BACKFILL] CF contestId backfill failed:', e.message);
     }
 
+    // ONE-TIME: Hard-reset all CF problems and re-sync from scratch
+    // Guarded by Settings flag 'cfHardResetDone' — runs exactly once per deployment cycle
+    try {
+      const Problem  = require('./models/Problem');
+      const Settings = require('./models/Settings');
+      const flag = await Settings.findOne({ key: 'global' }, { cfHardResetDone: 1 }).lean();
+      if (!flag?.cfHardResetDone) {
+        const del = await Problem.deleteMany({ platform: 'CF' });
+        console.log(`[CF RESET] Deleted ${del.deletedCount} CF problems for clean re-sync`);
+        await Settings.findOneAndUpdate(
+          { key: 'global' },
+          { $set: { cfHardResetDone: true } },
+          { upsert: true }
+        );
+        console.log('[CF RESET] Flag set — will not run again');
+      }
+    } catch (e) {
+      console.warn('[CF RESET] Failed:', e.message);
+    }
+
     // Initialize automated 12-hour sync for Codeforces
     const { initCron } = require('./tasks/cronSync');
     initCron();

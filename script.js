@@ -673,51 +673,7 @@ function computeTLEStats(problems) {
   };
 }
 
-// ============================================
-// WEAKNESS RADAR — topic mastery via Recharts
-// ============================================
-function WeaknessRadar({ problems }) {
-  if (typeof window.Recharts === 'undefined') return null;
-  const { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Tooltip } = window.Recharts;
-
-  const topicStats = React.useMemo(() => {
-    const map = {};
-    problems.forEach(p => {
-      (p.topics || []).forEach(tag => {
-        if (!map[tag]) map[tag] = { total: 0, solved: 0 };
-        map[tag].total++;
-        if (p.status === 'Done') map[tag].solved++;
-      });
-    });
-    return Object.entries(map)
-      .filter(([, v]) => v.total >= 3)
-      .sort((a, b) => (b[1].solved / b[1].total) - (a[1].solved / a[1].total))
-      .slice(0, 8)
-      .map(([subject, v]) => ({
-        subject,
-        A: Math.round((v.solved / v.total) * 100),
-      }));
-  }, [problems]);
-
-  if (topicStats.length === 0) return null;
-
-  return (
-    <div className="analytics-card" style={{ minHeight: 280 }}>
-      <h3 className="card-title">🕸 Topic Mastery</h3>
-      <ResponsiveContainer width="100%" height={240}>
-        <RadarChart data={topicStats}>
-          <PolarGrid stroke="rgba(255,255,255,0.1)" />
-          <PolarAngleAxis dataKey="subject" tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} />
-          <Radar name="Mastery %" dataKey="A" stroke="var(--primary)" fill="var(--primary)" fillOpacity={0.25} />
-          <Tooltip
-            contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8 }}
-            formatter={(v) => [`${v}%`, 'Mastery']}
-          />
-        </RadarChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
+// WeaknessRadar removed — Topic Mastery section deleted
 
 // ============================================
 // CONTEST STATS — LC + CF contest ratings
@@ -936,8 +892,12 @@ function App() {
   };
 
   const getTopicsForProblem = (p) => {
-    // Use numeric problemIdNum for LC TOPIC_MAP lookup; fall back to parsing from id
-    const num = p.problemIdNum || parseInt((p.uniqueId || p.id || '').replace(/\D/g, ''), 10) || p.number;
+    // Safe string conversion — never call .replace() on non-string
+    const safeUniqueId = typeof p.uniqueId === 'string' ? p.uniqueId
+      : typeof p.id === 'string' ? p.id
+      : String(p.uniqueId || p.id || '');
+    if (!safeUniqueId && !p.problemIdNum && !p.topics?.length) return ['Miscellaneous'];
+    const num = p.problemIdNum || parseInt(safeUniqueId.replace(/\D/g, ''), 10) || 0;
     if (TOPIC_MAP[num]) return TOPIC_MAP[num];
     if (p.topics && p.topics.length > 0) return p.topics;
     return [p.pattern || 'Miscellaneous'];
@@ -963,10 +923,13 @@ function App() {
 
     return {
       ...p,
+      // Normalize IDs to strings defensively
+      uniqueId: String(p.uniqueId || p.id || ''),
+      id: String(p.id || p.uniqueId || ''),
       // number: for LC use numeric problemIdNum; for CF use uniqueId string (e.g. "CF-1700A")
       number: (p.platform === 'CF')
-        ? (p.uniqueId || p.id)
-        : (p.problemIdNum || parseInt((p.uniqueId || p.id || '').replace(/\D/g, ''), 10) || p.number),
+        ? String(p.uniqueId || p.id || '')
+        : (p.problemIdNum || parseInt(String(p.uniqueId || p.id || '').replace(/\D/g, ''), 10) || p.number || 0),
       platform: p.platform || 'LC',
       status,
       isTLE,
@@ -999,8 +962,7 @@ function App() {
       try {
         setLoading(true);
         const probRes = await window.API.getAllProblems({ 
-          platform: platformFilter, 
-          sort: sortOrder 
+          platform: platformFilter,
         });
         if (probRes.success) {
           setApiProblems(transformProblems(probRes.data));
@@ -1040,7 +1002,7 @@ function App() {
       }
     };
     fetchData();
-  }, [platformFilter, sortOrder]);
+  }, [platformFilter]);
 
   // Check LeetCode session health on mount
   useEffect(() => {
@@ -1074,8 +1036,7 @@ function App() {
   const [patternFilter, setPatternFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
   const [platformFilter, setPlatformFilter] = useState('ALL'); // 'ALL' | 'LC' | 'CF'
-  const [sortOrder, setSortOrder] = useState('recent'); // 'recent' | 'problem'
-  const [viewMode, setViewMode] = useState('ALL'); // 'ALL' | 'STRIVER' | 'TLE'
+  const [viewMode, setViewMode] = useState('ALL'); // 'ALL' | 'STRIVER' | 'TLE' (kept for future use)
   const [showModal, setShowModal] = useState(false);
   const [notification, setNotification] = useState(null);
   const [syncing, setSyncing] = useState(false);
@@ -2083,7 +2044,7 @@ function App() {
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
-        if (searchTerm || debouncedSearch || difficultyFilter !== 'All' || patternFilter !== 'All' || statusFilter !== 'All' || selectedFilter !== null || viewMode !== 'ALL') {
+        if (searchTerm || debouncedSearch || difficultyFilter !== 'All' || patternFilter !== 'All' || statusFilter !== 'All' || selectedFilter !== null) {
           handleClearAllFilters();
         }
       }
@@ -2548,6 +2509,7 @@ function App() {
         statusFilter === 'All' ||
         (statusFilter === 'Targeted' ? problem.targeted === true :
           statusFilter === 'Striver' ? problem.isStriver === true :
+          statusFilter === 'TLE' ? problem.isTLE === true :
             problem.status === statusFilter);
 
       // selectedFilter from DifficultyNavbar
@@ -2563,15 +2525,9 @@ function App() {
       const matchesPlatform =
         platformFilter === 'ALL' || problem.platform === platformFilter;
 
-      // View mode filter (Striver / TLE sheet — independent of status)
-      const matchesViewMode =
-        viewMode === 'ALL' ||
-        (viewMode === 'STRIVER' ? problem.isStriver === true :
-          viewMode === 'TLE' ? problem.isTLE === true : true);
-
-      return matchesSearch && matchesDifficulty && matchesPattern && matchesStatus && matchesSelectedFilter && matchesPlatform && matchesViewMode;
+      return matchesSearch && matchesDifficulty && matchesPattern && matchesStatus && matchesSelectedFilter && matchesPlatform;
     });
-  }, [allProblems, debouncedSearch, difficultyFilter, patternFilter, statusFilter, selectedFilter, platformFilter, viewMode]);
+  }, [allProblems, debouncedSearch, difficultyFilter, patternFilter, statusFilter, selectedFilter, platformFilter]);
 
   // Animate table count when filtered problems change
   useEffect(() => {
@@ -3174,38 +3130,39 @@ function App() {
             <ContestStats stats={contestStats} />
           </div>
 
-          {/* Striver Progress Card — ABOVE Needs Revision */}
-          <div className="analytics-card striver-card fade-up fade-up-4">
-            <h3 className="card-title">📘 Striver Progress</h3>
-            <div className="striver-stats">
-              <div className="striver-stat-row">
-                <span className="striver-dot easy"></span>
-                <span className="striver-label">Easy</span>
-                <span className="striver-value">{striverStats.easy}</span>
+          {/* Striver Progress — LC only. TLE Sheet — CF only. Both shown on ALL. */}
+          {platformFilter !== 'CF' && (
+            <div className="analytics-card striver-card fade-up fade-up-4">
+              <h3 className="card-title">📘 Striver Progress</h3>
+              <div className="striver-stats">
+                <div className="striver-stat-row">
+                  <span className="striver-dot easy"></span>
+                  <span className="striver-label">Easy</span>
+                  <span className="striver-value">{striverStats.easy}</span>
+                </div>
+                <div className="striver-stat-row">
+                  <span className="striver-dot medium"></span>
+                  <span className="striver-label">Medium</span>
+                  <span className="striver-value">{striverStats.medium}</span>
+                </div>
+                <div className="striver-stat-row">
+                  <span className="striver-dot hard"></span>
+                  <span className="striver-label">Hard</span>
+                  <span className="striver-value">{striverStats.hard}</span>
+                </div>
+                <div className="striver-stat-row striver-total-row">
+                  <span className="striver-dot total"></span>
+                  <span className="striver-label">Total Solved</span>
+                  <span className="striver-value striver-total">{striverStats.total}</span>
+                </div>
               </div>
-              <div className="striver-stat-row">
-                <span className="striver-dot medium"></span>
-                <span className="striver-label">Medium</span>
-                <span className="striver-value">{striverStats.medium}</span>
-              </div>
-              <div className="striver-stat-row">
-                <span className="striver-dot hard"></span>
-                <span className="striver-label">Hard</span>
-                <span className="striver-value">{striverStats.hard}</span>
-              </div>
-              <div className="striver-stat-row striver-total-row">
-                <span className="striver-dot total"></span>
-                <span className="striver-label">Total Solved</span>
-                <span className="striver-value striver-total">{striverStats.total}</span>
-              </div>
+              {striverStats.total === 0 && (
+                <div className="striver-empty">Click 📘 on any problem in the table to mark it as Striver</div>
+              )}
             </div>
-            {striverStats.total === 0 && (
-              <div className="striver-empty">Click 📘 on any problem in the table to mark it as Striver</div>
-            )}
-          </div>
+          )}
 
-          {/* TLE Sheet Progress (Codeforces) */}
-          {platformFilter === 'CF' && (
+          {platformFilter !== 'LC' && (
             <div className="analytics-card striver-card fade-up fade-up-4">
               <h3 className="card-title">🏆 TLE Sheet Progress</h3>
               <div className="striver-stats">
@@ -3231,7 +3188,7 @@ function App() {
                 </div>
               </div>
               {tleStats.totalInSheet === 0 && (
-                <div className="striver-empty">No CF problems match the TLE Sheet filter yet.</div>
+                <div className="striver-empty">No CF problems match the TLE Sheet criteria yet.</div>
               )}
             </div>
           )}
@@ -3704,39 +3661,7 @@ function App() {
             </div>
           </div>
 
-          {/* Visualizations */}
-          <div className="analytics-grid" style={{ marginTop: 16 }}>
-            <WeaknessRadar problems={allProblems} />
-          </div>
-
           {/* Filters */}
-          {/* View Mode Toggle — Striver / TLE sheet (independent of status filter) */}
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-            {[
-              { key: 'ALL',     label: '📋 All' },
-              { key: 'STRIVER', label: '📘 Striver' },
-              { key: 'TLE',     label: '🏆 TLE Sheet' },
-            ].map(v => (
-              <button
-                key={v.key}
-                onClick={() => setViewMode(v.key)}
-                style={{
-                  padding: '6px 14px',
-                  borderRadius: '8px',
-                  border: viewMode === v.key ? '1.5px solid var(--primary)' : '1.5px solid var(--border)',
-                  background: viewMode === v.key ? 'rgba(99,102,241,0.15)' : 'var(--bg-tertiary)',
-                  color: viewMode === v.key ? 'var(--primary)' : 'var(--text-secondary)',
-                  fontWeight: viewMode === v.key ? 700 : 500,
-                  fontSize: '0.82rem',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                }}
-              >
-                {v.label}
-              </button>
-            ))}
-          </div>
-
           {/* Platform Filter Tabs */}
           <div className="platform-tabs" style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
             {[
@@ -3828,6 +3753,7 @@ function App() {
                   <option>Done</option>
                   <option>Targeted</option>
                   <option>Striver</option>
+                  <option>TLE</option>
                 </select>
               </div>
               {(searchTerm || difficultyFilter !== 'All' || patternFilter !== 'All' || statusFilter !== 'All' || selectedFilter !== null || platformFilter !== 'ALL') && (
@@ -3857,22 +3783,6 @@ function App() {
                   </span>
                 )}
                 <span className="table-count">{filteredProblems.length} problems</span>
-              </div>
-              <div className="sort-toggle-group">
-                <button 
-                  className={`btn-sort-toggle ${sortOrder === 'recent' ? 'active' : ''}`}
-                  onClick={() => setSortOrder('recent')}
-                  title="Sort by recently solved"
-                >
-                  🕒 Recent
-                </button>
-                <button 
-                  className={`btn-sort-toggle ${sortOrder === 'problem' ? 'active' : ''}`}
-                  onClick={() => setSortOrder('problem')}
-                  title="Sort by problem ID / order"
-                >
-                  🔢 Problem Order
-                </button>
               </div>
             </div>
 
