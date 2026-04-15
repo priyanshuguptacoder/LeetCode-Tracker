@@ -71,14 +71,12 @@ problemSchema.index({ topics: 1 });
 problemSchema.index({ platform: 1, difficultyRating: 1 });
 
 // ── Global Filters ───────────────────────────────────────────────────────────
-problemSchema.pre(/^find/, function(next) {
+problemSchema.pre(/^find/, function() {
   this.where({ isDeleted: { $ne: true } });
-  next();
 });
 
-problemSchema.pre('countDocuments', function(next) {
+problemSchema.pre('countDocuments', function() {
   this.where({ isDeleted: { $ne: true } });
-  next();
 });
 
 module.exports = mongoose.model('Problem', problemSchema);

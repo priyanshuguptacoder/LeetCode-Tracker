@@ -45,14 +45,12 @@ submissionSchema.index({ dateSolved: -1 });
 submissionSchema.index({ nextReviewAt: 1 });
 
 // ── Global Filters ───────────────────────────────────────────────────────────
-submissionSchema.pre(/^find/, function(next) {
+submissionSchema.pre(/^find/, function() {
   this.where({ isDeleted: { $ne: true } });
-  next();
 });
 
-submissionSchema.pre('countDocuments', function(next) {
+submissionSchema.pre('countDocuments', function() {
   this.where({ isDeleted: { $ne: true } });
-  next();
 });
 
 module.exports = mongoose.model('Submission', submissionSchema);
