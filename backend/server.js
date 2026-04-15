@@ -269,23 +269,34 @@ mongoose
       console.warn('[BACKFILL] problemIdNum backfill failed:', e.message);
     }
 
-    // Backfill: ensure CF problems have numeric contestId for correct sorting
+    // Backfill: ensure CF problems have numeric contestId and string index for correct sorting
     try {
       const Problem = require('./models/Problem');
       const cfMissing = await Problem.find({
         platform: 'CF',
-        $or: [{ contestId: null }, { contestId: { $exists: false } }],
-      }, { _id: 1, uniqueId: 1 }).lean();
+        $or: [
+          { contestId: null }, { contestId: { $exists: false } },
+          { index: null },     { index: { $exists: false } },
+        ],
+      }, { _id: 1, uniqueId: 1, contestId: 1, index: 1 }).lean();
       if (cfMissing.length > 0) {
-        await Problem.bulkWrite(cfMissing.map(doc => {
-          const match = (doc.uniqueId || '').match(/CF-(\d+)/);
-          const num = match ? parseInt(match[1], 10) : 999999;
-          return { updateOne: { filter: { _id: doc._id }, update: { $set: { contestId: num } } } };
-        }));
-        console.log(`[BACKFILL] Set contestId on ${cfMissing.length} CF problems`);
+        const ops = cfMissing.map(doc => {
+          const uid = doc.uniqueId || '';
+          const cidMatch = uid.match(/^CF-(\d+)/);
+          const idxMatch = uid.match(/^CF-\d+([A-Z]+\d*)$/i);
+          const update = {};
+          if (!doc.contestId && cidMatch) update.contestId = parseInt(cidMatch[1], 10);
+          if (!doc.index && idxMatch) update.index = idxMatch[1].toUpperCase();
+          if (Object.keys(update).length === 0) return null;
+          return { updateOne: { filter: { _id: doc._id }, update: { $set: update } } };
+        }).filter(Boolean);
+        if (ops.length > 0) {
+          await Problem.bulkWrite(ops);
+          console.log(`[BACKFILL] Fixed contestId/index on ${ops.length} CF problems`);
+        }
       }
     } catch (e) {
-      console.warn('[BACKFILL] CF contestId backfill failed:', e.message);
+      console.warn('[BACKFILL] CF contestId/index backfill failed:', e.message);
     }
 
     // Backfill: compute and store isTLE on all CF problems

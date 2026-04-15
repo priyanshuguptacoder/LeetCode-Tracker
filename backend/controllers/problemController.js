@@ -147,6 +147,10 @@ exports.getAllProblems = async (req, res) => {
     let sortStage;
     if (plat === 'LC') {
       sortStage = { problemIdNum: 1 };
+      // Runtime assertion — cheap count, only warns, never blocks the response
+      Problem.countDocuments({ platform: 'LC', $or: [{ problemIdNum: null }, { problemIdNum: 0 }] })
+        .then(n => { if (n > 0) console.warn(`[SORT] ${n} LC problems missing problemIdNum — order may be wrong`); })
+        .catch(() => {});
     } else if (plat === 'CF') {
       sortStage = { contestId: 1, index: 1 };
     } else {

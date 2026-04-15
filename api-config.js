@@ -15,11 +15,10 @@ const API_BASE_URL = isLocalhost ? LOCAL_API_URL : PRODUCTION_API_URL;
 // ─── API ─────────────────────────────────────────────────────────────────────
 const api = {
   getAllProblems: async (opts = {}) => {
-    // Accept either a plain string (legacy) or an options object { platform, sort }
+    // Accept either a plain string (legacy) or an options object { platform }
     const platform = (typeof opts === 'string' ? opts : opts.platform) || 'ALL';
-    const sort     = (typeof opts === 'object' && opts.sort) ? opts.sort : 'recent';
-    const params   = `?platform=${platform}&sort=${sort}`;
-    console.log('[API] getAllProblems', params, '→', `${API_BASE_URL}/problems${params}`);
+    const params   = `?platform=${platform}`;
+    console.log('[API] getAllProblems', `${API_BASE_URL}/problems${params}`);
     const r = await fetch(`${API_BASE_URL}/problems${params}`);
     if (!r.ok) throw new Error('Failed to fetch problems');
     return r.json();

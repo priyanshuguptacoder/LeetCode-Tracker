@@ -69,7 +69,28 @@ async function upsertSolvedProblem(incoming) {
 
   if (platform === 'LC' && !resolvedProblemIdNum) {
     console.error('[UPSERT] Cannot extract problemIdNum from LC uniqueId:', uniqueId);
-    // Don't throw — still insert, but log so it shows in Render logs
+  }
+
+  // CF consistency guard — contestId and index must exist for correct sorting
+  const resolvedContestId = platform === 'CF'
+    ? (() => {
+        if (contestId != null && !isNaN(Number(contestId))) return Number(contestId);
+        // Try to extract from uniqueId: "CF-1700A" → 1700
+        const m = uniqueId.match(/^CF-(\d+)/);
+        return m ? parseInt(m[1], 10) : null;
+      })()
+    : contestId;
+
+  const resolvedIndex = platform === 'CF'
+    ? (index ? String(index).trim().toUpperCase() : (() => {
+        // Try to extract from uniqueId: "CF-1700A" → "A"
+        const m = uniqueId.match(/^CF-\d+([A-Z]+\d*)$/i);
+        return m ? m[1].toUpperCase() : null;
+      })())
+    : index;
+
+  if (platform === 'CF' && (!resolvedContestId || !resolvedIndex)) {
+    console.warn('[UPSERT] CF problem missing contestId or index:', uniqueId, { resolvedContestId, resolvedIndex });
   }
 
   const set = {
@@ -84,8 +105,8 @@ async function upsertSolvedProblem(incoming) {
     lastSubmittedAt: incomingLast,
     submittedAt: incomingLast,
     solved: true,
-    contestId,
-    index,
+    contestId: resolvedContestId,
+    index: resolvedIndex,
     rating,
     problemIdNum: resolvedProblemIdNum,
     isTLE,

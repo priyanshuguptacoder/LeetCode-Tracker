@@ -789,11 +789,7 @@ function App() {
   });
 
   // ── Per-platform streak (LC / CF / combined) ──────────────────────────────
-  const [platformStreak, setPlatformStreak] = useState({
-    combined: { currentStreak: 0, maxStreak: 0, activeDays: 0 },
-    lc:       { currentStreak: 0, maxStreak: 0, activeDays: 0 },
-    cf:       { currentStreak: 0, maxStreak: 0, activeDays: 0 },
-  });
+  const [platformStreak, setPlatformStreak] = useState(null);
 
   // ── Contest Stats state ────────────────────────────────────────────────────
   const [contestStats, setContestStats] = useState(null);
@@ -1565,10 +1561,11 @@ function App() {
       }
 
       // Refetch after sync — do NOT clear state first (prevents flicker)
-      const [probRes, recentTodayRes, streakRes, contestRes, striverRes, tleRes] = await Promise.allSettled([
+      const [probRes, recentTodayRes, streakRes, platformStreakRes, contestRes, striverRes, tleRes] = await Promise.allSettled([
         window.API.getAllProblems(),
         window.API.getRecentAndToday(),
         window.API.getStreak(),
+        window.API.getStreakByPlatform(),
         window.API.getContestStats(),
         window.API.getStriverStats(),
         window.API.getTLEStats(),
@@ -1581,6 +1578,8 @@ function App() {
       }
       if (streakRes.status === 'fulfilled' && streakRes.value.success)
         setDbStreak(streakRes.value.data);
+      if (platformStreakRes.status === 'fulfilled' && platformStreakRes.value.success)
+        setPlatformStreak(platformStreakRes.value.data);
       if (contestRes.status === 'fulfilled' && contestRes.value.success)
         setContestStats(contestRes.value.data);
       if (striverRes.status === 'fulfilled' && striverRes.value.success)
@@ -1830,9 +1829,9 @@ function App() {
     const problem = revisionModal;
     setRevisionModal(null);
     if (!problem) return;
-    if (revisingIdRef.current === problem.number) return;
+    if (revisingIdRef.current === String(problem.number)) return;
     try {
-      revisingIdRef.current = problem.number;
+      revisingIdRef.current = String(problem.number);
       setRevisingId(problem.number);
       const res = await window.API.reviseProblem(problem.number, { timeTaken, hintsUsed, success });
       if (res.success) {
@@ -1869,9 +1868,9 @@ function App() {
 
   const handleUnrevise = (number) => {
     requireAdmin(async () => {
-      if (unrevisingIdRef.current === number) return;
+      if (unrevisingIdRef.current === String(number)) return;
       try {
-        unrevisingIdRef.current = number;
+        unrevisingIdRef.current = String(number);
         setUnrevisingId(number);
         const res = await window.API.unreviseProblem(number);
         if (res.success) {
@@ -1987,6 +1986,8 @@ function App() {
   const handleToggleStriver = (number) => {
     requireAdmin(async () => {
       const problem = apiProblemsRef.current.find(p => String(p.number) === String(number));
+      // Striver is LC-only
+      if (!problem || problem.platform !== 'LC') return;
       const uid = problem?.uniqueId || problem?.id;
       if (!uid || striverId === uid) return;
       // Optimistic update — flip immediately, revert on error
@@ -2027,6 +2028,8 @@ function App() {
   const handleToggleTLE = (number) => {
     requireAdmin(async () => {
       const problem = apiProblemsRef.current.find(p => String(p.number) === String(number));
+      // TLE is CF-only
+      if (!problem || problem.platform !== 'CF') return;
       const uid = problem?.uniqueId || problem?.id;
       if (!uid || tleId === uid) return;
       const prev = problem.isTLE;
@@ -2120,8 +2123,10 @@ function App() {
   const [striverStats, setStriverStats] = useState({ easy: 0, medium: 0, hard: 0, total: 0 });
   const [tleStats, setTleStats] = useState({ easy: 0, medium: 0, hard: 0, total: 0, totalInSheet: 0 });
 
-  const totalSolved = allProblems.filter(p => p.status === 'Done').length;
+  const totalSolved   = allProblems.filter(p => p.status === 'Done').length;
   const totalProblems = allProblems.length;
+  const lcSolved      = allProblems.filter(p => p.platform === 'LC' && p.status === 'Done').length;
+  const cfSolved      = allProblems.filter(p => p.platform === 'CF' && p.status === 'Done').length;
 
   // Rolling 100 (kept for progress bar)
   const completedCycles = Math.floor(totalSolved / 100);
@@ -2842,16 +2847,13 @@ function App() {
         <div className="container">
           {/* Navbar Stats Bar */}
           <div className="navbar-stats">
-            <StatCard value={totalSolved} label="Problems Solved" icon="✅" delay={0.05} isReady={statsReady} />
+            <StatCard value={totalSolved} label="Total Solved" icon="✅" delay={0.05} isReady={statsReady} />
             <div className="navbar-stat-divider" />
             <StatCard value={displayActiveDays} label="Active Days" icon="📅" delay={0.10} isReady={statsReady} />
             <div className="navbar-stat-divider" />
-            <div className="navbar-stat navbar-stat-targeted">
-              <span className="navbar-stat-value">{targetedProblems.list.length}</span>
-              <span className="navbar-stat-label">🎯 Targeted</span>
-            </div>
+            <StatCard value={lcSolved} label="LeetCode" icon="💻" delay={0.15} isReady={statsReady} />
             <div className="navbar-stat-divider" />
-            <StatCard value={totalProblems} label="Total Problems" icon="📚" delay={0.20} isReady={statsReady} />
+            <StatCard value={cfSolved} label="Codeforces" icon="🏆" delay={0.20} isReady={statsReady} />
           </div>
 
           {/* Difficulty Navbar — filter by Easy/Medium/Hard */}
@@ -2889,23 +2891,25 @@ function App() {
               </div>
 
               {/* Per-platform streak breakdown */}
-              <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
-                {[
-                  { label: '💻 LC', streak: platformStreak.lc.currentStreak, days: platformStreak.lc.activeDays },
-                  { label: '🏆 CF', streak: platformStreak.cf.currentStreak, days: platformStreak.cf.activeDays },
-                ].map(p => (
-                  <div key={p.label} style={{
-                    flex: 1, minWidth: 90,
-                    background: 'var(--bg-tertiary)',
-                    borderRadius: 8, padding: '8px 10px',
-                    fontSize: '0.78rem', color: 'var(--text-secondary)',
-                  }}>
-                    <div style={{ fontWeight: 700, marginBottom: 4 }}>{p.label}</div>
-                    <div>🔥 {p.streak}d streak</div>
-                    <div>📅 {p.days} active days</div>
-                  </div>
-                ))}
-              </div>
+              {platformStreak && (
+                <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
+                  {[
+                    { label: '💻 LC', streak: platformStreak.lc?.currentStreak ?? '—', days: platformStreak.lc?.activeDays ?? '—' },
+                    { label: '🏆 CF', streak: platformStreak.cf?.currentStreak ?? '—', days: platformStreak.cf?.activeDays ?? '—' },
+                  ].map(p => (
+                    <div key={p.label} style={{
+                      flex: 1, minWidth: 90,
+                      background: 'var(--bg-tertiary)',
+                      borderRadius: 8, padding: '8px 10px',
+                      fontSize: '0.78rem', color: 'var(--text-secondary)',
+                    }}>
+                      <div style={{ fontWeight: 700, marginBottom: 4 }}>{p.label}</div>
+                      <div>🔥 {p.streak}{typeof p.streak === 'number' ? 'd' : ''} streak</div>
+                      <div>📅 {p.days} active days</div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {/* Today Status */}
               <div className={`today-status ${(() => {
@@ -3186,21 +3190,23 @@ function App() {
             </div>
 
             {/* Contest Stats — placed below streak/monthly analytics */}
-            <ContestStats stats={contestStats} />
           </div>
 
+          {/* Contest Stats — directly below streak + monthly planner */}
+          <ContestStats stats={contestStats} />
+
           {/* Striver Progress — LC only. TLE Sheet — CF only. Both shown on ALL. */}
-          {platformFilter !== 'CF' && (
+          {(platformFilter === 'ALL' || platformFilter === 'LC') && (
             <div className="analytics-card striver-card fade-up fade-up-4">
               <h3 className="card-title">📘 Striver Progress</h3>
               <ProgressCard data={striverStats} />
               {striverStats.total === 0 && (
-                <div className="striver-empty">Click 📘 on any problem in the table to mark it as Striver</div>
+                <div className="striver-empty">Click 📘 on any LC problem to mark it as Striver</div>
               )}
             </div>
           )}
 
-          {platformFilter !== 'LC' && (
+          {(platformFilter === 'ALL' || platformFilter === 'CF') && (
             <div className="analytics-card striver-card fade-up fade-up-4">
               <h3 className="card-title">🏆 TLE Sheet Progress</h3>
               <ProgressCard data={tleStats} />
@@ -3863,7 +3869,7 @@ function App() {
                               <button
                                 className="rev-btn"
                                 onClick={() => handleUnrevise(problem.number)}
-                                disabled={(problem.revisionCount || 0) === 0 || unrevisingId === problem.number}
+                                disabled={(problem.revisionCount || 0) === 0 || unrevisingId === String(problem.number)}
                                 title="Remove revision"
                               >−</button>
                               <button
@@ -3913,22 +3919,26 @@ function App() {
                             >
                               {targetingId === problem.number ? '⏳' : '🎯'}
                             </button>
-                            <button
-                              className={`btn-striver${problem.isStriver ? ' active' : ''}`}
-                              onClick={() => handleToggleStriver(problem.number)}
-                              disabled={striverId === (problem.uniqueId || problem.id)}
-                              title={problem.isStriver ? 'Remove from Striver' : 'Mark as Striver'}
-                            >
-                              {striverId === (problem.uniqueId || problem.id) ? '⏳' : '📘'}
-                            </button>
-                            <button
-                              className={`btn-tle${problem.isTLE ? ' active' : ''}`}
-                              onClick={() => handleToggleTLE(problem.number)}
-                              disabled={tleId === (problem.uniqueId || problem.id)}
-                              title={problem.isTLE ? 'Remove from TLE sheet' : 'Add to TLE sheet'}
-                            >
-                              {tleId === (problem.uniqueId || problem.id) ? '⏳' : '🏆'}
-                            </button>
+                            {(problem.platform === 'LC') && (
+                              <button
+                                className={`btn-striver${problem.isStriver ? ' active' : ''}`}
+                                onClick={() => handleToggleStriver(problem.number)}
+                                disabled={striverId === (problem.uniqueId || problem.id)}
+                                title={problem.isStriver ? 'Remove from Striver' : 'Mark as Striver'}
+                              >
+                                {striverId === (problem.uniqueId || problem.id) ? '⏳' : '📘'}
+                              </button>
+                            )}
+                            {(problem.platform === 'CF') && (
+                              <button
+                                className={`btn-tle${problem.isTLE ? ' active' : ''}`}
+                                onClick={() => handleToggleTLE(problem.number)}
+                                disabled={tleId === (problem.uniqueId || problem.id)}
+                                title={problem.isTLE ? 'Remove from TLE sheet' : 'Add to TLE sheet'}
+                              >
+                                {tleId === (problem.uniqueId || problem.id) ? '⏳' : '🏆'}
+                              </button>
+                            )}
                             <button
                               className="btn-delete"
                               onClick={() => handleDelete(problem.number, problem.isCustom)}
@@ -4035,7 +4045,7 @@ function App() {
                         <button
                           className="rev-btn"
                           onClick={() => handleUnrevise(problem.number)}
-                          disabled={(problem.revisionCount || 0) === 0 || unrevisingId === problem.number}
+                          disabled={(problem.revisionCount || 0) === 0 || unrevisingId === String(problem.number)}
                           title="Remove revision"
                         >−</button>
                         <span className="pm-rev-label">Rev</span>
@@ -4054,22 +4064,26 @@ function App() {
                       >
                         {targetingId === problem.number ? '⏳' : '🎯'}
                       </button>
-                      <button
-                        className={`btn-striver${problem.isStriver ? ' active' : ''}`}
-                        onClick={() => handleToggleStriver(problem.number)}
-                        disabled={striverId === (problem.uniqueId || problem.id)}
-                        title={problem.isStriver ? 'Remove from Striver' : 'Mark as Striver'}
-                      >
-                        {striverId === (problem.uniqueId || problem.id) ? '⏳' : '📘'}
-                      </button>
-                      <button
-                        className={`btn-tle${problem.isTLE ? ' active' : ''}`}
-                        onClick={() => handleToggleTLE(problem.number)}
-                        disabled={tleId === (problem.uniqueId || problem.id)}
-                        title={problem.isTLE ? 'Remove from TLE sheet' : 'Add to TLE sheet'}
-                      >
-                        {tleId === (problem.uniqueId || problem.id) ? '⏳' : '🏆'}
-                      </button>
+                      {(problem.platform === 'LC') && (
+                        <button
+                          className={`btn-striver${problem.isStriver ? ' active' : ''}`}
+                          onClick={() => handleToggleStriver(problem.number)}
+                          disabled={striverId === (problem.uniqueId || problem.id)}
+                          title={problem.isStriver ? 'Remove from Striver' : 'Mark as Striver'}
+                        >
+                          {striverId === (problem.uniqueId || problem.id) ? '⏳' : '📘'}
+                        </button>
+                      )}
+                      {(problem.platform === 'CF') && (
+                        <button
+                          className={`btn-tle${problem.isTLE ? ' active' : ''}`}
+                          onClick={() => handleToggleTLE(problem.number)}
+                          disabled={tleId === (problem.uniqueId || problem.id)}
+                          title={problem.isTLE ? 'Remove from TLE sheet' : 'Add to TLE sheet'}
+                        >
+                          {tleId === (problem.uniqueId || problem.id) ? '⏳' : '🏆'}
+                        </button>
+                      )}
                       <button
                         className="btn-delete"
                         onClick={() => handleDelete(problem.number, problem.isCustom)}
