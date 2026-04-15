@@ -127,12 +127,15 @@ mongoose
     // One-time backfill: copy solvedDate → lastSubmittedAt for problems missing it
     try {
       const Problem = require('./models/Problem');
-      const result = await Problem.updateMany(
-        { solved: true, solvedDate: { $ne: null }, lastSubmittedAt: null },
-        [{ $set: { lastSubmittedAt: '$solvedDate' } }]
-      );
-      if (result.modifiedCount > 0) {
-        console.log(`[BACKFILL] Set lastSubmittedAt on ${result.modifiedCount} problems`);
+      const problemsToBackfill = await Problem.find({ solved: true, solvedDate: { $ne: null }, lastSubmittedAt: null });
+      let count = 0;
+      for (const doc of problemsToBackfill) {
+        doc.lastSubmittedAt = doc.solvedDate;
+        await doc.save();
+        count++;
+      }
+      if (count > 0) {
+        console.log(`[BACKFILL] Set lastSubmittedAt on ${count} problems`);
       }
     } catch (e) {
       console.warn('[BACKFILL] lastSubmittedAt backfill failed:', e.message);
