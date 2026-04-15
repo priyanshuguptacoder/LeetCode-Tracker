@@ -484,11 +484,11 @@ async function syncRecentSubmissions() {
       return null;
     }),
   ]);
-  console.log(`[SYNC FETCHED ${submissions.length}] unique accepted slugs from LeetCode`);
+  console.log(`[SYNC FETCHED ${(submissions || []).length}] unique accepted slugs from LeetCode`);
 
   // Step 2: Store submissionCalendar dates in Settings (always, even if no new problems)
   let calendarDates = null;
-  if (calendarResult && calendarResult.dates.length > 0) {
+  if (calendarResult?.dates?.length > 0) {
     calendarDates = calendarResult.dates;
     const Settings = require('../models/Settings');
     await Settings.findOneAndUpdate(

@@ -188,7 +188,9 @@ exports.getCodeforcesStats = async (req, res) => {
     const byRating = {};
     const byTag = {};
 
-    problems.forEach(p => {
+    const safeProblems = Array.isArray(problems) ? problems : [];
+
+    safeProblems.forEach(p => {
       byDifficulty[p.difficulty] = (byDifficulty[p.difficulty] || 0) + 1;
 
       // Group by raw rating buckets (800, 900, ..., 3500)
@@ -203,7 +205,7 @@ exports.getCodeforcesStats = async (req, res) => {
     res.json({
       success: true,
       data: {
-        total: problems.length,
+        total: safeProblems.length,
         byDifficulty,
         byRating,
         byTag,

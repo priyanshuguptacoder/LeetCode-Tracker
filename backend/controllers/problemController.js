@@ -24,7 +24,7 @@ async function rebuildStreak(calendarDates = null) {
     const stored = await Settings.findOne({ key: 'global' }, { submissionCalendarDates: 1 }).lean();
     if (stored?.submissionCalendarDates?.length > 0) {
       effectiveCalendarDates = stored.submissionCalendarDates;
-      console.log(`[STREAK REBUILD] using stored submissionCalendar (${effectiveCalendarDates.length} dates)`);
+      console.log(`[STREAK REBUILD] using stored submissionCalendar (${(effectiveCalendarDates || []).length} dates)`);
     }
   }
 
@@ -34,7 +34,7 @@ async function rebuildStreak(calendarDates = null) {
     console.error('[STREAK REBUILD] Invariant violations:', stats.errors);
   }
 
-  const lastSolvedDate = stats.days.length > 0
+  const lastSolvedDate = (stats?.days?.length || 0) > 0
     ? new Date(stats.days[stats.days.length - 1] + 'T00:00:00Z')
     : null;
 
@@ -137,10 +137,9 @@ exports.getAllProblems = async (req, res) => {
       total,
       page: p,
       limit: l,
-      count: data.length, 
-      platform: platform.toUpperCase(),
-      data 
-    });
+      count: (data || []).length, 
+      platform: (platform || 'ALL').toUpperCase(),
+      data: data || []    });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to fetch problems', message: err.message });
   }
@@ -492,7 +491,7 @@ exports.getRevisionList = async (req, res) => {
       if (!p.nextRevisionAt) return false;
       return now >= new Date(p.nextRevisionAt);
     });
-    res.json({ success: true, count: list.length, data: list });
+    res.json({ success: true, count: (list || []).length, data: list || [] });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to fetch revision list', message: err.message });
   }
@@ -577,7 +576,7 @@ exports.getSuggestions = async (req, res) => {
       addSuggestion(pick, 'Challenge yourself');
     }
 
-    res.json({ success: true, count: suggestions.length, data: suggestions });
+    res.json({ success: true, count: (suggestions || []).length, data: suggestions || [] });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to fetch suggestions', message: err.message });
   }
@@ -587,8 +586,9 @@ exports.getSuggestions = async (req, res) => {
 exports.getStats = async (req, res) => {
   try {
     const problems = await Problem.find({ isDeleted: { $ne: true } });
-    const total = problems.length;
-    const solved = problems.filter(p => p.solved).length;
+    const safeProblems = Array.isArray(problems) ? problems : [];
+    const total = safeProblems.length;
+    const solved = safeProblems.filter(p => p.solved).length;
 
     const byDifficulty = { Easy: 0, Medium: 0, Hard: 0 };
     const byTopic = {};
@@ -665,7 +665,7 @@ exports.alignProblems = async (req, res) => {
     let s = await Settings.findOne({ key: 'global' });
     if (!s) s = await Settings.create({ key: 'global' });
 
-    res.json({ success: true, count: ops.length, streak: streakPayload(s) });
+    res.json({ success: true, count: (ops || []).length, streak: streakPayload(s) });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Align failed', message: err.message });
   }
@@ -735,10 +735,11 @@ exports.markStriverProblems = async (req, res) => {
 exports.getStriverStats = async (req, res) => {
   try {
     const problems = await Problem.find({ isStriver: true, solved: true, isDeleted: { $ne: true } });
-    const easy   = problems.filter(p => p.difficulty === 'Easy').length;
-    const medium = problems.filter(p => p.difficulty === 'Medium').length;
-    const hard   = problems.filter(p => p.difficulty === 'Hard').length;
-    res.json({ success: true, data: { easy, medium, hard, total: problems.length } });
+    const safeProblems = Array.isArray(problems) ? problems : [];
+    const easy   = safeProblems.filter(p => p.difficulty === 'Easy').length;
+    const medium = safeProblems.filter(p => p.difficulty === 'Medium').length;
+    const hard   = safeProblems.filter(p => p.difficulty === 'Hard').length;
+    res.json({ success: true, data: { easy, medium, hard, total: safeProblems.length } });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to fetch striver stats', message: err.message });
   }
@@ -799,7 +800,7 @@ exports.validateStreak = async (req, res) => {
       stored:   { currentStreak: storedCurrent, maxStreak: storedMax, activeDays: storedActive },
       days:         stats.days,
       gaps:         stats.gaps,
-      totalGapDays: stats.gaps.length,
+      totalGapDays: (stats?.gaps || []).length,
       todayKey:     stats.todayKey,
     });
   } catch (err) {
