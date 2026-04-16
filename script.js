@@ -712,9 +712,9 @@ function ContestStats({ stats }) {
   };
 
   const Row = ({ label, value }) => (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-      <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>{label}</span>
-      <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+      <span style={{ color: '#9ca3af', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</span>
+      <span style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)' }}>
         {value != null ? (typeof value === 'number' ? value.toLocaleString() : value) : 'N/A'}
       </span>
     </div>
@@ -725,11 +725,17 @@ function ContestStats({ stats }) {
       <h3 className="card-title">🏆 Contest Stats</h3>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
         {/* LeetCode */}
-        <div style={{ padding: '12px', background: 'var(--bg-tertiary)', borderRadius: '8px' }}>
-          <div style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '10px', fontSize: '0.88rem' }}>
+        <div style={{
+          padding: '16px',
+          background: 'rgba(34,197,94,0.05)',
+          borderRadius: '10px',
+          borderLeft: '4px solid #22c55e',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+        }}>
+          <div style={{ fontWeight: 700, color: '#22c55e', marginBottom: '12px', fontSize: '0.88rem' }}>
             💻 LeetCode
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <Row label="Rating"      value={lc.rating} />
             <Row label="Global Rank" value={lc.globalRank} />
             <Row label="Contests"    value={lc.contestCount} />
@@ -737,11 +743,17 @@ function ContestStats({ stats }) {
         </div>
 
         {/* Codeforces */}
-        <div style={{ padding: '12px', background: 'var(--bg-tertiary)', borderRadius: '8px' }}>
-          <div style={{ fontWeight: 700, color: '#a78bfa', marginBottom: '10px', fontSize: '0.88rem' }}>
+        <div style={{
+          padding: '16px',
+          background: 'rgba(245,158,11,0.05)',
+          borderRadius: '10px',
+          borderLeft: '4px solid #f59e0b',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+        }}>
+          <div style={{ fontWeight: 700, color: '#f59e0b', marginBottom: '12px', fontSize: '0.88rem' }}>
             🏆 Codeforces
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <Row label="Rating"     value={cf.rating} />
             <Row label="Max Rating" value={cf.maxRating} />
             <Row label="Rank"       value={cf.rank} />
@@ -2965,20 +2977,38 @@ function App() {
 
               {/* Per-platform streak breakdown */}
               {(dbStreak.lc || dbStreak.cf) && (
-                <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '10px', marginTop: '14px', flexWrap: 'wrap' }}>
                   {[
-                    { label: '💻 LC', streak: dbStreak.lc?.currentStreak ?? '—', days: dbStreak.lc?.activeDays ?? '—' },
-                    { label: '🏆 CF', streak: dbStreak.cf?.currentStreak ?? '—', days: dbStreak.cf?.activeDays ?? '—' },
+                    {
+                      label: '💻 LeetCode',
+                      streak: dbStreak.lc?.currentStreak ?? '—',
+                      days: dbStreak.lc?.activeDays ?? '—',
+                      borderColor: '#22c55e',
+                      bg: 'rgba(34,197,94,0.06)',
+                    },
+                    {
+                      label: '🏆 Codeforces',
+                      streak: dbStreak.cf?.currentStreak ?? '—',
+                      days: dbStreak.cf?.activeDays ?? '—',
+                      borderColor: '#f59e0b',
+                      bg: 'rgba(245,158,11,0.06)',
+                    },
                   ].map(p => (
                     <div key={p.label} style={{
-                      flex: 1, minWidth: 90,
-                      background: 'var(--bg-tertiary)',
-                      borderRadius: 8, padding: '8px 10px',
-                      fontSize: '0.78rem', color: 'var(--text-secondary)',
+                      flex: 1, minWidth: 110,
+                      background: p.bg,
+                      borderRadius: 8,
+                      borderLeft: `4px solid ${p.borderColor}`,
+                      padding: '12px 14px',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
                     }}>
-                      <div style={{ fontWeight: 700, marginBottom: 4 }}>{p.label}</div>
-                      <div>🔥 {p.streak}{typeof p.streak === 'number' ? 'd' : ''} streak</div>
-                      <div>📅 {p.days} active days</div>
+                      <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginBottom: 4 }}>{p.label}</div>
+                      <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>
+                        {p.streak}{typeof p.streak === 'number' ? 'd' : ''}
+                      </div>
+                      <div style={{ fontSize: '0.72rem', color: '#9ca3af', marginTop: 3 }}>
+                        📅 {p.days} active days
+                      </div>
                     </div>
                   ))}
                 </div>
