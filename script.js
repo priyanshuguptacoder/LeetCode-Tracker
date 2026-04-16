@@ -1738,6 +1738,7 @@ function App() {
         wrongAttempts,
         needsRevision: autoRevision,
       };
+      console.log('[ADD PROBLEM] payload:', JSON.stringify(newProblem));
       try {
         const response = await window.API.createProblem(newProblem);
         if (response.success) {

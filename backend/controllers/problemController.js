@@ -294,24 +294,25 @@ exports.createProblem = async (req, res) => {
             solvedDate, targeted, targetedAt, platform = 'LC' } = req.body;
     const normalizedPlatform = normalizePlatform(platform);
     
-    // Support both new platformLink and legacy leetcodeLink
     const link = platformLink || leetcodeLink;
     if (!id || !title || !difficulty || !link) {
       return res.status(400).json({ success: false, error: 'id, title, difficulty, and platformLink (or leetcodeLink) are required' });
     }
-    
-    // Format ID based on platform (e.g., 'LC-1' or 'CF-123A')
-    const formattedId = id.toString().toUpperCase().startsWith(`${normalizedPlatform}-`)
-      ? id.toString().toUpperCase()
-      : `${normalizedPlatform}-${id}`;
+
+    const rawId = String(id).trim().toUpperCase();
+    const formattedId = rawId.startsWith(`${normalizedPlatform}-`)
+      ? rawId
+      : `${normalizedPlatform}-${rawId}`;
     const uniqueId = formattedId;
-    
-    // Check including soft-deleted — if deleted, block re-creation (user intent lock)
-    const exists = await Problem.findOne({ uniqueId });
-    if (exists && exists.isDeleted) {
-      return res.status(409).json({ success: false, error: `Problem ${formattedId} was previously deleted. Deletion is permanent.` });
+
+    // Check ALL docs including soft-deleted (unique index covers all)
+    const exists = await Problem.findOne({ uniqueId }).lean();
+    if (exists) {
+      if (exists.isDeleted) {
+        return res.status(409).json({ success: false, error: `Problem ${uniqueId} was previously deleted. Deletion is permanent.` });
+      }
+      return res.status(400).json({ success: false, error: `Problem ${uniqueId} already exists` });
     }
-    if (exists) return res.status(400).json({ success: false, error: `Problem ${formattedId} already exists` });
 
     const isSolved = solved === true || solved === 'true';
     const isTargeted = targeted === true || targeted === 'true';
@@ -380,6 +381,11 @@ exports.createProblem = async (req, res) => {
     res.status(201).json({ success: true, data: problem, streak: streakData });
   } catch (err) {
     console.error('[CREATE PROBLEM ERROR]', err.message, err.stack);
+    // Handle Mongoose duplicate key error gracefully
+    if (err.code === 11000) {
+      const field = Object.keys(err.keyValue || {})[0] || 'uniqueId';
+      return res.status(400).json({ success: false, error: `Duplicate: ${field} already exists` });
+    }
     res.status(500).json({ success: false, error: 'Failed to create problem', message: err.message });
   }
 };
