@@ -907,15 +907,13 @@ function App() {
 
   // ── Display ID: separate from title, used in table and mobile card ──────────
   function getDisplayId(p) {
-    if (p.platform === "LC") {
-      return `#${p.problemIdNum}`;
+    if (p.platform === 'CF') {
+      const cid = p.contestId || '';
+      const idx = p.index || '';
+      return cid && idx ? `${cid}${idx}` : (p.uniqueId || '');
     }
-
-    if (p.platform === "CF") {
-      return `${p.contestId}${p.index}`;
-    }
-
-    return "";
+    // LC — numeric only, no #
+    return p.problemIdNum || '';
   }
 
   function cleanTitle(title) {
@@ -1083,7 +1081,7 @@ function App() {
   const [difficultyFilter, setDifficultyFilter] = useState('All');
   const [patternFilter, setPatternFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
-  const [platformFilter, setPlatformFilter] = useState('ALL'); // 'ALL' | 'LC' | 'CF'
+  const [platformFilter, setPlatformFilter] = useState('LC'); // 'LC' | 'CF'
   const [viewMode, setViewMode] = useState('ALL'); // 'ALL' | 'STRIVER' | 'TLE' (kept for future use)
   const [showModal, setShowModal] = useState(false);
   const [notification, setNotification] = useState(null);
@@ -2161,7 +2159,7 @@ function App() {
     setPatternFilter('All');
     setStatusFilter('All');
     setSelectedFilter(null);
-    setPlatformFilter('ALL');
+    setPlatformFilter('LC');
     setViewMode('ALL');
 
     showNotification('✨ All filters cleared', 'success');
@@ -2653,8 +2651,7 @@ function App() {
                 false);
 
       // Platform filter
-      const matchesPlatform =
-        platformFilter === 'ALL' || problem.platform === platformFilter;
+      const matchesPlatform = problem.platform === platformFilter;
 
       return matchesSearch && matchesDifficulty && matchesPattern && matchesStatus && matchesSelectedFilter && matchesPlatform;
     });
@@ -3775,7 +3772,6 @@ function App() {
           {/* Platform Filter Tabs */}
           <div className="platform-tabs" style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
             {[
-              { key: 'ALL', label: '🌐 All',         count: allProblems.length },
               { key: 'LC',  label: '💻 LeetCode',    count: allProblems.filter(p => p.platform === 'LC').length },
               { key: 'CF',  label: '🏆 Codeforces',  count: allProblems.filter(p => p.platform === 'CF').length },
             ].map(tab => (
@@ -3866,7 +3862,7 @@ function App() {
                   <option>TLE</option>
                 </select>
               </div>
-              {(searchTerm || difficultyFilter !== 'All' || patternFilter !== 'All' || statusFilter !== 'All' || selectedFilter !== null || platformFilter !== 'ALL') && (
+              {(searchTerm || difficultyFilter !== 'All' || patternFilter !== 'All' || statusFilter !== 'All' || selectedFilter !== null || platformFilter !== 'LC') && (
                 <div className="filter-group filter-clear-group">
                   <label>&nbsp;</label>
                   <button
@@ -3901,7 +3897,7 @@ function App() {
               <table className="problems-table">
                 <thead>
                   <tr>
-                    <th>#</th>
+                    <th>ID</th>
                     <th>Title</th>
                     <th>Difficulty</th>
                     <th>My Difficulty</th>
@@ -4076,11 +4072,8 @@ function App() {
                       {problem.isStriver && <span className="pm-tag pm-tag-striver">📘</span>}
                     </div>
 
-                    {/* Row 2: title with ID badge */}
+                    {/* Row 2: title */}
                     <div className="pm-title">
-                      <span className="problem-id-badge" style={{ fontSize: '0.72rem', fontWeight: 700, opacity: 0.5, marginRight: '5px', fontVariantNumeric: 'tabular-nums' }}>
-                        {getDisplayId(problem)}
-                      </span>
                       {cleanTitle(problem.title)}
                     </div>
 
