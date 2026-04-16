@@ -1759,10 +1759,8 @@ function App() {
           if (autoRevision) {
             setMistakeModal({ number: uniqueId, title: formData.title });
           }
-            setMistakeModal({ number: problemNumber, title: formData.title });
-          }
           setTimeout(() => {
-            const tableRow = document.querySelector(`tr[data-problem-number="${problemNumber}"]`);
+            const tableRow = document.querySelector(`tr[data-problem-number="${uniqueId}"]`);
             if (tableRow) {
               tableRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
               tableRow.style.animation = 'highlightRow 2s ease';
