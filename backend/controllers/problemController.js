@@ -305,10 +305,10 @@ exports.createProblem = async (req, res) => {
       : `${normalizedPlatform}-${rawId}`;
     const uniqueId = formattedId;
 
-    // Check ALL docs including soft-deleted (unique index covers all)
-    const exists = await Problem.findOne({ uniqueId }).lean();
-    if (exists) {
-      if (exists.isDeleted) {
+    // Check ALL docs including soft-deleted using raw collection (bypasses isDeleted pre-hook)
+    const existsRaw = await Problem.collection.findOne({ uniqueId });
+    if (existsRaw) {
+      if (existsRaw.isDeleted) {
         return res.status(409).json({ success: false, error: `Problem ${uniqueId} was previously deleted. Deletion is permanent.` });
       }
       return res.status(400).json({ success: false, error: `Problem ${uniqueId} already exists` });
