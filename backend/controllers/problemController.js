@@ -112,13 +112,11 @@ async function computeStreakForPlatform(platform = 'ALL', calendarDates = null) 
   let skipped = 0;
   const problems = rawProblems
     .filter(p => {
-      // Assert valid platform
       if (p.platform && !VALID_PLATFORMS.includes(p.platform)) {
         console.error(`[STREAK] Unknown platform "${p.platform}" on doc ${p.uniqueId} — skipping`);
         skipped++;
         return false;
       }
-      // Skip docs with no usable date
       if (!p.solvedDate && !p.lastSubmittedAt) {
         console.error(`[STREAK] Doc ${p.uniqueId} has no solvedDate or lastSubmittedAt — skipping`);
         skipped++;
@@ -126,11 +124,18 @@ async function computeStreakForPlatform(platform = 'ALL', calendarDates = null) 
       }
       return true;
     })
-    .map(p => ({ ...p, solvedDate: p.solvedDate || p.lastSubmittedAt }));
+    .map(p => {
+      // For CF: always prefer lastSubmittedAt (most accurate submission timestamp).
+      // For LC/ALL: use solvedDate first, fall back to lastSubmittedAt.
+      const dateToUse = (platform === 'CF')
+        ? (p.lastSubmittedAt || p.solvedDate)
+        : (p.solvedDate || p.lastSubmittedAt);
+      return { ...p, solvedDate: dateToUse };
+    });
 
   console.log(`[STREAK] platform=${platform} total=${rawProblems.length} valid=${problems.length} skipped=${skipped}`);
 
-  // Only use calendar dates for global/LC (calendar is LC-specific)
+  // Only use calendar dates for global/LC (calendar is LC-specific, not CF)
   const effectiveCal = (platform === 'ALL' || platform === 'LC') ? calendarDates : null;
   return computeStats(problems, effectiveCal);
 }
