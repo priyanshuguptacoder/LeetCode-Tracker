@@ -94,18 +94,16 @@ problemSchema.pre('countDocuments', function() {
 // ── Invariants ───────────────────────────────────────────────────────────────
 // 1) `id` always mirrors `uniqueId` (legacy compatibility)
 // 2) If `solved === true`, `solvedDate` MUST be a valid Date (never null)
-problemSchema.pre('validate', function(next) {
+problemSchema.pre('validate', async function() {
   if (this.uniqueId && (!this.id || this.id !== this.uniqueId)) {
     this.id = this.uniqueId;
   }
 
   if (this.solved === true) {
     if (!this.solvedDate) {
-      // Use lastSubmittedAt if available; otherwise now.
       this.solvedDate = this.lastSubmittedAt || this.submittedAt || new Date();
     }
   }
-  next();
 });
 
 module.exports = mongoose.model('Problem', problemSchema);
