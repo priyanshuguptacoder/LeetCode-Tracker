@@ -289,6 +289,7 @@ exports.getProblem = async (req, res) => {
 // Supports multi-platform: platform='LC'|'CF', id='LC-1'|'CF-123A'
 exports.createProblem = async (req, res) => {
   try {
+    console.log('[CREATE PROBLEM] body:', JSON.stringify(req.body));
     const { id, title, difficulty, topics, solved, notes, leetcodeLink, platformLink, 
             solvedDate, targeted, targetedAt, platform = 'LC' } = req.body;
     const normalizedPlatform = normalizePlatform(platform);
@@ -369,11 +370,16 @@ exports.createProblem = async (req, res) => {
 
     let streakData = null;
     if (isSolved) {
-      const updated = await applyStreakUpdate();
-      streakData = streakPayload(updated);
+      try {
+        const updated = await applyStreakUpdate();
+        streakData = streakPayload(updated);
+      } catch (streakErr) {
+        console.error('[CREATE] Streak update failed (non-fatal):', streakErr.message);
+      }
     }
     res.status(201).json({ success: true, data: problem, streak: streakData });
   } catch (err) {
+    console.error('[CREATE PROBLEM ERROR]', err.message, err.stack);
     res.status(500).json({ success: false, error: 'Failed to create problem', message: err.message });
   }
 };
