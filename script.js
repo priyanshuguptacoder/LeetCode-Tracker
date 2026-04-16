@@ -1209,6 +1209,7 @@ function App() {
     type: 'Solved',
     pattern: '',
     link: '',
+    platform: 'LC',
     solveTime: '',
     hintsUsed: false,
     wrongAttempts: '',
@@ -1692,19 +1693,19 @@ function App() {
       showNotification('Please fill in all required fields', 'error');
       return;
     }
-    const problemNumber = parseInt(formData.number);
-    if (problemNumber <= 0 || isNaN(problemNumber)) {
-      showNotification('Problem number must be a positive integer', 'error');
+
+    const normalizedId = formData.number.trim().toUpperCase();
+    const uniqueId = `${formData.platform}-${normalizedId}`;
+
+    // CF ID validation
+    if (formData.platform === 'CF' && !/^\d+[A-Z]\d*$/.test(normalizedId)) {
+      showNotification('CF problem ID must be like 150A, 1790B', 'error');
       return;
     }
-    if (problemExists(problemNumber)) {
-      showNotification(`⚠️ Problem #${problemNumber} already exists!`, 'error');
-      const tableRow = document.querySelector(`tr[data-problem-number="${problemNumber}"]`);
-      if (tableRow) {
-        tableRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        tableRow.classList.add('highlight-row');
-        setTimeout(() => tableRow.classList.remove('highlight-row'), 2000);
-      }
+
+    // Duplicate check by uniqueId
+    if (allProblems.some(p => p.uniqueId === uniqueId)) {
+      showNotification(`⚠️ Problem ${uniqueId} already exists!`, 'error');
       return;
     }
 
@@ -1712,7 +1713,6 @@ function App() {
       const hasPattern = formData.pattern && formData.pattern.trim() !== '';
       const detectedPattern = hasPattern ? formData.pattern : detectPattern(formData.title);
 
-      // ── Auto-detection: should this go to Needs Revision? ──────────────
       const solveTime = formData.solveTime ? parseFloat(formData.solveTime) : null;
       const hintsUsed = formData.hintsUsed || false;
       const wrongAttempts = formData.wrongAttempts ? parseInt(formData.wrongAttempts) : 0;
@@ -1723,11 +1723,12 @@ function App() {
       );
 
       const newProblem = {
-        id: problemNumber,
+        id: normalizedId,
         title: formData.title,
         difficulty: formData.difficulty,
         topics: detectedPattern ? [detectedPattern] : [],
-        leetcodeLink: formData.link || `https://leetcode.com/problems/${problemNumber}/`,
+        platform: formData.platform,
+        platformLink: formData.link,
         solved: formData.type === 'Solved',
         solvedDate: formData.type === 'Solved' ? toLocalDateStr(new Date()) : null,
         targeted: formData.type === 'Target',
@@ -1740,10 +1741,9 @@ function App() {
       try {
         const response = await window.API.createProblem(newProblem);
         if (response.success) {
-          if (response.streak) setDbStreak(response.streak);
+          if (response.streak) setDbStreak(prev => ({ ...prev, ...response.streak }));
           const allProblemsResponse = await window.API.getAllProblems();
-          setProblems(transformProblems(allProblemsResponse.data));
-          // Refresh recent/today if problem was solved
+          setApiProblems(transformProblems(allProblemsResponse.data));
           if (formData.type === 'Solved') {
             try {
               const recentTodayRes = await window.API.getRecentAndToday();
@@ -1753,11 +1753,12 @@ function App() {
               }
             } catch (_) { }
           }
-          showNotification(`✅ Problem #${problemNumber} added!${formData.type === 'Solved' ? ' — Streak updated!' : ''}${autoRevision ? ' Added to Needs Revision.' : ''}`, 'success');
+          showNotification(`✅ Problem ${uniqueId} added!${formData.type === 'Solved' ? ' — Streak updated!' : ''}${autoRevision ? ' Added to Needs Revision.' : ''}`, 'success');
           setShowModal(false);
-          setFormData({ number: '', title: '', difficulty: 'Medium', type: 'Solved', pattern: '', link: '', solveTime: '', hintsUsed: false, wrongAttempts: '' });
-          // If auto-flagged, prompt for mistake type
+          setFormData({ number: '', title: '', difficulty: 'Medium', type: 'Solved', pattern: '', link: '', platform: 'LC', solveTime: '', hintsUsed: false, wrongAttempts: '' });
           if (autoRevision) {
+            setMistakeModal({ number: uniqueId, title: formData.title });
+          }
             setMistakeModal({ number: problemNumber, title: formData.title });
           }
           setTimeout(() => {
@@ -4263,12 +4264,23 @@ function App() {
                 <div className="modal-body">
                   <div className="form-row">
                     <div className="form-group">
-                      <label>Problem Number *</label>
+                      <label>Platform *</label>
+                      <select
+                        value={formData.platform}
+                        onChange={(e) => setFormData({ ...formData, platform: e.target.value })}
+                        className="form-input"
+                      >
+                        <option value="LC">LeetCode</option>
+                        <option value="CF">Codeforces</option>
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label>Problem ID *</label>
                       <input
-                        type="number"
+                        type="text"
                         value={formData.number}
                         onChange={(e) => setFormData({ ...formData, number: e.target.value })}
-                        placeholder="e.g., 1"
+                        placeholder={formData.platform === 'CF' ? 'e.g., 150A' : 'e.g., 1'}
                         className="form-input"
                         required
                       />
@@ -4297,12 +4309,14 @@ function App() {
                     />
                   </div>
                   <div className="form-group">
-                    <label>LeetCode Link *</label>
+                    <label>Problem Link *</label>
                     <input
                       type="url"
                       value={formData.link}
                       onChange={(e) => setFormData({ ...formData, link: e.target.value })}
-                      placeholder="https://leetcode.com/problems/two-sum/"
+                      placeholder={formData.platform === 'CF'
+                        ? 'https://codeforces.com/problemset/problem/1772/A'
+                        : 'https://leetcode.com/problems/two-sum/'}
                       className="form-input"
                       required
                     />
