@@ -364,11 +364,16 @@ mongoose
       console.warn('[BACKFILL] CF contestId/index backfill failed:', e.message);
     }
 
-    // Backfill: compute and store isTLE on all CF problems
+    // Backfill: compute and store isTLE ONLY on CF problems that don't have it set yet
+    // Never overwrite user-toggled values
     try {
       const Problem = require('./models/Problem');
       const TLE_TOPICS = ['dp', 'graphs', 'greedy', 'binary search'];
-      const cfProblems = await Problem.find({ platform: 'CF' }, { _id: 1, rating: 1, rawDifficulty: 1, topics: 1 }).lean();
+      // Only fetch docs where isTLE is null/undefined (never been set)
+      const cfProblems = await Problem.find(
+        { platform: 'CF', $or: [{ isTLE: null }, { isTLE: { $exists: false } }] },
+        { _id: 1, rating: 1, rawDifficulty: 1, topics: 1 }
+      ).lean();
       if (cfProblems.length > 0) {
         const ops = cfProblems.map(doc => {
           const r = Number(doc.rawDifficulty || doc.rating || 0);
@@ -384,7 +389,7 @@ mongoose
           };
         });
         const res = await Problem.bulkWrite(ops);
-        console.log(`[BACKFILL] isTLE set on ${res.modifiedCount}/${cfProblems.length} CF problems`);
+        console.log(`[BACKFILL] isTLE initialised on ${res.modifiedCount} new CF problems`);
       }
     } catch (e) {
       console.warn('[BACKFILL] isTLE backfill failed:', e.message);
