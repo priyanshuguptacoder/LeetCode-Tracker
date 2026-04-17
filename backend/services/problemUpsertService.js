@@ -57,10 +57,12 @@ async function upsertSolvedProblem(incoming) {
 
   const TLE_TOPICS = ['dp', 'graphs', 'greedy', 'binary search'];
   const cfRating = Number(rating || 0);
-  const isTLE = platform === 'CF' && (
+  const autoIsTLE = platform === 'CF' && (
     (cfRating >= 1200 && cfRating <= 1800) ||
     (Array.isArray(topics) && topics.some(t => TLE_TOPICS.includes((t || '').toLowerCase())))
   );
+  // Preserve user-toggled isTLE for existing docs — only auto-classify new ones
+  const isTLE = existing != null ? (existing.isTLE ?? autoIsTLE) : autoIsTLE;
 
   // Always derive problemIdNum from uniqueId for LC — never trust the caller
   const resolvedProblemIdNum = platform === 'LC'
