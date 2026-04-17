@@ -2039,6 +2039,9 @@ function App() {
   // ── Click suggestion / targeted card → scroll + highlight table row ─────
   const handleClickSuggestion = (problemId) => {
     const safeId = String(problemId);
+    // Detect platform from problemId and switch to correct tab
+    const isCF = safeId.startsWith('CF-') || /^\d+[A-Z]/.test(safeId);
+    setPlatformFilter(isCF ? 'CF' : 'LC');
     setSelectedFilter(null);
     setDifficultyFilter('All');
     setStatusFilter('All');
