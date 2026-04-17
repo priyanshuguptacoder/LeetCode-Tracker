@@ -3454,30 +3454,35 @@ function App() {
             const enrichProblem = (p) => {
               const source = p || {};
               const probId = String(source.uniqueId || source.number || '');
-              const isCF =
-                source.platform === 'CF' ||
-                probId.startsWith('CF-') ||
-                /^[0-9]+[A-Za-z]+$/.test(probId);
-              // Match by uniqueId first, then by numeric problemIdNum for LC
+              // Reliable platform resolution — backend source is authoritative
+              const platform = source.platform
+                ? source.platform
+                : (source.platformLink || source.link || '').includes('codeforces') ? 'CF' : 'LC';
+              const isCF = platform === 'CF';
+              // Match local allProblems for live toggle state
               const full = allProblems.find(ap =>
-                ap.uniqueId === probId ||
-                ap.uniqueId === source.uniqueId ||
+                ap.uniqueId === (source.uniqueId || probId) ||
                 (ap.problemIdNum && source.problemIdNum && ap.problemIdNum === source.problemIdNum)
               ) || {};
-              const defaultLink = isCF
-                ? `https://codeforces.com/problemset/problem/${source.contestId || full.contestId}/${source.index || full.index}`
-                : `https://leetcode.com/problems/${source.problemIdNum || probId}/`;
+              const link = source.platformLink || source.leetcodeLink || full.link ||
+                (isCF
+                  ? `https://codeforces.com/problemset/problem/${source.contestId || full.contestId}/${source.index || full.index}`
+                  : `https://leetcode.com/problems/${source.problemIdNum || probId}/`);
+              if (!link) console.error('[enrichProblem] Missing link for', probId);
               return {
+                ...full,
                 ...source,
-                uniqueId: full.uniqueId || source.uniqueId || probId,
-                number: full.number || source.problemIdNum || probId,
-                platform: source.platform || full.platform || (isCF ? 'CF' : 'LC'),
-                isStriver: full.isStriver ?? source.isStriver ?? false,
-                targeted: full.targeted ?? source.targeted ?? false,
-                revisionCount: full.revisionCount ?? source.revisionCount ?? 0,
-                lastRevisedAt: full.lastRevisedAt ?? source.lastRevisedAt ?? null,
-                link: source.platformLink || source.leetcodeLink || full.link || defaultLink,
-                providerTitle: source?.providerTitle || full?.providerTitle || (isCF ? 'Codeforces' : 'LeetCode'),
+                uniqueId: source.uniqueId || full.uniqueId || probId,
+                number:   source.problemIdNum || full.number || probId,
+                platform,
+                // Backend is source of truth for toggle state
+                isStriver: source.isStriver ?? full.isStriver ?? false,
+                isTLE:     source.isTLE     ?? full.isTLE     ?? false,
+                targeted:  source.targeted  ?? full.targeted  ?? false,
+                revisionCount: source.revisionCount ?? full.revisionCount ?? 0,
+                lastRevisedAt: source.lastRevisedAt ?? full.lastRevisedAt ?? null,
+                link,
+                providerTitle: source.providerTitle || full.providerTitle || (isCF ? 'Codeforces' : 'LeetCode'),
               };
             };
 
@@ -3505,6 +3510,8 @@ function App() {
                 handleRevise(problemNumber);
               } else if (action === 'striver') {
                 handleToggleStriver(problemNumber);
+              } else if (action === 'tle') {
+                handleToggleTLE(problemNumber);
               } else if (action === 'target') {
                 handleToggleTarget(problemNumber);
               }
@@ -3621,21 +3628,33 @@ function App() {
                             <div className="pc-actions">
                               <a
                                 className="pc-btn pc-btn-open"
-                                href={p.link || p.leetcodeLink || `https://leetcode.com/problems/${p.number}/`}
+                                href={p.link}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 Open ↗
                               </a>
-                              <button
-                                className={`pc-btn-toggle ${p.isStriver ? 'active' : ''}`}
-                                onClick={(e) => handleButtonClick(e, 'striver', p.number)}
-                                disabled={striverId === p.uniqueId}
-                                title={p.isStriver ? 'Striver Active' : 'Add to Striver'}
-                              >
-                                <span className="toggle-icon">📘</span>
-                              </button>
+                              {p.platform === 'LC' && (
+                                <button
+                                  className={`pc-btn-toggle ${p.isStriver ? 'active' : ''}`}
+                                  onClick={(e) => handleButtonClick(e, 'striver', p.number)}
+                                  disabled={striverId === p.uniqueId}
+                                  title={p.isStriver ? 'Striver Active' : 'Add to Striver'}
+                                >
+                                  <span className="toggle-icon">📘</span>
+                                </button>
+                              )}
+                              {p.platform === 'CF' && (
+                                <button
+                                  className={`pc-btn-toggle ${p.isTLE ? 'active' : ''}`}
+                                  onClick={(e) => handleButtonClick(e, 'tle', p.number)}
+                                  disabled={tleId === p.uniqueId}
+                                  title={p.isTLE ? 'TLE Active' : 'Add to TLE'}
+                                >
+                                  <span className="toggle-icon">🏆</span>
+                                </button>
+                              )}
                               <button
                                 className={`pc-btn-toggle ${p.targeted ? 'active' : ''}`}
                                 onClick={(e) => handleButtonClick(e, 'target', p.number)}
