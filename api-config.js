@@ -16,7 +16,7 @@ const API_BASE_URL = isLocalhost ? LOCAL_API_URL : PRODUCTION_API_URL;
 const api = {
   getAllProblems: async (opts = {}) => {
     // Accept either a plain string (legacy) or an options object { platform }
-    const platform = (typeof opts === 'string' ? opts : opts.platform) || 'ALL';
+    const platform = (typeof opts === 'string' ? opts : opts?.platform) || 'ALL';
     const params   = `?platform=${platform}`;
     console.log('[API] getAllProblems', `${API_BASE_URL}/problems${params}`);
     const r = await fetch(`${API_BASE_URL}/problems${params}`);

@@ -45,6 +45,8 @@ async function rebuildStreak(calendarDates = null) {
 
   if (!stats.isValid) {
     console.error('[STREAK REBUILD] Invariant violations:', stats.errors);
+    // Do not persist corrupted stats — return what we have without writing
+    return stats;
   }
 
   const lastSolvedDate = (stats?.days?.length || 0) > 0
@@ -842,10 +844,8 @@ exports.alignProblems = async (req, res) => {
 
     await Problem.bulkWrite(ops);
 
-    let s = await Settings.findOne({ key: 'global' });
-    if (!s) s = await Settings.create({ key: 'global' });
-
-    res.json({ success: true, count: (ops || []).length, streak: streakPayload(s) });
+    const rebuilt = await rebuildStreak();
+    res.json({ success: true, count: (ops || []).length, streak: streakPayload(rebuilt) });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Align failed', message: err.message });
   }

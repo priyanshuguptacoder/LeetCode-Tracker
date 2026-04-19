@@ -65,6 +65,7 @@ async function fetchFromLeetCode(slug) {
 async function upsertProblem(slug, extraData = {}) {
   if (!slug || typeof slug !== 'string') throw new Error('slug is required');
   slug = slug.toLowerCase().trim();
+  if (!/^[a-z0-9-]+$/.test(slug)) throw new Error(`Invalid slug format: "${slug}"`);
 
   // 1. Cache hit
   const cached = getCached(slug);
@@ -561,6 +562,10 @@ async function syncRecentSubmissions() {
 
   // Step 3: Process each slug — strict intent-lock check
   for (const sub of submissions) {
+    if (!sub?.titleSlug) {
+      console.warn('[SYNC] Skipping submission with missing titleSlug:', sub);
+      continue;
+    }
     const slug = sub.titleSlug.toLowerCase().trim();
     try {
       const existingProblem = await Problem.findOne({

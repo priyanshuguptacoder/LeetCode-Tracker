@@ -2059,6 +2059,12 @@ function App() {
     const problem = revisionModal;
     setRevisionModal(null);
     if (!problem) return;
+    // Guard: problem may have been deleted while revision modal was open
+    const stillExists = problemsRef.current.find(p => String(p.number) === String(problem.number));
+    if (!stillExists) {
+      showNotification('Problem was deleted — revision not saved.', 'warning');
+      return;
+    }
     if (revisingIdRef.current === String(problem.number)) return;
     try {
       revisingIdRef.current = String(problem.number);
@@ -2205,7 +2211,7 @@ function App() {
       setPendingScrollId(null);
     });
     return () => cancelAnimationFrame(raf);
-  }, [pendingScrollId]);
+  }, [pendingScrollId, platformFilter]);
 
   // ── Table header scroll-elevation effect ─────────────────────────────────
   const tableHeaderRef = React.useRef(null);
