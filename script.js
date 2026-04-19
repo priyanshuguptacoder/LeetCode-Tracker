@@ -1125,7 +1125,7 @@ function App() {
   const [platformFilter, setPlatformFilter] = useState('LC'); // 'LC' | 'CF'
   const [viewMode, setViewMode] = useState('ALL'); // 'ALL' | 'STRIVER' | 'TLE' (kept for future use)
   const [showModal, setShowModal] = useState(false);
-  const [notification, setNotification] = useState(null);
+  const [notifications, setNotifications] = useState([]);
   const [syncing, setSyncing] = useState(false);
 
   // ── Password-confirm modal state (used for delete confirmation) ───────────
@@ -1625,30 +1625,82 @@ function App() {
   // verifyPassword removed — replaced by requireAdmin() session-based system
 
   // ============================================
-  // NOTIFICATION SYSTEM
+  // ADVANCED NOTIFICATION SYSTEM (FINAL)
   // ============================================
 
-  const showNotification = (message, type = 'success') => {
-    setNotification({ message, type });
-    setTimeout(() => setNotification(null), 3000);
+  const showNotification = (input, fallbackType = 'success') => {
+    let notificationData = {
+      id: Date.now() + Math.random(), // Unique ID prevents React mapping bugs
+      title: '',
+      message: '',
+      type: fallbackType,
+      duration: 3000,
+    };
+
+    // Backward compatibility for old string-based calls
+    if (typeof input === 'string') {
+      notificationData.message = input;
+    } else {
+      notificationData = { ...notificationData, ...input };
+    }
+
+    setNotifications(prev => [...prev, notificationData]);
+
+    // Auto-remove toast safely
+    setTimeout(() => {
+      setNotifications(prev =>
+        prev.filter(n => n.id !== notificationData.id)
+      );
+    }, notificationData.duration);
   };
 
   const handleSyncLeetCode = async () => {
     setSyncing(true);
+
+    // 1. Show loading state
+    showNotification({
+      title: '🔄 Syncing...',
+      message: 'Fetching latest data from LeetCode & Codeforces',
+      type: 'info',
+      duration: 2000,
+    });
+
     try {
       const result = await window.API.syncAll();
 
-      // If LC auth is expired we still want CF to succeed; just warn.
       const lcErr = result?.data?.lc?.problems?.error || result?.data?.lc?.contest?.error;
-      if (lcErr && String(lcErr).includes('LEETCODE_SESSION_EXPIRED')) {
-        setSyncStatus('expired');
-        showNotification('⚠️ LeetCode session expired — update cookies on Render (CF may still sync)', 'error');
+      const lcAdded = result?.data?.lc?.problems?.inserted || 0;
+      const cfAdded = result?.data?.cf?.problems?.upsert?.inserted || 0;
+      const totalAdded = lcAdded + cfAdded;
+
+      // 2. Handle Authentication Errors
+      if (lcErr) {
+        if (
+          String(lcErr).includes('LEETCODE_SESSION_EXPIRED') ||
+          String(lcErr).includes('LEETCODE_AUTH_FAILED')
+        ) {
+          setSyncStatus('expired');
+          showNotification({
+            title: '⚠️ Session Expired',
+            message: 'LeetCode session expired. Update cookies.\n(CF sync may still work)',
+            type: 'error',
+            duration: 5000,
+          });
+        } else {
+          showNotification({
+            title: '⚠️ Partial Sync Issue',
+            message: `LeetCode Error: ${lcErr}`,
+            type: 'warning',
+          });
+        }
       } else {
         setSyncStatus('ok');
       }
 
-      // Refetch after sync — do NOT clear state first (prevents flicker)
-      const [probRes, recentTodayRes, streakRes, contestRes, striverRes, tleRes, revisionRes] = await Promise.allSettled([
+      // 3. Refetch Data
+      const [
+        probRes, recentTodayRes, streakRes, contestRes, striverRes, tleRes, revisionRes
+      ] = await Promise.allSettled([
         window.API.getAllProblems(),
         window.API.getRecentAndToday(),
         window.API.getStreak(),
@@ -1657,6 +1709,7 @@ function App() {
         window.API.getTLEStats(),
         window.API.getRevisionList(),
       ]);
+
       if (probRes.status === 'fulfilled' && probRes.value.success)
         setProblems(transformProblems(probRes.value.data));
       if (recentTodayRes.status === 'fulfilled' && recentTodayRes.value.success) {
@@ -1674,9 +1727,30 @@ function App() {
       if (revisionRes.status === 'fulfilled' && revisionRes.value.success)
         setRevisionList(revisionRes.value.data || []);
 
-      showNotification('✅ Sync All complete', 'success');
+      // 4. Final Success UI
+      if (!lcErr || !String(lcErr).includes('EXPIRED')) {
+        if (totalAdded > 0) {
+          showNotification({
+            title: '✅ Sync Successful',
+            message: `+${totalAdded} new problems added\nLC: +${lcAdded} | CF: +${cfAdded}`,
+            type: 'success',
+            duration: 5000,
+          });
+        } else {
+          showNotification({
+            title: '✅ Up to Date',
+            message: 'No new problems found. Everything is synced.',
+            type: 'success',
+          });
+        }
+      }
+
     } catch (err) {
-      showNotification(`❌ Network error: ${err.message}`, 'error');
+      showNotification({
+        title: '❌ Sync Failed',
+        message: err.message,
+        type: 'error',
+      });
     } finally {
       setSyncing(false);
     }
@@ -2886,12 +2960,25 @@ function App() {
 
     return (
       <div className="app app-ready">
-        {/* Notification */}
-        {notification && (
-          <div className={`notification notification-${notification.type}`}>
-            {notification.message}
-          </div>
-        )}
+        {/* Notifications */}
+        <div className="notification-container" style={{ position: 'fixed', top: '20px', right: '20px', zIndex: 9999, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {notifications.map((n) => (
+            <div key={n.id} className={`notification notification-${n.type}`} style={{ position: 'relative', top: 0, right: 0, transform: 'none' }}>
+              {n.title && (
+                <div style={{
+                  fontWeight: 'bold',
+                  marginBottom: '4px',
+                  fontSize: '1.05em'
+                }}>
+                  {n.title}
+                </div>
+              )}
+              <div style={{ whiteSpace: 'pre-line' }}>
+                {n.message}
+              </div>
+            </div>
+          ))}
+        </div>
 
         {/* Header — Mobile-First */}
         <header className="header">
