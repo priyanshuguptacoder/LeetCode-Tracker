@@ -368,7 +368,7 @@ async function fetchRecentAcceptedSubmissions() {
 
   const { data } = await axios.post(
     LC_GRAPHQL,
-    { query: RECENT_AC_QUERY, variables: { username, limit: 20 } },
+    { query: RECENT_AC_QUERY, variables: { username, limit: 100 } },
     {
       headers: {
         'Content-Type': 'application/json',
@@ -533,16 +533,13 @@ async function syncRecentSubmissions() {
           skipped++;
           continue;
         }
-        // Repair: if existing solved problem is missing solvedDate, backfill it now
-        if (existingProblem.solved && !existingProblem.solvedDate) {
-          const fallbackDate = existingProblem.lastSubmittedAt || sub.timestamp || new Date();
-          await Problem.updateOne(
-            { _id: existingProblem._id },
-            { $set: { solvedDate: fallbackDate } }
-          );
+        // Update lastSubmittedAt and backfill solvedDate if missing
+        const updates = { lastSubmittedAt: sub.timestamp };
+        if (!existingProblem.solvedDate) {
+          updates.solvedDate = sub.timestamp || new Date();
           console.log(`[SYNC REPAIR] solvedDate backfilled for ${slug}`);
         }
-        console.log(`[SYNC SKIPPED] ${slug} — already in DB`);
+        await Problem.updateOne({ _id: existingProblem._id }, { $set: updates });
         skipped++;
         continue;
       }
