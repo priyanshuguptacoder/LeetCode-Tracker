@@ -60,20 +60,20 @@ async function fetchFromLeetCode(slug) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // CORE: upsertProblem(slug, extraData?)
 // Flow: cache → DB → LeetCode API → save → cache
-// SKIP if already in Submission collection (no duplicate inserts).
+// Falls back to contest-type insert if API fails (never ignores a submission).
 // ═══════════════════════════════════════════════════════════════════════════════
 async function upsertProblem(slug, extraData = {}) {
   if (!slug || typeof slug !== 'string') throw new Error('slug is required');
   slug = slug.toLowerCase().trim();
 
-  // 1. Cache hit — fastest path, no DB or API call
+  // 1. Cache hit
   const cached = getCached(slug);
   if (cached) {
     console.log(`[CACHE HIT] ${slug}`);
     return cached;
   }
 
-  // 2. DB hit — already tracked, return without touching anything
+  // 2. DB hit — already in Submission collection
   const existing = await Submission.findOne({ slug });
   if (existing) {
     console.log(`[DB HIT] ${slug}`);
@@ -82,47 +82,75 @@ async function upsertProblem(slug, extraData = {}) {
     return shaped;
   }
 
-  // 3. Fetch metadata from LeetCode API (only reached for new problems)
-  let apiData;
-  try {
-    apiData = await fetchFromLeetCode(slug);
-  } catch (err) {
-    throw new Error(`LeetCode API error for "${slug}": ${err.message}`);
-  }
-
-  // 4. Build document and insert
   const now    = new Date();
   const solved = extraData.dateSolved ? new Date(extraData.dateSolved) : now;
   const source = extraData._source || 'api';
 
-  const sr  = sm2Update();
-  const doc = {
-    problemId:       apiData.id,
-    slug:            apiData.slug,
-    title:           apiData.title,
-    difficulty:      apiData.difficulty,
-    tags:            apiData.tags,
-    link:            apiData.link,
-    dateSolved:      solved,
-    first_solved_at: solved,
-    last_updated_at: now,
-    time_taken:      extraData.time_taken != null ? Number(extraData.time_taken) : null,
-    attempts:        extraData.attempts   != null ? Number(extraData.attempts)   : null,
-    notes:           extraData.notes      || '',
-    sources:         [source],
-    easeFactor:      sr.easeFactor,
-    interval:        sr.interval,
-    reviewCount:     sr.reviewCount,
-    nextReviewAt:    sr.nextReviewAt,
-  };
+  // 3. Try to fetch from LeetCode API
+  let apiData = null;
+  try {
+    apiData = await fetchFromLeetCode(slug);
+  } catch (err) {
+    console.warn(`[SYNC] LeetCode API failed for "${slug}" — inserting as contest type: ${err.message}`);
+  }
+
+  const sr = sm2Update();
+
+  let doc;
+  if (apiData) {
+    // Standard problem — full metadata from API
+    doc = {
+      problemId:       apiData.id,
+      slug:            apiData.slug,
+      title:           apiData.title,
+      difficulty:      apiData.difficulty,
+      tags:            apiData.tags,
+      link:            apiData.link,
+      type:            'standard',
+      dateSolved:      solved,
+      first_solved_at: solved,
+      last_updated_at: now,
+      time_taken:      extraData.time_taken != null ? Number(extraData.time_taken) : null,
+      attempts:        extraData.attempts   != null ? Number(extraData.attempts)   : null,
+      notes:           extraData.notes      || '',
+      sources:         [source],
+      easeFactor:      sr.easeFactor,
+      interval:        sr.interval,
+      reviewCount:     sr.reviewCount,
+      nextReviewAt:    sr.nextReviewAt,
+    };
+    console.log(`[DB] INSERT standard #${apiData.id} "${apiData.title}"`);
+  } else {
+    // Contest / unknown problem — insert with slug as fallback identity
+    const title = extraData.title || slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    doc = {
+      problemId:       null,
+      slug,
+      title,
+      difficulty:      extraData.difficulty || 'Medium',
+      tags:            [],
+      link:            `https://leetcode.com/problems/${slug}/`,
+      type:            'contest',
+      dateSolved:      solved,
+      first_solved_at: solved,
+      last_updated_at: now,
+      time_taken:      null,
+      attempts:        null,
+      notes:           '',
+      sources:         [source],
+      easeFactor:      sr.easeFactor,
+      interval:        sr.interval,
+      reviewCount:     sr.reviewCount,
+      nextReviewAt:    sr.nextReviewAt,
+    };
+    console.log(`[DB] INSERT contest "${slug}" (API unavailable)`);
+  }
 
   let submission;
   try {
     submission = await Submission.create(doc);
-    console.log(`[DB] INSERT #${apiData.id} "${apiData.title}" (${source})`);
   } catch (err) {
     if (err.code === 11000) {
-      // Race condition — another request inserted between our check and create
       console.warn(`[DB] Duplicate race for "${slug}" — fetching existing`);
       const race = await Submission.findOne({ slug });
       if (race) {
@@ -134,7 +162,6 @@ async function upsertProblem(slug, extraData = {}) {
     throw err;
   }
 
-  // Sync metadata to Problem collection (never overwrites solved status on existing docs)
   await syncToProblemCollection(submission);
 
   const shaped = shapeResponse(submission);
@@ -231,40 +258,53 @@ function calculateNextRevision(fromDate, revisionCount) {
 }
 
 async function syncToProblemCollection(sub) {
-  // Canonical unified identity
-  const problemIdNum = Number(sub.problemId);
-  const uniqueId = `LC-${problemIdNum}`;
-  const existing = await Problem.findOne({ uniqueId });
+  const now = new Date();
+  const problemIdNum = sub.problemId ? Number(sub.problemId) : null;
+  // For contest problems (no numeric ID), use slug as the uniqueId suffix
+  const uniqueId = (problemIdNum && !isNaN(problemIdNum))
+    ? `LC-${problemIdNum}`
+    : `LC-${sub.slug}`;
 
-  // Extract numeric ID for sorting - CRITICAL for numeric ordering
+  const isContest = !problemIdNum || isNaN(problemIdNum);
+  const existing = await Problem.findOne({ uniqueId });
 
   const update = {
     $set: {
       title:           sub.title,
       difficulty:      sub.difficulty,
-      topics:          sub.tags,
-      submittedAt:     sub.last_updated_at,
-      lastSubmittedAt: sub.dateSolved,   // always updated — tracks most recent sync timestamp
+      topics:          sub.tags || [],
+      submittedAt:     sub.last_updated_at || now,
+      lastSubmittedAt: sub.dateSolved || now,
       leetcodeLink:    sub.link || `https://leetcode.com/problems/${sub.slug}/`,
+      platformLink:    sub.link || `https://leetcode.com/problems/${sub.slug}/`,
       providerTitle:   'LeetCode',
       platform:        'LC',
-      problemIdNum:    problemIdNum,     // ENSURE numeric field for sorting
       uniqueId,
-      id: uniqueId,
+      id:              uniqueId,
       ...(sub.notes && { notes: sub.notes }),
     },
   };
 
-  // Apply solved fields if new doc OR previously unsolved (e.g. Targeted problems)
+  // Only set problemIdNum for standard problems
+  if (!isContest) {
+    update.$set.problemIdNum = problemIdNum;
+  }
+
+  // Apply solved fields for new or previously-unsolved docs
   if (!existing || !existing.solved) {
     update.$set.solved         = true;
-    update.$set.solvedDate     = sub.dateSolved;
-    update.$set.nextRevisionAt = calculateNextRevision(sub.dateSolved, 0);
+    update.$set.solvedDate     = sub.dateSolved || now;
+    update.$set.nextRevisionAt = calculateNextRevision(sub.dateSolved || now, 0);
     update.$set.revisionCount  = 0;
     update.$set.confidence     = 3;
   } else if (existing.solved && !existing.solvedDate) {
-    // Existing doc is solved but solvedDate is null — backfill it (NEVER overwrite if already set)
-    update.$set.solvedDate = sub.dateSolved || existing.lastSubmittedAt || new Date();
+    update.$set.solvedDate = sub.dateSolved || existing.lastSubmittedAt || now;
+  }
+
+  // Auto-fix: overwrite wrong problemIdNum if API gave us the correct one
+  if (!isContest && existing && existing.problemIdNum !== problemIdNum) {
+    update.$set.problemIdNum = problemIdNum;
+    console.log(`[SYNC FIX] Updated problemIdNum for ${uniqueId}: ${existing.problemIdNum} → ${problemIdNum}`);
   }
 
   await Problem.findOneAndUpdate(
