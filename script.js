@@ -1128,11 +1128,193 @@ function App() {
   const [notifications, setNotifications] = useState([]);
   // Ref to track all active notification timers — cleared on unmount to prevent memory leaks
   const notifTimersRef = useRef({});
+  // Ref to implement "latest sync wins" — stale responses are ignored
+  const syncRequestRef = useRef(0);
+
   useEffect(() => {
     const timers = notifTimersRef.current;
     return () => { Object.values(timers).forEach(clearTimeout); };
   }, []);
-  const [syncing, setSyncing] = useState(false);
+
+  // ── Safe UUID — crypto.randomUUID() where available, deterministic fallback ──
+  const safeUUID = () => {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    // Fallback: timestamp + counter + random — not cryptographic but collision-safe for UI
+    return `${Date.now().toString(36)}-${(++safeUUID._counter).toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  };
+  safeUUID._counter = 0;
+
+  // ── Notification constants ────────────────────────────────────────────────
+  const NOTIF_PRIORITY  = { error: 4, warning: 3, success: 2, info: 1 };
+  // Removal order when over limit: remove lowest priority first (never remove error early)
+  const REMOVAL_ORDER   = ['info', 'success', 'warning']; // error is never auto-removed early
+  const MAX_NOTIFICATIONS = 4;
+
+  // ── upsertNotification — core primitive ──────────────────────────────────
+  // If a notification with the same dedupKey exists, UPDATE it in place.
+  // Otherwise INSERT. This prevents duplicate toasts and enables loading→result replacement.
+  const upsertNotification = (notif) => {
+    const id       = notif.id       || safeUUID();
+    const priority = NOTIF_PRIORITY[notif.type] || 1;
+    const entry    = { id, priority, title: '', message: '', duration: 3000, ...notif };
+
+    // Clear any existing timer for this dedupKey
+    setNotifications(prev => {
+      const existingIdx = notif.dedupKey
+        ? prev.findIndex(n => n.dedupKey === notif.dedupKey)
+        : -1;
+
+      if (existingIdx !== -1) {
+        // UPDATE existing — clear its old timer, replace in-place
+        const old = prev[existingIdx];
+        clearTimeout(notifTimersRef.current[old.id]);
+        delete notifTimersRef.current[old.id];
+        const updated = [...prev];
+        updated[existingIdx] = { ...entry, id: old.id }; // keep same id for stable key
+        scheduleRemoval(old.id, entry.duration);
+        return updated;
+      }
+
+      // INSERT — enforce max limit by removing lowest-priority first
+      let next = [...prev];
+      if (next.length >= MAX_NOTIFICATIONS) {
+        // Find the lowest-priority removable notification
+        let removed = false;
+        for (const type of REMOVAL_ORDER) {
+          const idx = next.findIndex(n => n.type === type);
+          if (idx !== -1) {
+            const victim = next[idx];
+            clearTimeout(notifTimersRef.current[victim.id]);
+            delete notifTimersRef.current[victim.id];
+            next.splice(idx, 1);
+            removed = true;
+            break;
+          }
+        }
+        // If all remaining are errors (shouldn't happen), drop oldest non-error
+        if (!removed) next = next.slice(1);
+      }
+
+      scheduleRemoval(id, entry.duration);
+      return [...next, entry];
+    });
+  };
+
+  const scheduleRemoval = (id, duration) => {
+    clearTimeout(notifTimersRef.current[id]); // idempotent
+    const timer = setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+      delete notifTimersRef.current[id];
+    }, duration);
+    notifTimersRef.current[id] = timer;
+  };
+
+  // ── showNotification — backward-compatible public API ────────────────────
+  const showNotification = (input, fallbackType = 'success') => {
+    const raw = typeof input === 'string'
+      ? { message: input, type: fallbackType }
+      : { ...input };
+    upsertNotification({ ...raw, type: raw.type || fallbackType });
+  };
+
+  // ── dismissNotification — idempotent ─────────────────────────────────────
+  const dismissNotification = (id) => {
+    if (!id) return;
+    clearTimeout(notifTimersRef.current[id]);
+    delete notifTimersRef.current[id];
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
+
+  // ── handleSyncLeetCode — race-safe, deterministic states ─────────────────
+  const handleSyncLeetCode = async () => {
+    // "Latest request wins" — increment counter, capture this call's ID
+    const requestId = ++syncRequestRef.current;
+    const isStale   = () => syncRequestRef.current !== requestId;
+
+    setSyncing(true);
+
+    // Show loading — uses dedupKey so it can be replaced atomically by the result
+    upsertNotification({
+      dedupKey: 'sync-result',
+      title:    '🔄 Syncing',
+      message:  'Updating LC & CF...',
+      type:     'info',
+      duration: 60000, // dismissed by result, not by timer
+    });
+
+    try {
+      const result = await window.API.syncAll();
+
+      // Stale check — a newer sync already started, discard this response
+      if (isStale()) return;
+
+      const lcErr      = result?.data?.lc?.problems?.error || result?.data?.lc?.contest?.error;
+      const lcAdded    = result?.data?.lc?.problems?.inserted || 0;
+      const cfAdded    = result?.data?.cf?.problems?.upsert?.inserted || 0;
+      const totalAdded = lcAdded + cfAdded;
+
+      // Mutually exclusive sync states
+      const isAuthExpired  = lcErr && /SESSION_EXPIRED|AUTH_FAILED/i.test(String(lcErr));
+      const isPartialError = lcErr && !isAuthExpired;
+      const isFullSuccess  = !lcErr;
+
+      if (isAuthExpired) {
+        setSyncStatus('expired');
+        upsertNotification({ dedupKey: 'sync-result', title: '⚠️ Session Expired', message: 'Update LC cookies on Render.', type: 'error', duration: 6000 });
+      } else if (isPartialError) {
+        setSyncStatus('ok');
+        upsertNotification({ dedupKey: 'sync-result', title: '⚠️ Partial Sync', message: 'LC error. CF done.', type: 'warning', duration: 4000 });
+      } else if (isFullSuccess) {
+        setSyncStatus('ok');
+        upsertNotification({
+          dedupKey: 'sync-result',
+          title:    totalAdded > 0 ? '✅ Synced' : '✅ Up to Date',
+          message:  totalAdded > 0 ? `+${totalAdded} added (LC:${lcAdded} CF:${cfAdded})` : 'Nothing new.',
+          type:     'success',
+          duration: totalAdded > 0 ? 4000 : 2500,
+        });
+      }
+
+      // Refetch all data — only apply if still the latest request
+      const [probRes, recentTodayRes, streakRes, contestRes, striverRes, tleRes, revisionRes] =
+        await Promise.allSettled([
+          window.API.getAllProblems(),
+          window.API.getRecentAndToday(),
+          window.API.getStreak(),
+          window.API.getContestStats(),
+          window.API.getStriverStats(),
+          window.API.getTLEStats(),
+          window.API.getRevisionList(),
+        ]);
+
+      if (isStale()) return; // another sync fired while we were refetching
+
+      if (probRes.status === 'fulfilled' && probRes.value.success)
+        setProblems(transformProblems(probRes.value.data));
+      if (recentTodayRes.status === 'fulfilled' && recentTodayRes.value.success) {
+        setRecentProblems(recentTodayRes.value.recentSolved || []);
+        setTodayProblems(recentTodayRes.value.todaySolved || []);
+      }
+      if (streakRes.status === 'fulfilled' && streakRes.value.success)
+        setDbStreak(streakRes.value.data);
+      if (contestRes.status === 'fulfilled' && contestRes.value.success)
+        setContestStats(contestRes.value.data);
+      if (striverRes.status === 'fulfilled' && striverRes.value.success)
+        setStriverStats(prev => ({ ...prev, ...striverRes.value.data }));
+      if (tleRes.status === 'fulfilled' && tleRes.value.success)
+        setTleStats(prev => ({ ...prev, ...tleRes.value.data }));
+      if (revisionRes.status === 'fulfilled' && revisionRes.value.success)
+        setRevisionList(revisionRes.value.data || []);
+
+    } catch (err) {
+      if (isStale()) return;
+      upsertNotification({ dedupKey: 'sync-result', title: '❌ Sync Failed', message: err.message || 'Network error.', type: 'error', duration: 4000 });
+    } finally {
+      if (!isStale()) setSyncing(false);
+    }
+  };
 
   // ── Password-confirm modal state (used for delete confirmation) ───────────
   const [pwModal, setPwModal] = useState(null);
@@ -1634,167 +1816,7 @@ function App() {
   // ADVANCED NOTIFICATION SYSTEM (FINAL)
   // ============================================
 
-  // ── Notification priority: error=4 > warning=3 > success=2 > info=1 ──────────
-  const NOTIF_PRIORITY = { error: 4, warning: 3, success: 2, info: 1 };
-  const MAX_NOTIFICATIONS = 4;
-
-  const showNotification = (input, fallbackType = 'success') => {
-    // Normalise input — backward compatible with showNotification(string, type)
-    const raw = typeof input === 'string'
-      ? { message: input, type: fallbackType }
-      : { ...input };
-
-    const notif = {
-      id:       (typeof crypto !== 'undefined' && crypto.randomUUID)
-                  ? crypto.randomUUID()
-                  : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      title:    raw.title    || '',
-      message:  raw.message  || '',
-      type:     raw.type     || fallbackType,
-      duration: raw.duration || 3000,
-      priority: NOTIF_PRIORITY[raw.type] || NOTIF_PRIORITY[fallbackType] || 1,
-    };
-
-    setNotifications(prev => {
-      // Deduplication — skip if identical title+message already visible
-      const isDuplicate = prev.some(n => n.title === notif.title && n.message === notif.message);
-      if (isDuplicate) return prev;
-
-      // Remove lower-priority notifications if a higher-priority one arrives
-      const filtered = prev.filter(n => n.priority >= notif.priority);
-
-      // Enforce max limit — drop oldest if over cap
-      const capped = filtered.length >= MAX_NOTIFICATIONS
-        ? filtered.slice(filtered.length - MAX_NOTIFICATIONS + 1)
-        : filtered;
-
-      return [...capped, notif];
-    });
-
-    // Auto-remove with cleanup ref
-    const timer = setTimeout(() => {
-      setNotifications(prev => prev.filter(n => n.id !== notif.id));
-      delete notifTimersRef.current[notif.id];
-    }, notif.duration);
-    notifTimersRef.current[notif.id] = timer;
-  };
-
-  // Dismiss a notification manually
-  const dismissNotification = (id) => {
-    clearTimeout(notifTimersRef.current[id]);
-    delete notifTimersRef.current[id];
-    setNotifications(prev => prev.filter(n => n.id !== id));
-  };
-
-  const handleSyncLeetCode = async () => {
-    setSyncing(true);
-
-    // Show loading toast and track its ID so we can dismiss it when done
-    const loadingId = (typeof crypto !== 'undefined' && crypto.randomUUID)
-      ? crypto.randomUUID()
-      : `loading-${Date.now()}`;
-
-    setNotifications(prev => [...prev, {
-      id: loadingId, title: '🔄 Syncing...', priority: 1,
-      message: 'Fetching latest data from LeetCode & Codeforces',
-      type: 'info', duration: 60000, // long duration — we dismiss it manually
-    }]);
-
-    try {
-      const result = await window.API.syncAll();
-
-      // Dismiss loading toast immediately
-      dismissNotification(loadingId);
-
-      const lcErr    = result?.data?.lc?.problems?.error || result?.data?.lc?.contest?.error;
-      const lcAdded  = result?.data?.lc?.problems?.inserted || 0;
-      const cfAdded  = result?.data?.cf?.problems?.upsert?.inserted || 0;
-      const totalAdded = lcAdded + cfAdded;
-
-      // Determine sync state — mutually exclusive
-      const isAuthExpired = lcErr && (
-        String(lcErr).includes('LEETCODE_SESSION_EXPIRED') ||
-        String(lcErr).includes('LEETCODE_AUTH_FAILED')
-      );
-      const isPartialError = lcErr && !isAuthExpired;
-      const isFullSuccess  = !lcErr;
-
-      if (isAuthExpired) {
-        setSyncStatus('expired');
-        showNotification({
-          title: '⚠️ Session Expired',
-          message: 'LeetCode session expired — update cookies on Render.\nCF sync may still have worked.',
-          type: 'error',
-          duration: 6000,
-        });
-      } else if (isPartialError) {
-        setSyncStatus('ok');
-        showNotification({
-          title: '⚠️ Partial Sync',
-          message: `LeetCode error: ${lcErr}\nCF sync completed.`,
-          type: 'warning',
-          duration: 5000,
-        });
-      } else if (isFullSuccess) {
-        setSyncStatus('ok');
-        if (totalAdded > 0) {
-          showNotification({
-            title: '✅ Sync Complete',
-            message: `+${totalAdded} new problem${totalAdded > 1 ? 's' : ''} added  (LC: +${lcAdded} · CF: +${cfAdded})`,
-            type: 'success',
-            duration: 5000,
-          });
-        } else {
-          showNotification({
-            title: '✅ Already Up to Date',
-            message: 'No new problems found.',
-            type: 'success',
-            duration: 3000,
-          });
-        }
-      }
-
-      // Refetch all data
-      const [probRes, recentTodayRes, streakRes, contestRes, striverRes, tleRes, revisionRes] =
-        await Promise.allSettled([
-          window.API.getAllProblems(),
-          window.API.getRecentAndToday(),
-          window.API.getStreak(),
-          window.API.getContestStats(),
-          window.API.getStriverStats(),
-          window.API.getTLEStats(),
-          window.API.getRevisionList(),
-        ]);
-
-      if (probRes.status === 'fulfilled' && probRes.value.success)
-        setProblems(transformProblems(probRes.value.data));
-      if (recentTodayRes.status === 'fulfilled' && recentTodayRes.value.success) {
-        setRecentProblems(recentTodayRes.value.recentSolved || []);
-        setTodayProblems(recentTodayRes.value.todaySolved || []);
-      }
-      if (streakRes.status === 'fulfilled' && streakRes.value.success)
-        setDbStreak(streakRes.value.data);
-      if (contestRes.status === 'fulfilled' && contestRes.value.success)
-        setContestStats(contestRes.value.data);
-      if (striverRes.status === 'fulfilled' && striverRes.value.success)
-        setStriverStats(prev => ({ ...prev, ...striverRes.value.data }));
-      if (tleRes.status === 'fulfilled' && tleRes.value.success)
-        setTleStats(prev => ({ ...prev, ...tleRes.value.data }));
-      if (revisionRes.status === 'fulfilled' && revisionRes.value.success)
-        setRevisionList(revisionRes.value.data || []);
-
-    } catch (err) {
-      dismissNotification(loadingId);
-      showNotification({
-        title: '❌ Sync Failed',
-        message: err.message || 'Network error — check your connection.',
-        type: 'error',
-        duration: 5000,
-      });
-    } finally {
-      setSyncing(false);
-    }
-  };
+  const [syncing, setSyncing] = useState(false);
 
   // ============================================
   // SMART ADD PROBLEM HANDLER
@@ -1804,7 +1826,7 @@ function App() {
     e.preventDefault();
 
     if (!formData.number || !formData.title || !formData.link) {
-      showNotification('Please fill in all required fields', 'error');
+      showNotification('Fill all required fields', 'error');
       return;
     }
 
@@ -1813,13 +1835,13 @@ function App() {
 
     // CF ID validation
     if (formData.platform === 'CF' && !/^\d+[A-Z]\d*$/.test(normalizedId)) {
-      showNotification('CF problem ID must be like 150A, 1790B', 'error');
+      showNotification('CF ID: e.g. 150A', 'error');
       return;
     }
 
     // Duplicate check by uniqueId
     if (allProblems.some(p => p.uniqueId === uniqueId)) {
-      showNotification(`⚠️ Problem ${uniqueId} already exists!`, 'error');
+      showNotification(`${uniqueId} exists`, 'error');
       return;
     }
 
@@ -1868,7 +1890,7 @@ function App() {
               }
             } catch (_) { }
           }
-          showNotification(`✅ Problem ${uniqueId} added!${formData.type === 'Solved' ? ' — Streak updated!' : ''}${autoRevision ? ' Added to Needs Revision.' : ''}`, 'success');
+          showNotification(`✅ ${uniqueId} added!${formData.type === 'Solved' ? ' Streak updated.' : ''}${autoRevision ? ' Added to revision.' : ''}`, 'success');
           setShowModal(false);
           setFormData({ number: '', title: '', difficulty: 'Medium', type: 'Solved', pattern: '', link: '', platform: 'LC', solveTime: '', hintsUsed: false, wrongAttempts: '' });
           if (autoRevision) {
@@ -1897,7 +1919,7 @@ function App() {
       setProblems(prev => prev.map(p =>
         p.number === mistakeModal.number ? { ...p, mistakeType } : p
       ));
-      showNotification(`Root cause saved: ${mistakeType.replace(/_/g, ' ')}`, 'success');
+          showNotification(`Root cause: ${mistakeType.replace(/_/g, ' ')}`, 'success');
     } catch (err) {
       showNotification(`❌ ${err.message}`, 'error');
     } finally {
@@ -1983,7 +2005,7 @@ function App() {
               if (streakRes.success) setDbStreak(streakRes.data);
             } catch (_) { }
           }
-          showNotification(`✅ Problem #${number} deleted`, 'success');
+          showNotification(`✅ #${number} deleted`, 'success');
         }
       } catch (error) {
         if (tableRow) { tableRow.style.opacity = '1'; tableRow.style.transform = 'none'; }
@@ -2059,11 +2081,11 @@ function App() {
         ));
         incrementDailyRevision();
         if (res.removed) {
-          showNotification(`🏆 #${problem.number} mastered — removed from revision!`, 'success');
+          showNotification(`🏆 #${problem.number} mastered!`, 'success');
         } else if (res.data.failureLoopFlagged) {
-          showNotification(`⚠️ Pattern not learned — study the approach again`, 'warning');
+          showNotification(`⚠️ Study the pattern again`, 'warning');
         } else {
-          showNotification(`Revision recorded ✅ (${success ? 'Success' : 'Failed'})`, success ? 'success' : 'error');
+          showNotification(`Revision ${success ? '✅' : '❌'}`, success ? 'success' : 'error');
         }
       }
     } catch (err) {
@@ -2320,7 +2342,7 @@ function App() {
     setPlatformFilter('LC');
     setViewMode('ALL');
 
-    showNotification('✨ All filters cleared', 'success');
+    showNotification('Filters cleared', 'success');
   };
 
   // ESC key to clear all filters (including DifficultyNavbar)
