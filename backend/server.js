@@ -124,6 +124,11 @@ app.get('/', (req, res) => {
   });
 });
 
+// ─── Health check — lightweight, no DB dependency ────────────────────────────
+app.get('/health', (req, res) => {
+  res.status(200).send('OK');
+});
+
 app.use((req, res) => {
   res.status(404).json({ success: false, error: 'Route not found' });
 });
