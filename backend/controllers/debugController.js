@@ -1272,3 +1272,166 @@ exports.backfillAll = async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 };
+
+// ─── POST /api/debug/fix-lc-consistency ──────────────────────────────────────
+// Full LC data consistency pass:
+// - Slug is the primary key
+// - Contest problems get LC-<slug> uniqueId (never LC-NaN)
+// - Standard problems get LC-<problemIdNum> uniqueId
+// - Duplicate problems (same slug) are merged (keep newest)
+// - Orphaned submissions get a fallback problem doc
+// - NaN problemIdNum is nulled out
+exports.fixLCConsistency = async (req, res) => {
+  const LC_GRAPHQL = 'https://leetcode.com/graphql';
+  const LC_QUERY = `
+    query getQuestionDetail($titleSlug: String!) {
+      question(titleSlug: $titleSlug) {
+        questionId title difficulty titleSlug
+      }
+    }
+  `;
+
+  const stats = {
+    inserted: 0, updated: 0, fixedIds: 0,
+    typeCorrected: 0, duplicatesRemoved: 0,
+    contestNormalized: 0, apiFailuresHandled: 0,
+  };
+
+  try {
+    const now = new Date();
+
+    // ── Helper: fetch from LC API ─────────────────────────────────────────────
+    async function fetchLC(slug) {
+      try {
+        const { data } = await axios.post(LC_GRAPHQL,
+          { query: LC_QUERY, variables: { titleSlug: slug } },
+          { headers: { 'Content-Type': 'application/json', Referer: 'https://leetcode.com' }, timeout: 6000 }
+        );
+        const q = data?.data?.question;
+        if (!q?.questionId) return null;
+        return { id: parseInt(q.questionId, 10), title: q.title, difficulty: q.difficulty, slug: q.titleSlug };
+      } catch { return null; }
+    }
+
+    // ── STEP 1: Fix all LC problems ───────────────────────────────────────────
+    const lcProblems = await Problem.find({ platform: 'LC' }).lean();
+
+    for (const p of lcProblems) {
+      const slug = p.slug || (p.leetcodeLink || '').match(/problems\/([^/]+)/)?.[1] || null;
+      if (!slug) continue;
+
+      // Fix NaN problemIdNum
+      if (p.problemIdNum != null && isNaN(Number(p.problemIdNum))) {
+        await Problem.updateOne({ _id: p._id }, { $set: { problemIdNum: null } });
+        stats.fixedIds++;
+      }
+
+      // Try API for standard classification
+      const api = await fetchLC(slug);
+      let type = 'contest';
+      let correctId = null;
+
+      if (api) {
+        type = 'standard';
+        correctId = api.id;
+      } else {
+        stats.apiFailuresHandled++;
+        // If existing doc already has a valid problemIdNum, treat as standard
+        if (p.problemIdNum && !isNaN(Number(p.problemIdNum))) {
+          type = 'standard';
+          correctId = Number(p.problemIdNum);
+        }
+      }
+
+      const expectedUniqueId = type === 'standard' ? `LC-${correctId}` : `LC-${slug}`;
+      const updates = {};
+
+      // Fix uniqueId mismatch
+      if (p.uniqueId !== expectedUniqueId) {
+        updates.uniqueId = expectedUniqueId;
+        updates.id = expectedUniqueId;
+        stats.fixedIds++;
+      }
+
+      // Fix problemIdNum
+      if (type === 'standard' && p.problemIdNum !== correctId) {
+        updates.problemIdNum = correctId;
+        stats.typeCorrected++;
+      }
+      if (type === 'contest' && p.problemIdNum != null) {
+        updates.problemIdNum = null;
+        stats.contestNormalized++;
+      }
+
+      // Fix link
+      const correctLink = `https://leetcode.com/problems/${slug}/`;
+      if (!p.leetcodeLink || !p.leetcodeLink.includes(slug)) {
+        updates.leetcodeLink = correctLink;
+        updates.platformLink = correctLink;
+      }
+
+      // Apply title from API if available
+      if (api && p.title !== api.title) {
+        updates.title = api.title;
+        updates.difficulty = api.difficulty;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        updates.updatedAt = now;
+        await Problem.updateOne({ _id: p._id }, { $set: updates });
+        stats.updated++;
+      }
+    }
+
+    // ── STEP 2: Duplicate cleanup — group by slug, keep newest ────────────────
+    const slugGroups = await Problem.aggregate([
+      { $match: { platform: 'LC' } },
+      { $group: { _id: '$slug', count: { $sum: 1 }, docs: { $push: { id: '$_id', updatedAt: '$updatedAt' } } } },
+      { $match: { count: { $gt: 1 } } },
+    ]);
+
+    for (const g of slugGroups) {
+      const sorted = g.docs.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+      const toDelete = sorted.slice(1).map(d => d.id);
+      await Problem.deleteMany({ _id: { $in: toDelete } });
+      stats.duplicatesRemoved += toDelete.length;
+    }
+
+    // ── STEP 3: Orphaned submissions → ensure problem exists ──────────────────
+    const submissions = await Submission.find({}).lean();
+    for (const sub of submissions) {
+      const slug = sub.slug;
+      if (!slug) continue;
+      const exists = await Problem.findOne({ $or: [{ slug }, { leetcodeLink: { $regex: slug } }] }).lean();
+      if (!exists) {
+        const api = await fetchLC(slug);
+        const problemIdNum = api ? api.id : null;
+        const uniqueId = problemIdNum ? `LC-${problemIdNum}` : `LC-${slug}`;
+        const link = `https://leetcode.com/problems/${slug}/`;
+        await Problem.findOneAndUpdate(
+          { uniqueId },
+          {
+            $setOnInsert: { createdAt: now, revisionCount: 0, confidence: 3, isDeleted: false },
+            $set: {
+              uniqueId, id: uniqueId, slug, platform: 'LC',
+              title: api?.title || sub.title || slug,
+              difficulty: api?.difficulty || sub.difficulty || 'Medium',
+              problemIdNum, leetcodeLink: link, platformLink: link,
+              solved: true, solvedDate: sub.dateSolved || now,
+              lastSubmittedAt: sub.dateSolved || now,
+              providerTitle: 'LeetCode', updatedAt: now,
+            },
+          },
+          { upsert: true }
+        );
+        stats.inserted++;
+        if (!api) stats.apiFailuresHandled++;
+      }
+    }
+
+    res.json({ success: true, stats });
+  } catch (err) {
+    console.error('[FIX-LC-CONSISTENCY]', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+};

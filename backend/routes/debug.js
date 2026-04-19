@@ -29,6 +29,7 @@ const {
   backfillDifficulty,
   backfillAll,
   syncAll,
+  fixLCConsistency,
 } = require('../controllers/debugController');
 
 // Helper to wrap routes with devOnly check
@@ -51,6 +52,7 @@ router.get('/debug/cleanup-cf-ids', protect(cleanupCFIds));
 router.get('/debug/backfill-ids',   protect(backfillProblemIdNums));
 router.get('/debug/backfill-difficulty', protect(backfillDifficulty));
 router.post('/debug/backfill-all', protect(backfillAll));
+router.post('/debug/fix-lc-consistency', protect(fixLCConsistency));
 router.post('/debug/manual-test',   protect(manualTest));
 router.post('/debug/run-all',       protect(runAll));
 router.post('/debug/validate',      protect(validate));
