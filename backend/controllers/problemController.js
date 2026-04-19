@@ -137,7 +137,7 @@ async function computeStreakForPlatform(platform = 'ALL', calendarDates = null) 
 
   // Only use calendar dates for global/LC (calendar is LC-specific, not CF)
   const effectiveCal = (platform === 'ALL' || platform === 'LC') ? calendarDates : null;
-  return computeStats(problems, effectiveCal);
+  return computeStats(problems, effectiveCal, platform);
 }
 
 // ─── GET /api/problems/streak ─────────────────────────────────────────────────
