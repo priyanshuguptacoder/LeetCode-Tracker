@@ -1126,6 +1126,12 @@ function App() {
   const [viewMode, setViewMode] = useState('ALL'); // 'ALL' | 'STRIVER' | 'TLE' (kept for future use)
   const [showModal, setShowModal] = useState(false);
   const [notifications, setNotifications] = useState([]);
+  // Ref to track all active notification timers — cleared on unmount to prevent memory leaks
+  const notifTimersRef = useRef({});
+  useEffect(() => {
+    const timers = notifTimersRef.current;
+    return () => { Object.values(timers).forEach(clearTimeout); };
+  }, []);
   const [syncing, setSyncing] = useState(false);
 
   // ── Password-confirm modal state (used for delete confirmation) ───────────
@@ -1628,87 +1634,137 @@ function App() {
   // ADVANCED NOTIFICATION SYSTEM (FINAL)
   // ============================================
 
+  // ── Notification priority: error=4 > warning=3 > success=2 > info=1 ──────────
+  const NOTIF_PRIORITY = { error: 4, warning: 3, success: 2, info: 1 };
+  const MAX_NOTIFICATIONS = 4;
+
   const showNotification = (input, fallbackType = 'success') => {
-    let notificationData = {
-      id: Date.now() + Math.random(), // Unique ID prevents React mapping bugs
-      title: '',
-      message: '',
-      type: fallbackType,
-      duration: 3000,
+    // Normalise input — backward compatible with showNotification(string, type)
+    const raw = typeof input === 'string'
+      ? { message: input, type: fallbackType }
+      : { ...input };
+
+    const notif = {
+      id:       (typeof crypto !== 'undefined' && crypto.randomUUID)
+                  ? crypto.randomUUID()
+                  : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      title:    raw.title    || '',
+      message:  raw.message  || '',
+      type:     raw.type     || fallbackType,
+      duration: raw.duration || 3000,
+      priority: NOTIF_PRIORITY[raw.type] || NOTIF_PRIORITY[fallbackType] || 1,
     };
 
-    // Backward compatibility for old string-based calls
-    if (typeof input === 'string') {
-      notificationData.message = input;
-    } else {
-      notificationData = { ...notificationData, ...input };
-    }
+    setNotifications(prev => {
+      // Deduplication — skip if identical title+message already visible
+      const isDuplicate = prev.some(n => n.title === notif.title && n.message === notif.message);
+      if (isDuplicate) return prev;
 
-    setNotifications(prev => [...prev, notificationData]);
+      // Remove lower-priority notifications if a higher-priority one arrives
+      const filtered = prev.filter(n => n.priority >= notif.priority);
 
-    // Auto-remove toast safely
-    setTimeout(() => {
-      setNotifications(prev =>
-        prev.filter(n => n.id !== notificationData.id)
-      );
-    }, notificationData.duration);
+      // Enforce max limit — drop oldest if over cap
+      const capped = filtered.length >= MAX_NOTIFICATIONS
+        ? filtered.slice(filtered.length - MAX_NOTIFICATIONS + 1)
+        : filtered;
+
+      return [...capped, notif];
+    });
+
+    // Auto-remove with cleanup ref
+    const timer = setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== notif.id));
+      delete notifTimersRef.current[notif.id];
+    }, notif.duration);
+    notifTimersRef.current[notif.id] = timer;
+  };
+
+  // Dismiss a notification manually
+  const dismissNotification = (id) => {
+    clearTimeout(notifTimersRef.current[id]);
+    delete notifTimersRef.current[id];
+    setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
   const handleSyncLeetCode = async () => {
     setSyncing(true);
 
-    // 1. Show loading state
-    showNotification({
-      title: '🔄 Syncing...',
+    // Show loading toast and track its ID so we can dismiss it when done
+    const loadingId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : `loading-${Date.now()}`;
+
+    setNotifications(prev => [...prev, {
+      id: loadingId, title: '🔄 Syncing...', priority: 1,
       message: 'Fetching latest data from LeetCode & Codeforces',
-      type: 'info',
-      duration: 2000,
-    });
+      type: 'info', duration: 60000, // long duration — we dismiss it manually
+    }]);
 
     try {
       const result = await window.API.syncAll();
 
-      const lcErr = result?.data?.lc?.problems?.error || result?.data?.lc?.contest?.error;
-      const lcAdded = result?.data?.lc?.problems?.inserted || 0;
-      const cfAdded = result?.data?.cf?.problems?.upsert?.inserted || 0;
+      // Dismiss loading toast immediately
+      dismissNotification(loadingId);
+
+      const lcErr    = result?.data?.lc?.problems?.error || result?.data?.lc?.contest?.error;
+      const lcAdded  = result?.data?.lc?.problems?.inserted || 0;
+      const cfAdded  = result?.data?.cf?.problems?.upsert?.inserted || 0;
       const totalAdded = lcAdded + cfAdded;
 
-      // 2. Handle Authentication Errors
-      if (lcErr) {
-        if (
-          String(lcErr).includes('LEETCODE_SESSION_EXPIRED') ||
-          String(lcErr).includes('LEETCODE_AUTH_FAILED')
-        ) {
-          setSyncStatus('expired');
+      // Determine sync state — mutually exclusive
+      const isAuthExpired = lcErr && (
+        String(lcErr).includes('LEETCODE_SESSION_EXPIRED') ||
+        String(lcErr).includes('LEETCODE_AUTH_FAILED')
+      );
+      const isPartialError = lcErr && !isAuthExpired;
+      const isFullSuccess  = !lcErr;
+
+      if (isAuthExpired) {
+        setSyncStatus('expired');
+        showNotification({
+          title: '⚠️ Session Expired',
+          message: 'LeetCode session expired — update cookies on Render.\nCF sync may still have worked.',
+          type: 'error',
+          duration: 6000,
+        });
+      } else if (isPartialError) {
+        setSyncStatus('ok');
+        showNotification({
+          title: '⚠️ Partial Sync',
+          message: `LeetCode error: ${lcErr}\nCF sync completed.`,
+          type: 'warning',
+          duration: 5000,
+        });
+      } else if (isFullSuccess) {
+        setSyncStatus('ok');
+        if (totalAdded > 0) {
           showNotification({
-            title: '⚠️ Session Expired',
-            message: 'LeetCode session expired. Update cookies.\n(CF sync may still work)',
-            type: 'error',
+            title: '✅ Sync Complete',
+            message: `+${totalAdded} new problem${totalAdded > 1 ? 's' : ''} added  (LC: +${lcAdded} · CF: +${cfAdded})`,
+            type: 'success',
             duration: 5000,
           });
         } else {
           showNotification({
-            title: '⚠️ Partial Sync Issue',
-            message: `LeetCode Error: ${lcErr}`,
-            type: 'warning',
+            title: '✅ Already Up to Date',
+            message: 'No new problems found.',
+            type: 'success',
+            duration: 3000,
           });
         }
-      } else {
-        setSyncStatus('ok');
       }
 
-      // 3. Refetch Data
-      const [
-        probRes, recentTodayRes, streakRes, contestRes, striverRes, tleRes, revisionRes
-      ] = await Promise.allSettled([
-        window.API.getAllProblems(),
-        window.API.getRecentAndToday(),
-        window.API.getStreak(),
-        window.API.getContestStats(),
-        window.API.getStriverStats(),
-        window.API.getTLEStats(),
-        window.API.getRevisionList(),
-      ]);
+      // Refetch all data
+      const [probRes, recentTodayRes, streakRes, contestRes, striverRes, tleRes, revisionRes] =
+        await Promise.allSettled([
+          window.API.getAllProblems(),
+          window.API.getRecentAndToday(),
+          window.API.getStreak(),
+          window.API.getContestStats(),
+          window.API.getStriverStats(),
+          window.API.getTLEStats(),
+          window.API.getRevisionList(),
+        ]);
 
       if (probRes.status === 'fulfilled' && probRes.value.success)
         setProblems(transformProblems(probRes.value.data));
@@ -1727,29 +1783,13 @@ function App() {
       if (revisionRes.status === 'fulfilled' && revisionRes.value.success)
         setRevisionList(revisionRes.value.data || []);
 
-      // 4. Final Success UI
-      if (!lcErr || !String(lcErr).includes('EXPIRED')) {
-        if (totalAdded > 0) {
-          showNotification({
-            title: '✅ Sync Successful',
-            message: `+${totalAdded} new problems added\nLC: +${lcAdded} | CF: +${cfAdded}`,
-            type: 'success',
-            duration: 5000,
-          });
-        } else {
-          showNotification({
-            title: '✅ Up to Date',
-            message: 'No new problems found. Everything is synced.',
-            type: 'success',
-          });
-        }
-      }
-
     } catch (err) {
+      dismissNotification(loadingId);
       showNotification({
         title: '❌ Sync Failed',
-        message: err.message,
+        message: err.message || 'Network error — check your connection.',
         type: 'error',
+        duration: 5000,
       });
     } finally {
       setSyncing(false);
@@ -2961,21 +3001,18 @@ function App() {
     return (
       <div className="app app-ready">
         {/* Notifications */}
-        <div className="notification-container" style={{ position: 'fixed', top: '20px', right: '20px', zIndex: 9999, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <div className="notification-container">
           {notifications.map((n) => (
-            <div key={n.id} className={`notification notification-${n.type}`} style={{ position: 'relative', top: 0, right: 0, transform: 'none' }}>
-              {n.title && (
-                <div style={{
-                  fontWeight: 'bold',
-                  marginBottom: '4px',
-                  fontSize: '1.05em'
-                }}>
-                  {n.title}
-                </div>
-              )}
-              <div style={{ whiteSpace: 'pre-line' }}>
-                {n.message}
+            <div key={n.id} className={`notification notification-${n.type}`}>
+              <div className="notification-body">
+                {n.title && <div className="notification-title">{n.title}</div>}
+                {n.message && <div className="notification-message">{n.message}</div>}
               </div>
+              <button
+                className="notification-dismiss"
+                onClick={() => dismissNotification(n.id)}
+                aria-label="Dismiss"
+              >✕</button>
             </div>
           ))}
         </div>

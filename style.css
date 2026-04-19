@@ -382,28 +382,71 @@ body.light-mode .header p {
    NOTIFICATION SYSTEM
    ============================================ */
 
-.notification {
+.notification-container {
     position: fixed;
-    top: 90px;
-    right: 24px;
-    padding: 16px 24px;
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none;
+}
+
+.notification {
+    pointer-events: all;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
     border-radius: 12px;
     font-weight: 600;
     font-size: 14px;
-    z-index: 1000;
-    animation: slideIn 0.3s ease, slideOut 0.3s ease 2.7s;
-    box-shadow: var(--shadow-lg);
+    min-width: 260px;
+    max-width: 360px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    animation: slideIn 0.25s ease;
+    line-height: 1.5;
 }
 
-.notification-success {
-    background: linear-gradient(135deg, var(--success), #00A87A);
-    color: white;
+.notification-body {
+    flex: 1;
+    min-width: 0;
 }
 
-.notification-error {
-    background: linear-gradient(135deg, var(--danger), #DC2626);
-    color: white;
+.notification-title {
+    font-weight: 700;
+    font-size: 0.92rem;
+    margin-bottom: 3px;
 }
+
+.notification-message {
+    font-weight: 500;
+    font-size: 0.82rem;
+    opacity: 0.92;
+    white-space: pre-line;
+    word-break: break-word;
+}
+
+.notification-dismiss {
+    background: none;
+    border: none;
+    color: rgba(255,255,255,0.7);
+    cursor: pointer;
+    font-size: 0.85rem;
+    padding: 0;
+    line-height: 1;
+    flex-shrink: 0;
+    margin-top: 1px;
+    transition: color 0.15s;
+}
+.notification-dismiss:hover { color: #fff; }
+
+.notification-success  { background: linear-gradient(135deg, var(--success), #00A87A); color: white; }
+.notification-error    { background: linear-gradient(135deg, var(--danger), #DC2626);  color: white; }
+.notification-warning  { background: linear-gradient(135deg, #f59e0b, #d97706);        color: white; }
+.notification-info     { background: linear-gradient(135deg, #3b82f6, #2563eb);        color: white; }
 
 @keyframes slideIn {
     from {
@@ -2901,6 +2944,14 @@ body.light-mode .notification-success {
 
 body.light-mode .notification-error {
     background: linear-gradient(135deg, #EF4444, #DC2626);
+}
+
+body.light-mode .notification-warning {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+}
+
+body.light-mode .notification-info {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
 }
 
 /* Skeleton in light mode */
