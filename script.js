@@ -36,8 +36,10 @@ function StatCard({ value, label, icon, gradient, delay = 0, isReady }) {
   const animated = useCountUp(value, 1200, isReady);
   return (
     <div className="navbar-stat" style={{ animationDelay: `${delay}s` }}>
-      {icon && <div className="navbar-stat-icon">{icon}</div>}
-      <span className="navbar-stat-value">{animated}</span>
+      <div className="navbar-stat-top">
+        {icon && <span className="navbar-stat-icon">{icon}</span>}
+        <span className="navbar-stat-value">{animated}</span>
+      </div>
       <span className="navbar-stat-label">{label}</span>
     </div>
   );
@@ -692,10 +694,7 @@ function ProgressDistributionCard({
           >
             <span className={`striver-dot ${r.cls}`}></span>
             <span className="striver-label">{r.label}</span>
-            <span className="striver-value">
-              {r.value}
-              {r.trend > 0 && <span className="trend-up">+{r.trend}</span>}
-            </span>
+            <span className="striver-value">{r.value}</span>
           </div>
         ))}
         <div 
@@ -704,10 +703,7 @@ function ProgressDistributionCard({
         >
           <span className="striver-dot total"></span>
           <span className="striver-label">{totalInSheet != null ? 'Solved / Sheet' : 'Total Solved'}</span>
-          <span className="striver-value striver-total">
-            {totalLabel}
-            {trend?.total > 0 && <span className="trend-up">+{trend.total}</span>}
-          </span>
+          <span className="striver-value striver-total">{totalLabel}</span>
         </div>
       </div>
       {emptyMessage && totalCount === 0 && (

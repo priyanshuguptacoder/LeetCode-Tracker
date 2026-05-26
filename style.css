@@ -804,12 +804,19 @@ button:active {
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 20px 36px;
+    padding: 12px 16px;
     flex: 1;
     transition: background 0.3s ease, transform 0.2s ease;
     cursor: default;
     position: relative;
     z-index: 1;
+}
+
+.navbar-stat-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 2px;
 }
 
 /* Hover: radial glow spotlight from bottom */
@@ -834,13 +841,13 @@ button:active {
 
 /* Number count-up feel on load */
 .navbar-stat-value {
-    font-size: 1.85rem;
+    font-size: 1.5rem;
     font-weight: 800;
     color: var(--text-primary);
     line-height: 1.1;
-    letter-spacing: -0.03em;
+    letter-spacing: -0.02em;
     animation: statPop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both;
-    text-shadow: 0 0 20px rgba(0,200,150,0.15);
+    text-shadow: 0 0 16px rgba(0,200,150,0.1);
 }
 
 .navbar-stat:nth-child(1) .navbar-stat-value { animation-delay: 0.05s; }
@@ -854,23 +861,22 @@ button:active {
 }
 
 .navbar-stat-label {
-    font-size: 0.68rem;
+    font-size: 0.62rem;
     color: var(--text-secondary);
     text-transform: uppercase;
-    letter-spacing: 0.09em;
-    margin-top: 5px;
+    letter-spacing: 0.08em;
     font-weight: 600;
+    opacity: 0.85;
 }
 
 .navbar-stat-icon {
     font-size: 1.1rem;
-    margin-bottom: 4px;
-    opacity: 0.75;
+    opacity: 0.8;
     transition: transform 0.25s ease, opacity 0.25s ease;
 }
 
 .navbar-stat:hover .navbar-stat-icon {
-    transform: scale(1.25) rotate(-6deg);
+    transform: scale(1.15) rotate(-4deg);
     opacity: 1;
 }
 
@@ -1328,10 +1334,11 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
 }
 
 .card-title {
-    font-size: 16px;
-    font-weight: 700;
+    font-size: 15px;
+    font-weight: 800;
     color: var(--text-primary);
-    margin-bottom: 16px;
+    margin-bottom: 12px;
+    letter-spacing: -0.01em;
 }
 
 /* Difficulty Stats */
@@ -6365,7 +6372,7 @@ body.light-mode .btn-tle.active { background: rgba(217, 119, 6, 0.12); border-co
     background: var(--bg-secondary);
     border: 1px solid var(--border);
     border-radius: 16px;
-    padding: 16px;
+    padding: 14px 16px;
     box-shadow: var(--shadow-sm);
     transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
     position: relative;
@@ -6391,7 +6398,7 @@ body.light-mode .btn-tle.active { background: rgba(217, 119, 6, 0.12); border-co
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 12px;
-    margin-top: 12px;
+    margin-top: 8px;
 }
 
 @media (max-width: 768px) {
@@ -6404,8 +6411,8 @@ body.light-mode .btn-tle.active { background: rgba(217, 119, 6, 0.12); border-co
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 6px;
-    padding: 14px 10px;
+    gap: 4px;
+    padding: 10px 8px;
     background: var(--bg-tertiary);
     border-radius: 12px;
     border: 1px solid var(--border);
@@ -6431,18 +6438,19 @@ body.light-mode .btn-tle.active { background: rgba(217, 119, 6, 0.12); border-co
 .striver-dot.total  { background: linear-gradient(135deg, #3b82f6, #6366f1); }
 
 .striver-label {
-    font-size: 0.72rem;
+    font-size: 0.65rem;
     font-weight: 700;
     color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.06em;
+    opacity: 0.8;
 }
 
 .striver-value {
-    font-size: 1.6rem;
+    font-size: 1.4rem;
     font-weight: 800;
     color: var(--text-primary);
-    line-height: 1;
+    line-height: 1.1;
 }
 
 .striver-total-row {
@@ -7085,12 +7093,12 @@ tr.highlight-row,
     background: var(--card-bg);
     border: 1px solid var(--border);
     border-radius: 16px;
-    padding: 24px;
-    margin-bottom: 24px;
+    padding: 16px 20px;
+    margin-bottom: 20px;
     box-shadow: var(--shadow-sm);
     display: flex;
     flex-direction: column;
-    gap: 24px;
+    gap: 16px;
     position: relative;
     overflow: hidden;
 }
@@ -7110,7 +7118,7 @@ tr.highlight-row,
     justify-content: space-between;
     align-items: flex-start;
     flex-wrap: wrap;
-    gap: 16px;
+    gap: 12px;
 }
 
 .hero-profile {
@@ -7120,16 +7128,16 @@ tr.highlight-row,
 }
 
 .hero-profile h1 {
-    font-size: 1.8rem;
+    font-size: 1.6rem;
     font-weight: 800;
-    letter-spacing: -0.03em;
+    letter-spacing: -0.02em;
     color: var(--text-primary);
     margin: 0;
-    line-height: 1.2;
+    line-height: 1.1;
 }
 
 .hero-profile .subtitle {
-    font-size: 0.95rem;
+    font-size: 0.85rem;
     color: var(--text-secondary);
     margin: 0;
     font-weight: 500;
@@ -7145,8 +7153,8 @@ tr.highlight-row,
 .hero-stats-bar {
     display: flex;
     align-items: center;
-    gap: 20px;
-    padding-top: 20px;
+    gap: 16px;
+    padding-top: 12px;
     border-top: 1px solid var(--border);
     flex-wrap: wrap;
 }
