@@ -8,29 +8,87 @@ const axios = require('axios');
 const CF_API_BASE = 'https://codeforces.com/api';
 
 /**
- * Normalize Codeforces rating to 1-5 difficulty scale
- * CONSISTENT THRESHOLDS with difficultyToString:
- * - <= 1000  → 1 (Easy)
- * - <= 1400  → 3 (Medium)
- * - > 1400   → 5 (Hard)
+ * Normalize difficulty to 1-5 scale
+ * Unknown/null → null, Easy → 1, Medium → 3, Hard → 5
  */
-function normalizeDifficulty(rating) {
-  if (!rating) return 3; // Default to Medium
-  if (rating <= 1000) return 1;  // Easy
-  if (rating <= 1400) return 3; // Medium
-  return 5; // Hard
+function normalizeDifficulty(value) {
+  if (value == null) return null;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'unknown') return null;
+    if (normalized === 'easy') return 1;
+    if (normalized === 'medium') return 3;
+    if (normalized === 'hard') return 5;
+    return null;
+  }
+  if (typeof value === 'number') {
+    return normalizeDifficulty(difficultyToString(value));
+  }
+  return null;
 }
 
 /**
  * Convert rating to LeetCode-style string
- * CORRECT THRESHOLDS:
- * Easy <= 1000, Medium <= 1400, Hard > 1400
+ * Easy <= 1100, Medium <= 1600, Hard > 1600
  */
 function difficultyToString(rating) {
-  if (!rating) return 'Medium';
-  if (rating <= 1000) return 'Easy';
-  if (rating <= 1400) return 'Medium';
+  if (rating == null) return 'Unknown';
+  const numeric = Number(rating);
+  if (!Number.isFinite(numeric)) return 'Unknown';
+  if (numeric <= 1100) return 'Easy';
+  if (numeric <= 1600) return 'Medium';
   return 'Hard';
+}
+
+function getContestType(contestName) {
+  if (!contestName || typeof contestName !== 'string') return null;
+  const name = contestName.toLowerCase();
+
+  if (name.includes('gym') || name.includes('mashup') || name.includes('april fools') || name.includes('unknown')) {
+    return null;
+  }
+
+  if (
+    name.includes('div. 1 + div. 2') ||
+    name.includes('div.1 + div.2') ||
+    name.includes('div.1+div.2') ||
+    name.includes('div. 1+div. 2')
+  ) {
+    return 'div1+div2';
+  }
+  if (name.includes('div. 1') || name.includes('div.1')) return 'div1';
+  if (name.includes('div. 2') || name.includes('div.2')) return 'div2';
+  if (name.includes('div. 3') || name.includes('div.3')) return 'div3';
+  if (name.includes('div. 4') || name.includes('div.4')) return 'div4';
+  if (name.includes('educational')) return 'educational';
+  if (name.includes('global')) return 'global';
+  return null;
+}
+
+const ESTIMATED_RATINGS = {
+  div4: { A: 800, B: 900, C: 1000, D: 1100, E: 1200, F: 1400, G: 1600, H: 1800 },
+  div3: { A: 800, B: 1000, C: 1200, D: 1400, E: 1600, F: 1800, G: 2000 },
+  div2: { A: 900, B: 1200, C: 1500, D: 1800, E: 2100, F: 2400 },
+  div1plus2: { A: 1200, B: 1500, C: 1800, D: 2100, E: 2400, F: 2700 },
+  div1: { A: 1600, B: 1900, C: 2200, D: 2500, E: 2800, F: 3100 },
+  educational: { A: 900, B: 1100, C: 1300, D: 1500, E: 1700, F: 2000, G: 2300 },
+  global: { A: 1000, B: 1300, C: 1600, D: 1900, E: 2200, F: 2500 },
+};
+
+function estimateRating(problem) {
+  const contestType = getContestType(problem?.contestName);
+  if (!contestType) {
+    if (problem?.rating == null) {
+      console.warn(`[CF] Unknown contest type for estimation: ${problem?.contestName}`);
+    }
+    return null;
+  }
+
+  const indexKey = (problem?.index || '').toString().trim().charAt(0).toUpperCase();
+  if (!indexKey) return null;
+
+  const mapKey = contestType === 'div1+div2' ? 'div1plus2' : contestType;
+  return ESTIMATED_RATINGS[mapKey]?.[indexKey] ?? null;
 }
 
 /**
@@ -139,6 +197,7 @@ function deduplicateProblems(submissions) {
 
   for (const sub of acceptedSubmissions) {
     const { contestId, index, name, rating, tags = [] } = sub.problem;
+    const contestName = sub.contestName || sub.problem?.contestName || null;
     const problemKey = `${contestId}-${index}`;
 
     if (!seen.has(problemKey)) {
@@ -148,6 +207,7 @@ function deduplicateProblems(submissions) {
         name,
         rating,
         tags,
+        contestName,
         solvedAt: new Date(sub.creationTimeSeconds * 1000),
         submissionId: sub.id,
       });
@@ -165,8 +225,11 @@ function deduplicateProblems(submissions) {
  */
 function transformToSchema(cfProblem) {
   const { contestId, index, name, rating, tags, solvedAt } = cfProblem;
-  const difficulty = difficultyToString(rating);
-  const difficultyRating = difficulty === 'Easy' ? 1 : difficulty === 'Medium' ? 3 : 5;
+  const officialRating = rating != null ? Number(rating) : null;
+  const estimatedRating = estimateRating(cfProblem);
+  const finalRating = officialRating ?? estimatedRating ?? null;
+  const difficulty = difficultyToString(finalRating);
+  const difficultyRating = normalizeDifficulty(finalRating);
 
   const cid = Number(contestId);
   const idx = (index || '').toString().trim().toUpperCase();
@@ -179,8 +242,12 @@ function transformToSchema(cfProblem) {
     index: idx,
     title: name,
     platform: 'CF',
-    rating: rating != null ? Number(rating) : null,
-    rawDifficulty: rating || null,
+    officialRating: officialRating ?? null,
+    estimatedRating,
+    rating: finalRating,
+    ratingSource: officialRating != null ? 'official' : estimatedRating != null ? 'estimated' : 'unknown',
+    isEstimated: officialRating == null && estimatedRating != null,
+    rawDifficulty: officialRating ?? null,
     difficultyRating,
     difficulty: difficulty,
     tags: tags || [],
@@ -266,4 +333,6 @@ module.exports = {
   filterNewProblems,
   normalizeDifficulty,
   difficultyToString,
+  getContestType,
+  estimateRating,
 };
