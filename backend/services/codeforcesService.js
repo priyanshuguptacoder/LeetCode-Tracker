@@ -12,7 +12,7 @@ const CF_API_BASE = 'https://codeforces.com/api';
  * Unknown/null → null, Easy → 1, Medium → 3, Hard → 5
  */
 function normalizeDifficulty(value) {
-  if (value == null) return null;
+  if (value === null || value === undefined) return null;
   if (typeof value === 'string') {
     const normalized = value.trim().toLowerCase();
     if (normalized === 'unknown') return null;
@@ -32,7 +32,7 @@ function normalizeDifficulty(value) {
  * Easy <= 1100, Medium <= 1600, Hard > 1600
  */
 function difficultyToString(rating) {
-  if (rating == null) return 'Unknown';
+  if (rating === null || rating === undefined) return 'Unknown';
   const numeric = Number(rating);
   if (!Number.isFinite(numeric)) return 'Unknown';
   if (numeric <= 1100) return 'Easy';
@@ -84,7 +84,7 @@ const ESTIMATED_RATINGS = {
 function estimateRating(problem) {
   const contestType = getContestType(problem?.contestName);
   if (!contestType) {
-    if (problem?.rating == null) {
+    if (problem?.rating === null || problem?.rating === undefined) {
       console.warn(`[CF] Unknown contest type for estimation: ${problem?.contestName}`);
     }
     return null;
@@ -98,8 +98,8 @@ function estimateRating(problem) {
 }
 
 function getRatingSource(officialRating, estimatedRating) {
-  if (officialRating != null) return 'official';
-  if (estimatedRating != null) return 'estimated';
+  if (officialRating !== null) return 'official';
+  if (estimatedRating !== null) return 'estimated';
   return 'unknown';
 }
 
@@ -237,9 +237,9 @@ function deduplicateProblems(submissions) {
  */
 function transformToSchema(cfProblem) {
   const { contestId, index, name, rating, tags, solvedAt } = cfProblem;
-  const officialRating = rating != null ? Number(rating) : null;
+  const officialRating = rating === null || rating === undefined ? null : Number(rating);
   const estimatedRating = estimateRating(cfProblem);
-  const finalRating = officialRating ?? estimatedRating ?? null;
+  const finalRating = officialRating ?? estimatedRating;
   const difficulty = difficultyToString(finalRating);
   const difficultyRating = normalizeDifficulty(finalRating);
   const ratingSource = getRatingSource(officialRating, estimatedRating);
@@ -255,12 +255,12 @@ function transformToSchema(cfProblem) {
     index: idx,
     title: name,
     platform: 'CF',
-    officialRating: officialRating ?? null,
+    officialRating,
     estimatedRating,
     rating: finalRating,
     ratingSource,
     isEstimated: ratingSource === 'estimated',
-    rawDifficulty: officialRating ?? null,
+    rawDifficulty: officialRating,
     difficultyRating,
     difficulty: difficulty,
     tags: tags || [],
