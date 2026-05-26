@@ -69,7 +69,7 @@ const ESTIMATED_RATINGS = {
   div4: { A: 800, B: 900, C: 1000, D: 1100, E: 1200, F: 1400, G: 1600, H: 1800 },
   div3: { A: 800, B: 1000, C: 1200, D: 1400, E: 1600, F: 1800, G: 2000 },
   div2: { A: 900, B: 1200, C: 1500, D: 1800, E: 2100, F: 2400 },
-  div1plus2: { A: 1200, B: 1500, C: 1800, D: 2100, E: 2400, F: 2700 },
+  'div1+div2': { A: 1200, B: 1500, C: 1800, D: 2100, E: 2400, F: 2700 },
   div1: { A: 1600, B: 1900, C: 2200, D: 2500, E: 2800, F: 3100 },
   educational: { A: 900, B: 1100, C: 1300, D: 1500, E: 1700, F: 2000, G: 2300 },
   global: { A: 1000, B: 1300, C: 1600, D: 1900, E: 2200, F: 2500 },
@@ -87,8 +87,7 @@ function estimateRating(problem) {
   const indexKey = (problem?.index || '').toString().trim().charAt(0).toUpperCase();
   if (!indexKey) return null;
 
-  const mapKey = contestType === 'div1+div2' ? 'div1plus2' : contestType;
-  return ESTIMATED_RATINGS[mapKey]?.[indexKey] ?? null;
+  return ESTIMATED_RATINGS[contestType]?.[indexKey] ?? null;
 }
 
 /**
@@ -230,6 +229,12 @@ function transformToSchema(cfProblem) {
   const finalRating = officialRating ?? estimatedRating ?? null;
   const difficulty = difficultyToString(finalRating);
   const difficultyRating = normalizeDifficulty(finalRating);
+  let ratingSource = 'unknown';
+  if (officialRating != null) {
+    ratingSource = 'official';
+  } else if (estimatedRating != null) {
+    ratingSource = 'estimated';
+  }
 
   const cid = Number(contestId);
   const idx = (index || '').toString().trim().toUpperCase();
@@ -245,7 +250,7 @@ function transformToSchema(cfProblem) {
     officialRating: officialRating ?? null,
     estimatedRating,
     rating: finalRating,
-    ratingSource: officialRating != null ? 'official' : estimatedRating != null ? 'estimated' : 'unknown',
+    ratingSource,
     isEstimated: officialRating == null && estimatedRating != null,
     rawDifficulty: officialRating ?? null,
     difficultyRating,
