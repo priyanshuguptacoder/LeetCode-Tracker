@@ -4830,30 +4830,25 @@ ReactDOM.render(<App />, document.getElementById('root'));
 
 // Sync sticky offsets robustly using ResizeObserver
 function setupStickyObserver() {
-  const updateHeaders = (height) => {
-    document.documentElement.style.setProperty('--table-header-height', height + 'px');
-    // Also apply directly to th elements to bypass any CSS var sticky bugs in some browsers
-    const ths = document.querySelectorAll('.problems-table th');
-    ths.forEach(th => {
-      th.style.top = height + 'px';
-    });
-  };
-
+  // Set app header height to 0 since it's relative now
+  document.documentElement.style.setProperty('--app-header-height', '0px');
+  
   const observer = new ResizeObserver(entries => {
     for (let entry of entries) {
       if (entry.target.classList.contains('table-toolbar')) {
-        updateHeaders(entry.target.offsetHeight);
+        document.documentElement.style.setProperty('--table-header-height', entry.target.offsetHeight + 'px');
       }
     }
   });
 
+  // Function to find and observe toolbar
   const observeToolbar = () => {
     const toolbar = document.querySelector('.table-toolbar');
     if (toolbar) {
       observer.observe(toolbar);
-      updateHeaders(toolbar.offsetHeight);
+      document.documentElement.style.setProperty('--table-header-height', toolbar.offsetHeight + 'px');
     } else {
-      setTimeout(observeToolbar, 500);
+      setTimeout(observeToolbar, 500); // Retry if not yet mounted
     }
   };
   
