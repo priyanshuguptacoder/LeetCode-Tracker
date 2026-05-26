@@ -97,6 +97,12 @@ function estimateRating(problem) {
   return ESTIMATED_RATINGS[contestType]?.[indexKey] ?? null;
 }
 
+function getRatingSource(officialRating, estimatedRating) {
+  if (officialRating != null) return 'official';
+  if (estimatedRating != null) return 'estimated';
+  return 'unknown';
+}
+
 /**
  * Fetch user contest rating history from Codeforces API
  * Returns rating data array and contest count
@@ -236,12 +242,7 @@ function transformToSchema(cfProblem) {
   const finalRating = officialRating ?? estimatedRating ?? null;
   const difficulty = difficultyToString(finalRating);
   const difficultyRating = normalizeDifficulty(finalRating);
-  let ratingSource = 'unknown';
-  if (officialRating != null) {
-    ratingSource = 'official';
-  } else if (estimatedRating != null) {
-    ratingSource = 'estimated';
-  }
+  const ratingSource = getRatingSource(officialRating, estimatedRating);
 
   const cid = Number(contestId);
   const idx = (index || '').toString().trim().toUpperCase();
@@ -258,7 +259,7 @@ function transformToSchema(cfProblem) {
     estimatedRating,
     rating: finalRating,
     ratingSource,
-    isEstimated: officialRating == null && estimatedRating != null,
+    isEstimated: ratingSource === 'estimated',
     rawDifficulty: officialRating ?? null,
     difficultyRating,
     difficulty: difficulty,
