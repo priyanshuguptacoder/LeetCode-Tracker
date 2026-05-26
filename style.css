@@ -7109,6 +7109,11 @@ tr.highlight-row,
     top: 0; left: 0; right: 0;
     height: 3px;
     background: linear-gradient(90deg, #6366f1, #a855f7, #ec4899);
+    opacity: 0;
+    transition: opacity 0.4s ease;
+}
+
+.hero-card:hover::before {
     opacity: 0.8;
 }
 
