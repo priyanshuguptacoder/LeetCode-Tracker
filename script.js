@@ -654,38 +654,49 @@ function computeStreakFromDates(dateStrings) {
   return { activeDays, currentStreak, maxStreak };
 }
 
-// ProgressCard — unified Striver / TLE sheet progress display
-// Always renders — never returns null even if data is missing
-function ProgressCard({ data }) {
-  const safe = {
-    easy:        data?.easy        ?? 0,
-    medium:      data?.medium      ?? 0,
-    hard:        data?.hard        ?? 0,
-    total:       data?.total       ?? 0,
-    totalInSheet: data?.totalInSheet ?? null,
-  };
+// ProgressDistributionCard — reusable progress card for Striver, TLE, LeetCode, Codeforces distributions
+function ProgressDistributionCard({
+  title,
+  icon,
+  easyCount,
+  mediumCount,
+  hardCount,
+  totalCount,
+  totalInSheet = null,
+  emptyMessage = null
+}) {
   const rows = [
-    { label: 'Easy',   cls: 'easy',   value: safe.easy },
-    { label: 'Medium', cls: 'medium', value: safe.medium },
-    { label: 'Hard',   cls: 'hard',   value: safe.hard },
+    { label: 'Easy',   cls: 'easy',   value: easyCount },
+    { label: 'Medium', cls: 'medium', value: mediumCount },
+    { label: 'Hard',   cls: 'hard',   value: hardCount },
   ];
-  const totalLabel = safe.totalInSheet != null
-    ? `${safe.total} / ${safe.totalInSheet}`
-    : String(safe.total);
+  
+  const totalLabel = totalInSheet != null
+    ? `${totalCount} / ${totalInSheet}`
+    : String(totalCount);
+
   return (
-    <div className="striver-stats">
-      {rows.map(r => (
-        <div key={r.label} className="striver-stat-row">
-          <span className={`striver-dot ${r.cls}`}></span>
-          <span className="striver-label">{r.label}</span>
-          <span className="striver-value">{r.value}</span>
+    <div className="analytics-card striver-card fade-up fade-up-4" style={{ marginBottom: 0 }}>
+      <h3 className="card-title">
+        {icon} {title}
+      </h3>
+      <div className="striver-stats">
+        {rows.map(r => (
+          <div key={r.label} className="striver-stat-row">
+            <span className={`striver-dot ${r.cls}`}></span>
+            <span className="striver-label">{r.label}</span>
+            <span className="striver-value">{r.value}</span>
+          </div>
+        ))}
+        <div className="striver-stat-row striver-total-row">
+          <span className="striver-dot total"></span>
+          <span className="striver-label">{totalInSheet != null ? 'Solved / Sheet' : 'Total Solved'}</span>
+          <span className="striver-value striver-total">{totalLabel}</span>
         </div>
-      ))}
-      <div className="striver-stat-row striver-total-row">
-        <span className="striver-dot total"></span>
-        <span className="striver-label">{safe.totalInSheet != null ? 'Solved / Sheet' : 'Total Solved'}</span>
-        <span className="striver-value striver-total">{totalLabel}</span>
       </div>
+      {emptyMessage && totalCount === 0 && (
+        <div className="striver-empty">{emptyMessage}</div>
+      )}
     </div>
   );
 }
@@ -2396,6 +2407,15 @@ function App() {
   const mediumPercent = totalMedium > 0 ? Math.round((mediumCount / totalMedium) * 100) : 0;
   const hardPercent = totalHard > 0 ? Math.round((hardCount / totalHard) * 100) : 0;
 
+  // Platform-specific solved difficulty counts
+  const lcEasySolved = allProblems.filter(p => p.platform === 'LC' && p.difficulty === 'Easy' && p.status === 'Done').length;
+  const lcMediumSolved = allProblems.filter(p => p.platform === 'LC' && p.difficulty === 'Medium' && p.status === 'Done').length;
+  const lcHardSolved = allProblems.filter(p => p.platform === 'LC' && p.difficulty === 'Hard' && p.status === 'Done').length;
+
+  const cfEasySolved = allProblems.filter(p => p.platform === 'CF' && p.difficulty === 'Easy' && p.status === 'Done').length;
+  const cfMediumSolved = allProblems.filter(p => p.platform === 'CF' && p.difficulty === 'Medium' && p.status === 'Done').length;
+  const cfHardSolved = allProblems.filter(p => p.platform === 'CF' && p.difficulty === 'Hard' && p.status === 'Done').length;
+
   // ============================================
   // COACHING INTELLIGENCE — derived metrics
   // ============================================
@@ -3389,6 +3409,55 @@ function App() {
             </div>
           </div>
 
+          {/* 📊 Platform Difficulty Distribution */}
+          <div className="section-header-custom" style={{ margin: '24px 0 16px 0' }}>
+            <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+              📊 Platform Difficulty Distribution
+            </h2>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '20px', marginBottom: '24px' }}>
+            <ProgressDistributionCard
+              title="LeetCode Distribution"
+              icon="💻"
+              easyCount={lcEasySolved}
+              mediumCount={lcMediumSolved}
+              hardCount={lcHardSolved}
+              totalCount={lcSolved}
+            />
+            <ProgressDistributionCard
+              title="Codeforces Distribution"
+              icon="🏆"
+              easyCount={cfEasySolved}
+              mediumCount={cfMediumSolved}
+              hardCount={cfHardSolved}
+              totalCount={cfSolved}
+            />
+          </div>
+
+          {/* Striver & TLE Progress Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '20px', marginBottom: '24px' }}>
+            <ProgressDistributionCard
+              title="Striver Progress"
+              icon="📘"
+              easyCount={striverStats.easy}
+              mediumCount={striverStats.medium}
+              hardCount={striverStats.hard}
+              totalCount={striverStats.total}
+              emptyMessage="Click 📘 on any LC problem to mark it as Striver"
+            />
+            <ProgressDistributionCard
+              title="TLE Sheet Progress"
+              icon="🏆"
+              easyCount={tleStats.easy}
+              mediumCount={tleStats.medium}
+              hardCount={tleStats.hard}
+              totalCount={tleStats.total}
+              totalInSheet={tleStats.totalInSheet}
+              emptyMessage="No CF problems match the TLE Sheet criteria yet."
+            />
+          </div>
+
           {/* Advanced Analytics Grid */}
           <div className="advanced-analytics-grid fade-up fade-up-3">
             {/* Consistency Score */}
@@ -3494,23 +3563,7 @@ function App() {
           {/* Contest Stats — directly below streak + monthly planner */}
           <ContestStats stats={contestStats} />
 
-          {/* Striver Progress — always visible */}
-          <div className="analytics-card striver-card fade-up fade-up-4">
-            <h3 className="card-title">📘 Striver Progress</h3>
-            <ProgressCard data={striverStats} />
-            {striverStats.total === 0 && (
-              <div className="striver-empty">Click 📘 on any LC problem to mark it as Striver</div>
-            )}
-          </div>
 
-          {/* TLE Sheet Progress — always visible */}
-          <div className="analytics-card striver-card fade-up fade-up-4">
-            <h3 className="card-title">🏆 TLE Sheet Progress</h3>
-            <ProgressCard data={tleStats} />
-            {(tleStats.totalInSheet ?? 0) === 0 && (
-              <div className="striver-empty">No CF problems match the TLE Sheet criteria yet.</div>
-            )}
-          </div>
 
           {/* Needs Revision — Spaced Repetition Queue */}
           {(() => {
