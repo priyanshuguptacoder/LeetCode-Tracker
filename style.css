@@ -1,3 +1,8 @@
+html {
+    scroll-behavior: smooth;
+    scroll-padding-top: calc(var(--app-header-height, 65px) + 24px);
+}
+
 /* ============================================
    PREMIUM SAAS ANALYTICS DASHBOARD
    LeetCode Performance Engine
@@ -1740,6 +1745,7 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
     overflow: visible;
     box-shadow: var(--shadow-sm);
     margin-bottom: 24px;
+    margin-top: 32px;
     animation: filterCardEntry 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.08s forwards;
 }
 

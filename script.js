@@ -883,6 +883,23 @@ function ContestStats({ stats }) {
 }
 
 function App() {
+  React.useEffect(() => {
+
+    // Dynamic Header Height Detection
+    const updateHeaderHeight = () => {
+      const header = document.querySelector('.header');
+      if (header) {
+        const height = header.offsetHeight;
+        document.documentElement.style.setProperty('--app-header-height', `${height}px`);
+      }
+    };
+    
+    // Update on resize and initial load
+    window.addEventListener('resize', updateHeaderHeight);
+    // Slight delay to ensure React has rendered the DOM
+    setTimeout(updateHeaderHeight, 100);
+    return () => window.removeEventListener("resize", updateHeaderHeight);
+  }, []);
   // ============================================
   // API DATA FETCHING
   // Backend is the SINGLE SOURCE OF TRUTH for all problem data.
