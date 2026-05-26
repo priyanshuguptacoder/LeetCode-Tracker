@@ -4827,21 +4827,33 @@ ReactDOM.render(<App />, document.getElementById('root'));
 
 // Sync sticky offset CSS vars — desktop only.
 // On mobile, zero out the vars so sticky th top offsets don't affect layout.
-function syncStickyOffsets() {
-  if (window.innerWidth <= 768) {
-    document.documentElement.style.setProperty('--app-header-height', '0px');
-    document.documentElement.style.setProperty('--table-header-height', '0px');
-    return;
-  }
-  const appHeader = document.querySelector('.header');
-  const tableHeader = document.querySelector('.table-toolbar');
-  if (appHeader) {
-    document.documentElement.style.setProperty('--app-header-height', '0px');
-  }
-  if (tableHeader) {
-    document.documentElement.style.setProperty('--table-header-height', tableHeader.offsetHeight + 'px');
-  }
+
+// Sync sticky offsets robustly using ResizeObserver
+function setupStickyObserver() {
+  // Set app header height to 0 since it's relative now
+  document.documentElement.style.setProperty('--app-header-height', '0px');
+  
+  const observer = new ResizeObserver(entries => {
+    for (let entry of entries) {
+      if (entry.target.classList.contains('table-toolbar')) {
+        document.documentElement.style.setProperty('--table-header-height', entry.target.offsetHeight + 'px');
+      }
+    }
+  });
+
+  // Function to find and observe toolbar
+  const observeToolbar = () => {
+    const toolbar = document.querySelector('.table-toolbar');
+    if (toolbar) {
+      observer.observe(toolbar);
+      document.documentElement.style.setProperty('--table-header-height', toolbar.offsetHeight + 'px');
+    } else {
+      setTimeout(observeToolbar, 500); // Retry if not yet mounted
+    }
+  };
+  
+  observeToolbar();
 }
-document.addEventListener('DOMContentLoaded', syncStickyOffsets);
-window.addEventListener('resize', syncStickyOffsets);
-syncStickyOffsets();
+document.addEventListener('DOMContentLoaded', setupStickyObserver);
+setupStickyObserver();
+

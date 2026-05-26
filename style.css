@@ -1797,7 +1797,7 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
     border-bottom: 1px solid var(--border);
     white-space: nowrap;
     position: sticky;
-    top: calc(var(--app-header-height) + var(--table-header-height));
+    top: var(--table-header-height);
     z-index: 12;
     background: var(--bg-tertiary);
 }
