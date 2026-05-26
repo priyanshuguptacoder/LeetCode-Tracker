@@ -4836,7 +4836,7 @@ function syncStickyOffsets() {
   const appHeader = document.querySelector('.header');
   const tableHeader = document.querySelector('.table-toolbar');
   if (appHeader) {
-    document.documentElement.style.setProperty('--app-header-height', appHeader.offsetHeight + 'px');
+    document.documentElement.style.setProperty('--app-header-height', '0px');
   }
   if (tableHeader) {
     document.documentElement.style.setProperty('--table-header-height', tableHeader.offsetHeight + 'px');

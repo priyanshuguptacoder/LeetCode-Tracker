@@ -95,8 +95,8 @@ body.light-mode {
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
     border-bottom: 1px solid var(--border);
-    position: sticky;
-    top: 0;
+    position: relative;
+    
     z-index: 100;
     transition: box-shadow 0.3s ease, background 0.3s ease;
 }
@@ -1570,7 +1570,7 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     position: sticky;
-    top: var(--app-header-height);
+    top: 0;
     z-index: 20;
     transition: box-shadow 0.3s ease, background 0.3s ease, padding 0.3s ease;
     gap: 24px;
