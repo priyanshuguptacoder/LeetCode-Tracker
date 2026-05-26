@@ -757,26 +757,26 @@ function SolvedActivityChart({ allProblems }) {
   const { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } = window.Recharts;
 
   return (
-    <div className="analytics-card fade-up fade-up-3" style={{ padding: '20px' }}>
-      <h3 className="card-title" style={{ marginBottom: '16px' }}>📈 30-Day Activity Trend</h3>
-      <div style={{ width: '100%', height: 200 }}>
+    <div className="analytics-card activity-chart-card fade-up fade-up-3">
+      <h3 className="card-title chart-title">📈 30-Day Activity Trend</h3>
+      <div className="chart-wrapper" style={{ width: '100%', height: 220 }}>
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
+          <AreaChart data={data} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
             <defs>
               <linearGradient id="colorSolved" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
+                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2}/>
                 <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" opacity={0.5} />
-            <XAxis dataKey="displayDate" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#9ca3af' }} minTickGap={20} />
-            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#9ca3af' }} allowDecimals={false} />
+            <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="var(--border)" opacity={0.4} />
+            <XAxis dataKey="displayDate" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#9ca3af', fontWeight: 500 }} minTickGap={20} />
+            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#9ca3af', fontWeight: 500 }} allowDecimals={false} />
             <Tooltip 
-              contentStyle={{ backgroundColor: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-primary)' }}
-              itemStyle={{ color: '#6366f1', fontWeight: 600 }}
-              labelStyle={{ color: '#9ca3af', marginBottom: '4px', fontSize: '12px' }}
+              contentStyle={{ backgroundColor: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '12px', color: 'var(--text-primary)', boxShadow: '0 8px 24px rgba(0,0,0,0.15)', padding: '10px 14px' }}
+              itemStyle={{ color: '#6366f1', fontWeight: 700, fontSize: '15px' }}
+              labelStyle={{ color: '#9ca3af', marginBottom: '6px', fontSize: '13px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}
             />
-            <Area type="monotone" dataKey="solved" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorSolved)" />
+            <Area type="monotone" dataKey="solved" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorSolved)" activeDot={{ r: 6, fill: '#6366f1', stroke: 'var(--card-bg)', strokeWidth: 3 }} />
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -3233,8 +3233,8 @@ function App() {
             </div>
           </div>
 
-          {/* Primary Dashboard Grid: Distribution + Chart */}
-          <div className="dashboard-primary-grid fade-up fade-up-2">
+          {/* Primary Dashboard Grid: Distribution */}
+          <div className="dashboard-single-card fade-up fade-up-2">
             <ProgressDistributionCard
               title="Overall Problem Distribution"
               icon="📊"
@@ -3246,7 +3246,6 @@ function App() {
               selectedFilter={selectedFilter}
               trend={thisWeekTrend}
             />
-            <SolvedActivityChart allProblems={allProblems} />
           </div>
 
           {/* Streak & Monthly Stats */}
@@ -3550,6 +3549,11 @@ function App() {
               totalInSheet={tleStats.totalInSheet}
               emptyMessage="No CF problems match the TLE Sheet criteria yet."
             />
+          </div>
+
+          {/* 30-Day Activity Trend (Moved to Analytics Section) */}
+          <div className="analytics-chart-container fade-up fade-up-2">
+            <SolvedActivityChart allProblems={allProblems} />
           </div>
 
           {/* Advanced Analytics Grid */}

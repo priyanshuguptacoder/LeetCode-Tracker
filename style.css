@@ -7164,6 +7164,26 @@ tr.highlight-row,
     }
 }
 
+.dashboard-single-card {
+    margin-bottom: 24px;
+}
+
+.analytics-chart-container {
+    margin-bottom: 24px;
+}
+
+.activity-chart-card {
+    padding: 24px 28px;
+}
+
+.activity-chart-card .chart-title {
+    margin-bottom: 20px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
+}
+
 .trend-up {
     font-size: 0.7rem;
     color: #10b981;
