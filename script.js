@@ -663,12 +663,15 @@ function ProgressDistributionCard({
   hardCount,
   totalCount,
   totalInSheet = null,
-  emptyMessage = null
+  emptyMessage = null,
+  onFilterChange = null,
+  selectedFilter = null,
+  trend = null // optional object: { easy, medium, hard, total }
 }) {
   const rows = [
-    { label: 'Easy',   cls: 'easy',   value: easyCount },
-    { label: 'Medium', cls: 'medium', value: mediumCount },
-    { label: 'Hard',   cls: 'hard',   value: hardCount },
+    { label: 'Easy',   key: 'easy',   cls: 'easy',   value: easyCount,   trend: trend?.easy },
+    { label: 'Medium', key: 'medium', cls: 'medium', value: mediumCount, trend: trend?.medium },
+    { label: 'Hard',   key: 'hard',   cls: 'hard',   value: hardCount,   trend: trend?.hard },
   ];
   
   const totalLabel = totalInSheet != null
@@ -682,16 +685,29 @@ function ProgressDistributionCard({
       </h3>
       <div className="striver-stats">
         {rows.map(r => (
-          <div key={r.label} className="striver-stat-row">
+          <div 
+            key={r.label} 
+            className={`striver-stat-row ${onFilterChange ? 'clickable' : ''} ${selectedFilter === r.key ? 'active-filter' : ''}`}
+            onClick={() => onFilterChange && onFilterChange(selectedFilter === r.key ? null : r.key)}
+          >
             <span className={`striver-dot ${r.cls}`}></span>
             <span className="striver-label">{r.label}</span>
-            <span className="striver-value">{r.value}</span>
+            <span className="striver-value">
+              {r.value}
+              {r.trend > 0 && <span className="trend-up">+{r.trend}</span>}
+            </span>
           </div>
         ))}
-        <div className="striver-stat-row striver-total-row">
+        <div 
+          className={`striver-stat-row striver-total-row ${onFilterChange ? 'clickable' : ''} ${selectedFilter === 'solved' ? 'active-filter' : ''}`}
+          onClick={() => onFilterChange && onFilterChange(selectedFilter === 'solved' ? null : 'solved')}
+        >
           <span className="striver-dot total"></span>
           <span className="striver-label">{totalInSheet != null ? 'Solved / Sheet' : 'Total Solved'}</span>
-          <span className="striver-value striver-total">{totalLabel}</span>
+          <span className="striver-value striver-total">
+            {totalLabel}
+            {trend?.total > 0 && <span className="trend-up">+{trend.total}</span>}
+          </span>
         </div>
       </div>
       {emptyMessage && totalCount === 0 && (
@@ -702,6 +718,71 @@ function ProgressDistributionCard({
 }
 
 // WeaknessRadar removed — Topic Mastery section deleted
+
+// ============================================
+// SOLVED ACTIVITY CHART
+// Uses Recharts to show last 30 days activity
+// ============================================
+function SolvedActivityChart({ allProblems }) {
+  const [data, setData] = useState([]);
+
+  useEffect(() => {
+    if (!allProblems || allProblems.length === 0) return;
+    
+    // Get last 30 days
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const chartData = [];
+    
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().split('T')[0];
+      const shortDate = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      chartData.push({ date: dateStr, displayDate: shortDate, solved: 0 });
+    }
+
+    allProblems.forEach(p => {
+      if (p.status === 'Done' && p._solvedDateISO) {
+        const dStr = p._solvedDateISO.split('T')[0];
+        const point = chartData.find(c => c.date === dStr);
+        if (point) point.solved += 1;
+      }
+    });
+
+    setData(chartData);
+  }, [allProblems]);
+
+  if (!window.Recharts) return null;
+  const { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } = window.Recharts;
+
+  return (
+    <div className="analytics-card fade-up fade-up-3" style={{ padding: '20px' }}>
+      <h3 className="card-title" style={{ marginBottom: '16px' }}>📈 30-Day Activity Trend</h3>
+      <div style={{ width: '100%', height: 200 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
+            <defs>
+              <linearGradient id="colorSolved" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
+                <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" opacity={0.5} />
+            <XAxis dataKey="displayDate" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#9ca3af' }} minTickGap={20} />
+            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#9ca3af' }} allowDecimals={false} />
+            <Tooltip 
+              contentStyle={{ backgroundColor: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-primary)' }}
+              itemStyle={{ color: '#6366f1', fontWeight: 600 }}
+              labelStyle={{ color: '#9ca3af', marginBottom: '4px', fontSize: '12px' }}
+            />
+            <Area type="monotone" dataKey="solved" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorSolved)" />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
 
 // ============================================
 // CONTEST STATS — LC + CF contest ratings
@@ -2416,6 +2497,26 @@ function App() {
   const cfMediumSolved = allProblems.filter(p => p.platform === 'CF' && p.difficulty === 'Medium' && p.status === 'Done').length;
   const cfHardSolved = allProblems.filter(p => p.platform === 'CF' && p.difficulty === 'Hard' && p.status === 'Done').length;
 
+  // Recent Trends (Last 7 days)
+  const [thisWeekTrend, setThisWeekTrend] = useState({
+    total: 0, lc: 0, cf: 0, easy: 0, medium: 0, hard: 0
+  });
+
+  useEffect(() => {
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    const solvedThisWeek = allProblems.filter(p => p.status === 'Done' && p._solvedDateISO && new Date(p._solvedDateISO) >= weekAgo);
+    
+    setThisWeekTrend({
+      total: solvedThisWeek.length,
+      lc: solvedThisWeek.filter(p => p.platform === 'LC').length,
+      cf: solvedThisWeek.filter(p => p.platform === 'CF').length,
+      easy: solvedThisWeek.filter(p => p.difficulty === 'Easy').length,
+      medium: solvedThisWeek.filter(p => p.difficulty === 'Medium').length,
+      hard: solvedThisWeek.filter(p => p.difficulty === 'Hard').length
+    });
+  }, [allProblems]);
+
   // ============================================
   // COACHING INTELLIGENCE — derived metrics
   // ============================================
@@ -3065,95 +3166,88 @@ function App() {
           ))}
         </div>
 
-        {/* Header — Mobile-First */}
-        <header className="header">
-          <div className="header-content">
-            <div className="header-main">
-              <div className="header-title">
+        <div className="container">
+          {/* Unified Hero Section */}
+          <div className="hero-card fade-up">
+            <div className="hero-content">
+              <div className="hero-profile">
                 <h1>Priyanshu Gupta</h1>
                 <p className="subtitle">Your Personal DSA Growth Engine</p>
+                <span className={`sync-status ${syncStatus}`}>
+                  {syncStatus === 'checking' ? '⏳ Checking' : syncStatus === 'ok' ? '🟢 Active' : '🔴 Expired'}
+                </span>
               </div>
-              <span className={`sync-status ${syncStatus}`}>
-                {syncStatus === 'checking' ? '⏳ Checking' : syncStatus === 'ok' ? '🟢 Active' : '🔴 Expired'}
-              </span>
+              <div className="hero-actions">
+                <button
+                  className="btn-sync-lc"
+                  onClick={handleSyncLeetCode}
+                  disabled={syncing}
+                  title="Sync LeetCode + Codeforces (problems + contest stats)"
+                >
+                  {syncing ? (
+                    <><span className="sync-spinner">⟳</span> Syncing...</>
+                  ) : (
+                    <>🔄 Sync All</>
+                  )}
+                </button>
+
+                <a href="https://leetcode.com/u/invisiblemanfromheart/" target="_blank" rel="noopener noreferrer" className="btn-profile">
+                  <span>LC Profile</span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
+                  </svg>
+                </a>
+
+                <a href="https://codeforces.com/profile/priyanshuguptacoder" target="_blank" rel="noopener noreferrer" className="btn-profile">
+                  <span>CF Profile</span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
+                  </svg>
+                </a>
+
+                <button
+                  className={`btn-admin-lock ${isAdminUnlocked ? 'unlocked' : 'locked'}`}
+                  onClick={() => isAdminUnlocked ? lockAdmin() : setShowAdminModal(true)}
+                  title={isAdminUnlocked ? 'Admin mode active — click to lock' : 'Click to unlock admin mode'}
+                >
+                  {isAdminUnlocked ? '🔓' : '🔒'}
+                </button>
+                <button
+                  className="theme-toggle"
+                  onClick={() => setDarkMode(prev => !prev)}
+                  title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                >
+                  {darkMode ? '☀️' : '🌙'}
+                </button>
+              </div>
             </div>
-            <div className="header-actions">
-              <button
-                className="btn-sync-lc"
-                onClick={handleSyncLeetCode}
-                disabled={syncing}
-                title="Sync LeetCode + Codeforces (problems + contest stats)"
-              >
-                {syncing ? (
-                  <><span className="sync-spinner">⟳</span> Syncing...</>
-                ) : (
-                  <>🔄 Sync All</>
-                )}
-              </button>
-
-              <a
-                href="https://leetcode.com/u/invisiblemanfromheart/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn-profile"
-              >
-                <span>LeetCode Profile</span>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
-                </svg>
-              </a>
-
-              <a
-                href="https://codeforces.com/profile/priyanshuguptacoder"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn-profile"
-                style={{ marginLeft: '8px' }}
-              >
-                <span>CF Profile</span>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
-                </svg>
-              </a>
-              <button
-                className={`btn-admin-lock ${isAdminUnlocked ? 'unlocked' : 'locked'}`}
-                onClick={() => isAdminUnlocked ? lockAdmin() : setShowAdminModal(true)}
-                title={isAdminUnlocked ? 'Admin mode active — click to lock' : 'Click to unlock admin mode'}
-              >
-                {isAdminUnlocked ? '🔓' : '🔒'}
-              </button>
-              <button
-                className="theme-toggle"
-                onClick={() => setDarkMode(prev => !prev)}
-                title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-              >
-                {darkMode ? '☀️' : '🌙'}
-              </button>
+            
+            <div className="hero-stats-bar">
+              <StatCard value={totalSolved} label="Total Solved" icon="✅" delay={0.05} isReady={statsReady} />
+              <div className="navbar-stat-divider" />
+              <StatCard value={displayActiveDays} label="Active Days" icon="📅" delay={0.10} isReady={statsReady} />
+              <div className="navbar-stat-divider" />
+              <StatCard value={lcSolved} label="LeetCode" icon="💻" delay={0.15} isReady={statsReady} />
+              <div className="navbar-stat-divider" />
+              <StatCard value={cfSolved} label="Codeforces" icon="🏆" delay={0.20} isReady={statsReady} />
             </div>
           </div>
-        </header>
 
-        <div className="container">
-          {/* Navbar Stats Bar */}
-          <div className="navbar-stats">
-            <StatCard value={totalSolved} label="Total Solved" icon="✅" delay={0.05} isReady={statsReady} />
-            <div className="navbar-stat-divider" />
-            <StatCard value={displayActiveDays} label="Active Days" icon="📅" delay={0.10} isReady={statsReady} />
-            <div className="navbar-stat-divider" />
-            <StatCard value={lcSolved} label="LeetCode" icon="💻" delay={0.15} isReady={statsReady} />
-            <div className="navbar-stat-divider" />
-            <StatCard value={cfSolved} label="Codeforces" icon="🏆" delay={0.20} isReady={statsReady} />
+          {/* Primary Dashboard Grid: Distribution + Chart */}
+          <div className="dashboard-primary-grid fade-up fade-up-2">
+            <ProgressDistributionCard
+              title="Overall Problem Distribution"
+              icon="📊"
+              easyCount={easyCount}
+              mediumCount={mediumCount}
+              hardCount={hardCount}
+              totalCount={totalSolved}
+              onFilterChange={setSelectedFilter}
+              selectedFilter={selectedFilter}
+              trend={thisWeekTrend}
+            />
+            <SolvedActivityChart allProblems={allProblems} />
           </div>
-
-          {/* Difficulty Navbar — filter by Easy/Medium/Hard */}
-          <DifficultyNavbar
-            easy={easyCount}
-            medium={mediumCount}
-            hard={hardCount}
-            total={totalSolved}
-            selectedFilter={selectedFilter}
-            onFilterChange={setSelectedFilter}
-          />
 
           {/* Streak & Monthly Stats */}
           <div className="streak-monthly-grid fade-up fade-up-2">
@@ -3163,17 +3257,17 @@ function App() {
               </div>
               {/* Streak stats — read-only display, values come from DB */}
               <div className="streak-stats">
-                <div className="streak-item">
+                <div className="streak-item streak-primary">
                   <div className="streak-value">{displayCurrentStreak}</div>
                   <div className="streak-label">Current Streak</div>
                 </div>
                 <div className="streak-divider"></div>
-                <div className="streak-item">
+                <div className="streak-item streak-secondary">
                   <div className="streak-value">{displayMaxStreak}</div>
                   <div className="streak-label">Max Streak</div>
                 </div>
                 <div className="streak-divider"></div>
-                <div className="streak-item">
+                <div className="streak-item streak-tertiary">
                   <div className="streak-value">{displayActiveDays}</div>
                   <div className="streak-label">Active Days</div>
                 </div>
