@@ -1615,7 +1615,6 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
     gap: 12px;
     flex-wrap: wrap;
     flex: 0 0 auto;
-    margin-left: auto;
 }
 
 /* Toolbar Search */
