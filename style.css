@@ -1753,9 +1753,28 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
 
 @media (max-width: 768px) {
     .hide-mobile { display: none; }
-    .table-toolbar-right { flex-direction: column; align-items: stretch; }
+    .table-toolbar {
+        flex-wrap: wrap;
+        padding: 12px 16px;
+        gap: 10px;
+    }
+    .table-toolbar-left {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+    .table-toolbar-right {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        width: 100%;
+        gap: 8px;
+    }
+    .toolbar-search {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
     .toolbar-search input { width: 100%; }
-    .toolbar-filters { flex-wrap: wrap; height: auto; padding: 6px; gap: 8px; }
+    .toolbar-filters { flex-wrap: wrap; height: auto; padding: 6px; gap: 8px; width: 100%; }
     .toolbar-select { padding: 6px 22px 6px 8px; }
     .toolbar-divider { display: none; }
 }
@@ -7257,4 +7276,95 @@ tr.highlight-row,
 body.light-mode .monthly-planner {
     box-shadow: 0 0 30px rgba(99, 102, 241, 0.08) inset, 0 8px 32px rgba(0, 0, 0, 0.05) !important;
     border-color: rgba(99, 102, 241, 0.2) !important;
+}
+
+/* ============================================
+   MOBILE OVERFLOW FIX — prevent horizontal scroll
+   DESKTOP: untouched
+   ============================================ */
+@media (max-width: 768px) {
+    /* Global overflow containment */
+    html, body {
+        overflow-x: hidden;
+        max-width: 100%;
+    }
+
+    .app {
+        overflow-x: hidden;
+        max-width: 100%;
+    }
+
+    /* All major wrappers */
+    .container {
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+
+    /* Hero card */
+    .hero-card {
+        max-width: 100%;
+        overflow: hidden;
+    }
+
+    .hero-content {
+        flex-wrap: wrap;
+    }
+
+    .hero-actions {
+        flex-wrap: wrap;
+        width: 100%;
+    }
+
+    .hero-stats-bar {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    /* Navbar stats — already wraps but ensure no overflow */
+    .navbar-stats {
+        max-width: 100%;
+        overflow: hidden;
+    }
+
+    .navbar-stat {
+        box-sizing: border-box;
+        min-width: 0;
+        flex: 1 1 45%;
+    }
+
+    /* Table card */
+    .table-card {
+        max-width: 100%;
+        overflow: hidden;
+    }
+
+    /* Table wrapper scrolls horizontally inside its container */
+    .table-wrapper {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        max-width: 100%;
+    }
+
+    /* Notification — fixed width can overflow */
+    .notification {
+        min-width: 0;
+        max-width: calc(100vw - 32px);
+        width: auto;
+        left: 16px;
+        right: 16px;
+    }
+
+    /* Dashboard grids */
+    .dashboard-primary-grid,
+    .analytics-grid,
+    .stats-grid {
+        grid-template-columns: 1fr;
+        max-width: 100%;
+    }
+
+    /* Any card */
+    .card, .stat-card, .progress-card, .filters-card {
+        max-width: 100%;
+        box-sizing: border-box;
+    }
 }
