@@ -3191,47 +3191,51 @@ function App() {
                 </span>
               </div>
               <div className="hero-actions">
-                <button
-                  className="btn-sync-lc"
-                  onClick={handleSyncLeetCode}
-                  disabled={syncing}
-                  title="Sync LeetCode + Codeforces (problems + contest stats)"
-                >
-                  {syncing ? (
-                    <><span className="sync-spinner">⟳</span> Syncing...</>
-                  ) : (
-                    <>🔄 Sync All</>
-                  )}
-                </button>
+                <div className="toolbar-primary">
+                  <button
+                    className="btn-sync-lc"
+                    onClick={handleSyncLeetCode}
+                    disabled={syncing}
+                    title="Sync LeetCode + Codeforces (problems + contest stats)"
+                  >
+                    {syncing ? (
+                      <><span className="sync-spinner">⟳</span> Syncing...</>
+                    ) : (
+                      <>🔄 Sync All</>
+                    )}
+                  </button>
 
-                <a href="https://leetcode.com/u/invisiblemanfromheart/" target="_blank" rel="noopener noreferrer" className="btn-profile">
-                  <span>LC Profile</span>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
-                  </svg>
-                </a>
+                  <a href="https://leetcode.com/u/invisiblemanfromheart/" target="_blank" rel="noopener noreferrer" className="btn-profile">
+                    <span>LC Profile</span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
+                    </svg>
+                  </a>
 
-                <a href="https://codeforces.com/profile/priyanshuguptacoder" target="_blank" rel="noopener noreferrer" className="btn-profile">
-                  <span>CF Profile</span>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
-                  </svg>
-                </a>
+                  <a href="https://codeforces.com/profile/priyanshuguptacoder" target="_blank" rel="noopener noreferrer" className="btn-profile">
+                    <span>CF Profile</span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
+                    </svg>
+                  </a>
+                </div>
 
-                <button
-                  className={`btn-admin-lock ${isAdminUnlocked ? 'unlocked' : 'locked'}`}
-                  onClick={() => isAdminUnlocked ? lockAdmin() : setShowAdminModal(true)}
-                  title={isAdminUnlocked ? 'Admin mode active — click to lock' : 'Click to unlock admin mode'}
-                >
-                  {isAdminUnlocked ? '🔓' : '🔒'}
-                </button>
-                <button
-                  className="theme-toggle"
-                  onClick={() => setDarkMode(prev => !prev)}
-                  title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-                >
-                  {darkMode ? '☀️' : '🌙'}
-                </button>
+                <div className="toolbar-utility">
+                  <button
+                    className={`btn-admin-lock ${isAdminUnlocked ? 'unlocked' : 'locked'}`}
+                    onClick={() => isAdminUnlocked ? lockAdmin() : setShowAdminModal(true)}
+                    title={isAdminUnlocked ? 'Admin mode active — click to lock' : 'Click to unlock admin mode'}
+                  >
+                    {isAdminUnlocked ? '🔓' : '🔒'}
+                  </button>
+                  <button
+                    className="theme-toggle"
+                    onClick={() => setDarkMode(prev => !prev)}
+                    title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                  >
+                    {darkMode ? '☀️' : '🌙'}
+                  </button>
+                </div>
               </div>
             </div>
             

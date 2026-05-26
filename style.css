@@ -239,49 +239,34 @@ body.light-mode .header p {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    background: linear-gradient(135deg, var(--primary), var(--accent-blue, #3b82f6));
-    color: white;
-    padding: 10px 14px;
-    border-radius: 8px;
+    gap: 5px;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    padding: 7px 12px;
+    border-radius: 6px;
     text-decoration: none;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
-    transition: transform 0.25s ease, box-shadow 0.25s ease, filter 0.25s ease;
-    border: none;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+    border: 1px solid var(--border);
     cursor: pointer;
     position: relative;
     overflow: hidden;
-    min-height: 44px;
+    min-height: 32px;
 }
 
 @media (min-width: 769px) {
     .btn-profile {
-        padding: 10px 18px;
-        font-size: 13px;
+        padding: 7px 14px;
+        font-size: 12px;
     }
 }
 
-/* Shine sweep on hover */
-.btn-profile::after {
-    content: '';
-    position: absolute;
-    top: 0; left: -75%;
-    width: 50%;
-    height: 100%;
-    background: linear-gradient(120deg, transparent, rgba(255,255,255,0.28), transparent);
-    transform: skewX(-20deg);
-    transition: left 0.5s ease;
-}
-
-.btn-profile:hover::after {
-    left: 130%;
-}
-
 .btn-profile:hover {
-    transform: translateY(-2px) scale(1.04);
-    box-shadow: 0 6px 20px rgba(34, 197, 94, 0.35);
-    filter: brightness(1.08);
+    transform: translateY(-1px);
+    background: rgba(99, 102, 241, 0.08);
+    border-color: rgba(99, 102, 241, 0.3);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .btn-profile:active {
@@ -293,31 +278,32 @@ body.light-mode .header p {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    background: var(--bg-tertiary);
+    gap: 5px;
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.12), rgba(99, 102, 241, 0.08));
     color: var(--text-primary);
-    padding: 9px 14px;
-    border-radius: 8px;
-    font-size: 12px;
-    font-weight: 600;
-    border: 1px solid var(--border);
+    padding: 7px 12px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    border: 1px solid rgba(34, 197, 94, 0.2);
     cursor: pointer;
-    transition: background 0.2s, border-color 0.2s, transform 0.15s;
+    transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
     white-space: nowrap;
-    min-height: 44px;
+    min-height: 32px;
 }
 
 @media (min-width: 769px) {
     .btn-sync-lc {
-        padding: 9px 16px;
-        font-size: 13px;
+        padding: 7px 14px;
+        font-size: 12px;
     }
 }
 
 .btn-sync-lc:hover:not(:disabled) {
-    background: var(--bg-secondary);
-    border-color: var(--primary);
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(99, 102, 241, 0.14));
+    border-color: rgba(34, 197, 94, 0.4);
     transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(34, 197, 94, 0.15);
 }
 .btn-sync-lc:disabled {
     opacity: 0.6;
@@ -360,21 +346,28 @@ body.light-mode .header p {
     background: var(--bg-tertiary);
     border: 1px solid var(--border);
     color: var(--text-primary);
-    padding: 10px 14px;
-    border-radius: 8px;
+    padding: 6px 8px;
+    border-radius: 6px;
     cursor: pointer;
-    font-size: 16px;
-    transition: background 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
+    font-size: 14px;
+    line-height: 1;
+    transition: background 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+    min-height: 32px;
+    min-width: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .theme-toggle:hover {
     background: var(--bg-secondary);
-    transform: translateY(-2px) scale(1.05);
-    box-shadow: var(--shadow-sm);
+    border-color: rgba(99, 102, 241, 0.25);
+    transform: translateY(-1px);
 }
 
 .theme-toggle:active {
-    animation: themeRotate 0.4s ease;
+    transform: scale(0.95);
+    transition: transform 0.1s ease;
 }
 
 @keyframes themeRotate {
@@ -7158,8 +7151,111 @@ tr.highlight-row,
 .hero-actions {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
     flex-wrap: wrap;
+}
+
+/* Toolbar Groups */
+.toolbar-primary {
+    display: flex;
+    align-items: center;
+    gap: 1px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 3px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+}
+
+.toolbar-primary .btn-sync-lc,
+.toolbar-primary .btn-profile {
+    border: none;
+    border-radius: 5px;
+    background: transparent;
+    min-height: 30px;
+}
+
+.toolbar-primary .btn-sync-lc {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(99, 102, 241, 0.1));
+}
+
+.toolbar-primary .btn-sync-lc:hover:not(:disabled) {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.25), rgba(99, 102, 241, 0.18));
+    border: none;
+    box-shadow: none;
+}
+
+.toolbar-primary .btn-profile:hover {
+    background: rgba(99, 102, 241, 0.1);
+    border: none;
+    box-shadow: none;
+}
+
+.toolbar-utility {
+    display: flex;
+    align-items: center;
+    gap: 1px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 3px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.toolbar-utility .btn-admin-lock,
+.toolbar-utility .theme-toggle {
+    border: none;
+    border-radius: 5px;
+    min-height: 30px;
+    min-width: 30px;
+    padding: 5px 7px;
+    font-size: 13px;
+}
+
+.toolbar-utility .btn-admin-lock.locked {
+    background: transparent;
+    border: none;
+}
+
+.toolbar-utility .btn-admin-lock.locked:hover {
+    background: rgba(239, 68, 68, 0.1);
+    box-shadow: none;
+    transform: none;
+}
+
+.toolbar-utility .btn-admin-lock.unlocked {
+    background: rgba(34, 197, 94, 0.08);
+    border: none;
+}
+
+.toolbar-utility .btn-admin-lock.unlocked:hover {
+    background: rgba(239, 68, 68, 0.08);
+    box-shadow: none;
+    transform: none;
+}
+
+.toolbar-utility .theme-toggle {
+    background: transparent;
+    border: none;
+}
+
+.toolbar-utility .theme-toggle:hover {
+    background: rgba(99, 102, 241, 0.08);
+    border: none;
+}
+
+@media (max-width: 768px) {
+    .hero-actions {
+        width: 100%;
+    }
+    .toolbar-primary {
+        flex: 1;
+    }
+    .toolbar-primary .btn-sync-lc,
+    .toolbar-primary .btn-profile {
+        flex: 1;
+        justify-content: center;
+    }
 }
 
 .hero-stats-bar {
