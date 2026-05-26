@@ -44,7 +44,13 @@ function getContestType(contestName) {
   if (!contestName || typeof contestName !== 'string') return null;
   const name = contestName.toLowerCase();
 
-  if (name.includes('gym') || name.includes('mashup') || name.includes('april fools') || name.includes('unknown')) {
+  if (
+    name.includes('gym') ||
+    name.includes('mashup') ||
+    name.includes('april fools') ||
+    name.includes('unknown contest') ||
+    name.trim() === 'unknown'
+  ) {
     return null;
   }
 
@@ -84,8 +90,9 @@ function estimateRating(problem) {
     return null;
   }
 
-  const indexKey = (problem?.index || '').toString().trim().charAt(0).toUpperCase();
-  if (!indexKey) return null;
+  const trimmedIndex = (problem?.index || '').toString().trim();
+  if (!trimmedIndex) return null;
+  const indexKey = trimmedIndex.charAt(0).toUpperCase();
 
   return ESTIMATED_RATINGS[contestType]?.[indexKey] ?? null;
 }
