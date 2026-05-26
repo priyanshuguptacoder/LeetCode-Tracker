@@ -3,6 +3,53 @@ const { useState, useEffect, useRef } = React;
 // ============================================
 // COUNT-UP HOOK — animates 0 → target value
 // ============================================
+
+// ============================================
+// PREMIUM INTERACTIONS HOOK
+// ============================================
+function usePremiumInteractions() {
+  React.useEffect(() => {
+    // Mouse tracking for glow effect
+    const handleMouseMove = (e) => {
+      const cards = document.querySelectorAll('.interactive-card');
+      cards.forEach(card => {
+        const rect = card.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        card.style.setProperty('--mouse-x', `${x}px`);
+        card.style.setProperty('--mouse-y', `${y}px`);
+      });
+    };
+    
+    // Intersection Observer for reveal animations
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-revealed');
+          // Optional: stop observing once revealed
+          // observer.unobserve(entry.target);
+        }
+      });
+    }, {
+      threshold: 0.1,
+      rootMargin: "0px 0px -50px 0px"
+    });
+    
+    document.addEventListener('mousemove', handleMouseMove);
+    
+    // Slight delay to allow DOM to render before observing
+    setTimeout(() => {
+      const revealElements = document.querySelectorAll('.reveal-on-scroll');
+      revealElements.forEach(el => observer.observe(el));
+    }, 100);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      observer.disconnect();
+    };
+  }, []);
+}
+
 function useCountUp(target, duration = 1200, enabled = true) {
   const [value, setValue] = React.useState(0);
   const rafRef = React.useRef(null);
@@ -883,6 +930,7 @@ function ContestStats({ stats }) {
 }
 
 function App() {
+  usePremiumInteractions();
   // ============================================
   // API DATA FETCHING
   // Backend is the SINGLE SOURCE OF TRUTH for all problem data.
@@ -3164,7 +3212,7 @@ function App() {
 
         <div className="container">
           {/* Unified Hero Section */}
-          <div className="hero-card fade-up">
+          <div className="hero-card fade-up interactive-card reveal-on-scroll">
             <div className="hero-content">
               <div className="hero-profile">
                 <h1>Priyanshu Gupta</h1>
@@ -3246,7 +3294,8 @@ function App() {
 
           {/* Streak & Monthly Stats */}
           <div className="streak-monthly-grid fade-up fade-up-2">
-            <div className="streak-card">
+            <div className="streak-card interactive-card reveal-on-scroll">
+      <div className="interactive-glow"></div>
               <div className="streak-header">
                 <h3 className="card-title">🔥 Streak Stats</h3>
               </div>
