@@ -6392,12 +6392,18 @@ body.light-mode .btn-tle.active { background: rgba(217, 119, 6, 0.12); border-co
     height: 3px;
     background: linear-gradient(90deg, #3b82f6, #6366f1);
     border-radius: 16px 16px 0 0;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+}
+
+.striver-card:hover::before {
+    opacity: 1;
 }
 
 .striver-card:hover {
-    transform: translateY(-4px);
+    transform: translateY(-2px);
     box-shadow: var(--shadow-md);
-    border-color: rgba(59, 130, 246, 0.3);
+    border-color: rgba(59, 130, 246, 0.2);
 }
 
 .striver-stats {
@@ -7211,18 +7217,17 @@ tr.highlight-row,
 
 .striver-stat-row.clickable {
     cursor: pointer;
-    transition: background-color 0.2s ease, transform 0.2s ease;
-    border-radius: 8px;
-    padding: 6px 8px;
-    margin: -6px -8px;
+    transition: background-color 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
 }
 
 .striver-stat-row.clickable:hover {
-    background-color: var(--hover-bg);
+    background: rgba(59, 130, 246, 0.08);
+    border-color: rgba(59, 130, 246, 0.25);
 }
 
 .striver-stat-row.active-filter {
-    background-color: var(--border);
+    background: rgba(59, 130, 246, 0.1);
+    border-color: rgba(59, 130, 246, 0.3);
     transform: scale(1.02);
 }
 
