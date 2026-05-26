@@ -4834,7 +4834,7 @@ function syncStickyOffsets() {
     return;
   }
   const appHeader = document.querySelector('.header');
-  const tableHeader = document.querySelector('.table-header');
+  const tableHeader = document.querySelector('.table-toolbar');
   if (appHeader) {
     document.documentElement.style.setProperty('--app-header-height', appHeader.offsetHeight + 'px');
   }
