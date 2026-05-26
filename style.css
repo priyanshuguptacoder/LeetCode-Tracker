@@ -1753,30 +1753,6 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
 
 @media (max-width: 768px) {
     .hide-mobile { display: none; }
-    .table-toolbar {
-        flex-wrap: wrap;
-        padding: 12px 16px;
-        gap: 10px;
-    }
-    .table-toolbar-left {
-        flex: 1 1 auto;
-        min-width: 0;
-    }
-    .table-toolbar-right {
-        flex-direction: row;
-        flex-wrap: wrap;
-        align-items: center;
-        width: 100%;
-        gap: 8px;
-    }
-    .toolbar-search {
-        flex: 1 1 auto;
-        min-width: 0;
-    }
-    .toolbar-search input { width: 100%; }
-    .toolbar-filters { flex-wrap: wrap; height: auto; padding: 6px; gap: 8px; width: 100%; }
-    .toolbar-select { padding: 6px 22px 6px 8px; }
-    .toolbar-divider { display: none; }
 }
 
 .table-count.count-update {
@@ -7279,73 +7255,169 @@ body.light-mode .monthly-planner {
 }
 
 /* ============================================
-   MOBILE OVERFLOW FIX — prevent horizontal scroll
-   DESKTOP: untouched
+   MOBILE LAYOUT — compact, section-based
+   DESKTOP: completely untouched
    ============================================ */
 @media (max-width: 768px) {
-    /* Global overflow containment */
+
+    /* ── Global overflow containment ── */
     html, body {
         overflow-x: hidden;
         max-width: 100%;
     }
-
     .app {
         overflow-x: hidden;
         max-width: 100%;
     }
-
-    /* All major wrappers */
     .container {
         max-width: 100%;
         box-sizing: border-box;
+        padding: 12px;
     }
 
-    /* Hero card */
+    /* ── Hero card ── */
     .hero-card {
         max-width: 100%;
         overflow: hidden;
+        padding: 14px 14px 12px;
+        gap: 12px;
+        margin-bottom: 14px;
     }
 
+    /* Profile + actions row: stack vertically */
     .hero-content {
-        flex-wrap: wrap;
+        flex-direction: column;
+        flex-wrap: nowrap;
+        gap: 10px;
     }
 
+    .hero-profile h1 {
+        font-size: 1.25rem;
+    }
+
+    /* Action buttons: wrap into a tight row */
     .hero-actions {
+        display: flex;
         flex-wrap: wrap;
+        gap: 8px;
         width: 100%;
     }
+    .hero-actions .btn-sync-lc,
+    .hero-actions .btn-profile {
+        flex: 1 1 auto;
+        min-width: 0;
+        font-size: 12px;
+        padding: 8px 10px;
+    }
+    .hero-actions .btn-admin-lock,
+    .hero-actions .theme-toggle {
+        flex: 0 0 auto;
+    }
 
+    /* ── Hero stats bar → 2×2 grid ── */
     .hero-stats-bar {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1px;
+        padding-top: 10px;
+        border-top: 1px solid var(--border);
+    }
+
+    /* Hide the vertical dividers between stats */
+    .hero-stats-bar .navbar-stat-divider {
+        display: none;
+    }
+
+    /* Each stat card: compact, centered */
+    .hero-stats-bar .navbar-stat {
+        flex: unset;
+        padding: 10px 8px;
+        min-width: 0;
+        box-sizing: border-box;
+        border-radius: 8px;
+    }
+
+    .hero-stats-bar .navbar-stat-value {
+        font-size: 1.3rem;
+    }
+
+    .hero-stats-bar .navbar-stat-label {
+        font-size: 0.58rem;
+    }
+
+    /* ── Problem list toolbar on mobile ── */
+    .table-toolbar {
+        position: relative; /* remove sticky on mobile — stays in section */
         flex-wrap: wrap;
+        padding: 10px 12px;
         gap: 8px;
     }
 
-    /* Navbar stats — already wraps but ensure no overflow */
-    .navbar-stats {
-        max-width: 100%;
-        overflow: hidden;
-    }
-
-    .navbar-stat {
-        box-sizing: border-box;
+    /* Title row: full width */
+    .table-toolbar-left {
+        flex: 1 1 100%;
         min-width: 0;
-        flex: 1 1 45%;
+    }
+    .table-toolbar-left h3 {
+        font-size: 14px;
+    }
+    .table-toolbar-subtitle {
+        font-size: 11px;
     }
 
-    /* Table card */
+    /* Controls row: search + filters on one compact row */
+    .table-toolbar-right {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        width: 100%;
+        gap: 6px;
+    }
+
+    /* Search: takes available space */
+    .toolbar-search {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+    .toolbar-search input {
+        width: 100%;
+        font-size: 12px;
+        padding: 0 10px 0 28px;
+    }
+
+    /* Filters: compact pill row */
+    .toolbar-filters {
+        flex-wrap: wrap;
+        height: auto;
+        padding: 4px 6px;
+        gap: 4px;
+        width: 100%;
+    }
+    .toolbar-select {
+        padding: 4px 18px 4px 6px;
+        font-size: 11px;
+        flex: 1 1 auto;
+    }
+    .toolbar-divider {
+        display: none;
+    }
+
+    /* ── Table card ── */
     .table-card {
         max-width: 100%;
         overflow: hidden;
+        margin-top: 14px;
+        margin-bottom: 14px;
     }
 
-    /* Table wrapper scrolls horizontally inside its container */
+    /* Table scrolls horizontally inside its wrapper */
     .table-wrapper {
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
         max-width: 100%;
     }
 
-    /* Notification — fixed width can overflow */
+    /* ── Notification ── */
     .notification {
         min-width: 0;
         max-width: calc(100vw - 32px);
@@ -7354,17 +7426,24 @@ body.light-mode .monthly-planner {
         right: 16px;
     }
 
-    /* Dashboard grids */
+    /* ── Dashboard grids: single column ── */
     .dashboard-primary-grid,
     .analytics-grid,
     .stats-grid {
         grid-template-columns: 1fr;
         max-width: 100%;
+        gap: 12px;
     }
 
-    /* Any card */
+    /* ── Generic cards ── */
     .card, .stat-card, .progress-card, .filters-card {
         max-width: 100%;
         box-sizing: border-box;
+    }
+
+    /* ── Tighter section spacing ── */
+    .dashboard-single-card,
+    .analytics-chart-container {
+        margin-bottom: 14px;
     }
 }
