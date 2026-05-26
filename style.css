@@ -1591,7 +1591,7 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
     flex-direction: column;
     justify-content: center;
     gap: 4px;
-    flex: 1 1 200px;
+    flex: 0 0 auto;
 }
 
 .table-toolbar-left h3 {
