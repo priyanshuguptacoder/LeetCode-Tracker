@@ -4216,88 +4216,81 @@ function App() {
             ))}
           </div>
 
-          <div className="filters-card">
-            <div className="filters-grid">
-              <div className="filter-group">
-                <label>Search</label>
-                <div className="search-input-wrapper">
+                    <div className="table-card">
+            <div className="table-toolbar" ref={tableHeaderRef}>
+              <div className="table-toolbar-left">
+                <h3>Problem List</h3>
+                <span className="table-toolbar-subtitle">Track, revise and manage solved problems</span>
+              </div>
+              
+              <div className="table-toolbar-right">
+                <div className="toolbar-search">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                   <input
                     type="text"
-                    placeholder="Search name, #ID, difficulty..."
+                    placeholder="Search problems..."
                     value={searchTerm}
                     onChange={(e) => handleSearchChange(e.target.value)}
-                    className="filter-input"
                   />
                 </div>
-              </div>
-              <div className="filter-group">
-                <label>Difficulty</label>
-                <select
-                  value={difficultyFilter}
-                  onChange={(e) => setDifficultyFilter(e.target.value)}
-                  className={`filter-select${difficultyFilter !== 'All' ? ' filter-active' : ''}`}
-                >
-                  <option>All</option>
-                  <option>Easy</option>
-                  <option>Medium</option>
-                  <option>Hard</option>
-                </select>
-              </div>
-              <div className="filter-group">
-                <label>Pattern</label>
-                <select
-                  value={patternFilter}
-                  onChange={(e) => setPatternFilter(e.target.value)}
-                  className={`filter-select${patternFilter !== 'All' ? ' filter-active' : ''}`}
-                >
-                  {patterns.map(pattern => (
-                    <option key={pattern}>{pattern}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="filter-group">
-                <label>Status</label>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className={`filter-select${statusFilter !== 'All' ? ' filter-active' : ''}`}
-                >
-                  <option>All</option>
-                  <option>Not Started</option>
-                  <option>In Progress</option>
-                  <option>Done</option>
-                  <option>Targeted</option>
-                  <option>Striver</option>
-                  <option>TLE</option>
-                </select>
-              </div>
-              {(searchTerm || difficultyFilter !== 'All' || patternFilter !== 'All' || statusFilter !== 'All' || selectedFilter !== null || platformFilter !== 'LC') && (
-                <div className="filter-group filter-clear-group">
-                  <label>&nbsp;</label>
-                  <button
-                    className="btn-clear-filters"
-                    onClick={handleClearAllFilters}
-                    title="Clear all filters (ESC)"
+                
+                <div className="toolbar-filters">
+                  <select
+                    value={difficultyFilter}
+                    onChange={(e) => setDifficultyFilter(e.target.value)}
+                    className={`toolbar-select${difficultyFilter !== 'All' ? ' active' : ''}`}
                   >
-                    ✕ Clear
-                  </button>
+                    <option value="All">Difficulty</option>
+                    <option value="Easy">Easy</option>
+                    <option value="Medium">Medium</option>
+                    <option value="Hard">Hard</option>
+                  </select>
+                  
+                  <select
+                    value={patternFilter}
+                    onChange={(e) => setPatternFilter(e.target.value)}
+                    className={`toolbar-select${patternFilter !== 'All' ? ' active' : ''}`}
+                  >
+                    <option value="All">All Topics</option>
+                    {patterns.map(pattern => (
+                      <option key={pattern} value={pattern}>{pattern}</option>
+                    ))}
+                  </select>
+                  
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className={`toolbar-select${statusFilter !== 'All' ? ' active' : ''}`}
+                  >
+                    <option value="All">Status</option>
+                    <option value="Not Started">Not Started</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Done">Done</option>
+                    <option value="Targeted">Targeted</option>
+                    <option value="Striver">Striver</option>
+                    <option value="TLE">TLE</option>
+                  </select>
+                  
+                  {(searchTerm || difficultyFilter !== 'All' || patternFilter !== 'All' || statusFilter !== 'All' || selectedFilter !== null || platformFilter !== 'LC') && (
+                    <button
+                      className="toolbar-clear-btn"
+                      onClick={handleClearAllFilters}
+                      title="Clear filters"
+                    >
+                      ✕
+                    </button>
+                  )}
                 </div>
-              )}
-            </div>
-          </div>
-
-          {/* Problem List — desktop table + mobile cards */}
-          <div className="table-card">
-            <div className="table-header" ref={tableHeaderRef}>
-              <h3>Problem List</h3>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {selectedFilter && (
-                  <span className={`diff-active-badge diff-active-${selectedFilter}`}>
-                    {selectedFilter === 'solved' ? 'All Solved' : selectedFilter.charAt(0).toUpperCase() + selectedFilter.slice(1)} only
-                    <button className="diff-active-clear" onClick={() => setSelectedFilter(null)}>✕</button>
-                  </span>
-                )}
-                <span className="table-count">{filteredProblems.length} problems</span>
+                
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {selectedFilter && (
+                    <span className={`diff-active-badge diff-active-${selectedFilter}`}>
+                      {selectedFilter === 'solved' ? 'All Solved' : selectedFilter.charAt(0).toUpperCase() + selectedFilter.slice(1)} only
+                      <button className="diff-active-clear" onClick={() => setSelectedFilter(null)}>✕</button>
+                    </span>
+                  )}
+                  <span className="table-count">{filteredProblems.length}</span>
+                </div>
               </div>
             </div>
 
