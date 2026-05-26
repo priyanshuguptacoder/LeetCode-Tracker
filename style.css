@@ -1561,7 +1561,7 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
    PREMIUM TABLE TOOLBAR
    ============================================ */
 .table-toolbar {
-    padding: 20px 24px;
+    padding: 14px 24px;
     border-bottom: 1px solid var(--border);
     display: flex;
     justify-content: space-between;
@@ -1574,7 +1574,7 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
     z-index: 20;
     transition: box-shadow 0.3s ease, background 0.3s ease, padding 0.3s ease;
     gap: 16px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
 }
 
 .table-toolbar.scrolled-header {
@@ -1590,8 +1590,10 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
     display: flex;
     flex-direction: column;
     justify-content: center;
-    gap: 4px;
+    align-self: center;
+    gap: 3px;
     flex: 0 0 auto;
+    width: fit-content;
 }
 
 .table-toolbar-left h3 {
@@ -1600,6 +1602,7 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
     color: var(--text-primary);
     margin: 0;
     line-height: 1.2;
+    white-space: nowrap;
 }
 
 .table-toolbar-subtitle {
@@ -1607,14 +1610,16 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
     color: var(--text-secondary);
     font-weight: 500;
     letter-spacing: 0.2px;
+    white-space: nowrap;
 }
 
 .table-toolbar-right {
     display: flex;
     align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
+    gap: 10px;
+    flex-wrap: nowrap;
     flex: 0 0 auto;
+    align-self: center;
 }
 
 /* Toolbar Search */
