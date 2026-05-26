@@ -1573,7 +1573,7 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
     top: 0;
     z-index: 20;
     transition: box-shadow 0.3s ease, background 0.3s ease, padding 0.3s ease;
-    gap: 24px;
+    gap: 16px;
     flex-wrap: wrap;
 }
 
@@ -1615,6 +1615,7 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
     gap: 12px;
     flex-wrap: wrap;
     flex: 0 0 auto;
+    margin-left: auto;
 }
 
 /* Toolbar Search */
