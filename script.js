@@ -4280,19 +4280,22 @@ function App() {
                       ✕
                     </button>
                   )}
-                </div>
-                
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  {selectedFilter && (
-                    <span className={`diff-active-badge diff-active-${selectedFilter}`}>
-                      {selectedFilter === 'solved' ? 'All Solved' : selectedFilter.charAt(0).toUpperCase() + selectedFilter.slice(1)} only
-                      <button className="diff-active-clear" onClick={() => setSelectedFilter(null)}>✕</button>
-                    </span>
-                  )}
-                  <span className="table-count">{filteredProblems.length}</span>
+                  
+                  <div className="toolbar-divider"></div>
+                  <span className="table-count">{filteredProblems.length} <span className="hide-mobile">Problems</span></span>
                 </div>
               </div>
             </div>
+            
+            {/* Active Chart Filter indicator (if any) */}
+            {selectedFilter && (
+              <div style={{ padding: '0 24px 12px 24px' }}>
+                <span className={`diff-active-badge diff-active-${selectedFilter}`}>
+                  {selectedFilter === 'solved' ? 'All Solved' : selectedFilter.charAt(0).toUpperCase() + selectedFilter.slice(1)} only
+                  <button className="diff-active-clear" onClick={() => setSelectedFilter(null)}>✕</button>
+                </span>
+              </div>
+            )}
 
             {/* ── DESKTOP TABLE ── */}
             <div className="table-wrapper">
