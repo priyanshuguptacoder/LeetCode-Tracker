@@ -95,7 +95,8 @@ body.light-mode {
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
     border-bottom: 1px solid var(--border);
-    position: relative;
+    position: sticky;
+    top: 0;
     
     z-index: 100;
     transition: box-shadow 0.3s ease, background 0.3s ease;
@@ -104,7 +105,8 @@ body.light-mode {
 /* On mobile: not sticky (saves screen space) */
 @media (max-width: 768px) {
     .header {
-        position: relative;
+        position: sticky;
+    top: 0;
     }
     .table-header {
         position: relative;
@@ -1552,16 +1554,23 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
     border-radius: 16px;
     overflow: visible;
     box-shadow: var(--shadow-sm);
+    --toolbar-height: 81px;
     margin-bottom: 24px;
     margin-top: 32px;
     animation: filterCardEntry 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.08s forwards;
+}
+
+.table-card.is-scrolled {
+    --toolbar-height: 69px;
 }
 
 /* ============================================
    PREMIUM TABLE TOOLBAR
    ============================================ */
 .table-toolbar {
-    padding: 20px 24px;
+    height: var(--toolbar-height);
+    padding: 0 24px;
+    box-sizing: border-box;
     border-bottom: 1px solid var(--border);
     display: flex;
     justify-content: space-between;
@@ -1570,7 +1579,7 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     position: sticky;
-    top: 0;
+    top: var(--app-header-height, 65px);
     z-index: 20;
     transition: box-shadow 0.3s ease, background 0.3s ease, padding 0.3s ease;
     gap: 24px;
@@ -1583,7 +1592,7 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
     border-bottom-color: rgba(99, 102, 241, 0.2);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
-    padding: 14px 24px;
+    padding: 0 24px;
 }
 
 .table-toolbar-left {
@@ -1797,7 +1806,8 @@ body.light-mode .navbar-stat-targeted .navbar-stat-value {
     border-bottom: 1px solid var(--border);
     white-space: nowrap;
     position: sticky;
-    top: var(--table-header-height);
+    top: calc(var(--app-header-height, 65px) + var(--toolbar-height));
+    transition: top 0.3s ease;
     z-index: 12;
     background: var(--bg-tertiary);
 }
@@ -2579,6 +2589,11 @@ body.light-mode .table-card {
     background: #FFFFFF;
     border-color: #E5E7EB;
     box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+    --toolbar-height: 81px;
+}
+
+.table-card.is-scrolled {
+    --toolbar-height: 69px;
 }
 
 body.light-mode .analytics-card:hover,
