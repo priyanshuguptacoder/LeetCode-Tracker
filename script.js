@@ -717,10 +717,12 @@ function ProgressDistributionCard({
 
 // ============================================
 // SOLVED ACTIVITY CHART
-// Uses Recharts to show last 30 days activity
+// Uses Chart.js to show last 30 days activity
 // ============================================
 function SolvedActivityChart({ allProblems }) {
   const [data, setData] = useState([]);
+  const canvasRef = useRef(null);
+  const chartRef = useRef(null);
 
   useEffect(() => {
     if (!allProblems || allProblems.length === 0) return;
@@ -729,52 +731,113 @@ function SolvedActivityChart({ allProblems }) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const chartData = [];
+    const labels = [];
     
     for (let i = 29; i >= 0; i--) {
       const d = new Date(today);
       d.setDate(d.getDate() - i);
       const dateStr = d.toISOString().split('T')[0];
       const shortDate = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      chartData.push({ date: dateStr, displayDate: shortDate, solved: 0 });
+      chartData.push(0);
+      labels.push(shortDate);
     }
 
     allProblems.forEach(p => {
       if (p.status === 'Done' && p._solvedDateISO) {
         const dStr = p._solvedDateISO.split('T')[0];
-        const point = chartData.find(c => c.date === dStr);
-        if (point) point.solved += 1;
+        const idx = Array.from({ length: 30 }, (_, i) => {
+          const d = new Date(today);
+          d.setDate(d.getDate() - (29 - i));
+          return d.toISOString().split('T')[0];
+        }).indexOf(dStr);
+        if (idx !== -1) chartData[idx] += 1;
       }
     });
 
-    setData(chartData);
+    setData({ labels, values: chartData });
   }, [allProblems]);
 
-  if (!window.Recharts) return null;
-  const { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } = window.Recharts;
+  useEffect(() => {
+    if (!data.labels || !window.Chart) return;
+
+    // Destroy existing chart
+    if (chartRef.current) {
+      chartRef.current.destroy();
+    }
+
+    if (!canvasRef.current) return;
+
+    const ctx = canvasRef.current.getContext('2d');
+    const gradient = ctx.createLinearGradient(0, 0, 0, 200);
+    gradient.addColorStop(0, 'rgba(99, 102, 241, 0.3)');
+    gradient.addColorStop(1, 'rgba(99, 102, 241, 0)');
+
+    chartRef.current = new window.Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: data.labels,
+        datasets: [{
+          label: 'Problems Solved',
+          data: data.values,
+          borderColor: '#6366f1',
+          backgroundColor: gradient,
+          borderWidth: 3,
+          fill: true,
+          tension: 0.4,
+          pointRadius: 4,
+          pointBackgroundColor: '#6366f1',
+          pointBorderColor: '#1f2937',
+          pointBorderWidth: 2,
+          pointHoverRadius: 6,
+          pointHoverBackgroundColor: '#6366f1',
+          pointHoverBorderWidth: 3,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: false
+          },
+          tooltip: {
+            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+            titleColor: '#e5e7eb',
+            bodyColor: '#6366f1',
+            borderColor: 'rgba(99, 102, 241, 0.3)',
+            borderWidth: 1,
+            titleFont: { size: 13, weight: 600 },
+            bodyFont: { size: 15, weight: 700 },
+            padding: 10,
+            displayColors: false,
+            callbacks: {
+              label: function(context) {
+                return 'Solved: ' + context.parsed.y;
+              }
+            }
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: { color: '#9ca3af', font: { size: 11, weight: 500 }, maxTicksLimit: 5 },
+            grid: { color: 'rgba(107, 114, 128, 0.1)', drawBorder: false },
+            max: Math.max(...data.values) + 2
+          },
+          x: {
+            ticks: { color: '#9ca3af', font: { size: 11, weight: 500 } },
+            grid: { display: false, drawBorder: false }
+          }
+        }
+      }
+    });
+  }, [data]);
 
   return (
     <div className="analytics-card activity-chart-card fade-up fade-up-3">
       <h3 className="card-title chart-title">📈 30-Day Activity Trend</h3>
       <div className="chart-wrapper" style={{ width: '100%', height: 220 }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
-            <defs>
-              <linearGradient id="colorSolved" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2}/>
-                <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="var(--border)" opacity={0.4} />
-            <XAxis dataKey="displayDate" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#9ca3af', fontWeight: 500 }} minTickGap={20} />
-            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#9ca3af', fontWeight: 500 }} allowDecimals={false} />
-            <Tooltip 
-              contentStyle={{ backgroundColor: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '12px', color: 'var(--text-primary)', boxShadow: '0 8px 24px rgba(0,0,0,0.15)', padding: '10px 14px' }}
-              itemStyle={{ color: '#6366f1', fontWeight: 700, fontSize: '15px' }}
-              labelStyle={{ color: '#9ca3af', marginBottom: '6px', fontSize: '13px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}
-            />
-            <Area type="monotone" dataKey="solved" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorSolved)" activeDot={{ r: 6, fill: '#6366f1', stroke: 'var(--card-bg)', strokeWidth: 3 }} />
-          </AreaChart>
-        </ResponsiveContainer>
+        <canvas ref={canvasRef} style={{ maxHeight: '220px' }}></canvas>
       </div>
     </div>
   );
