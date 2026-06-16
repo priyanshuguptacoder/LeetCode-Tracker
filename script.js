@@ -1,3 +1,4 @@
+/** @jsxRuntime classic */
 const { useState, useEffect, useRef } = React;
 
 // ============================================
@@ -4919,4 +4920,3 @@ function setupStickyObserver() {
 }
 document.addEventListener('DOMContentLoaded', setupStickyObserver);
 setupStickyObserver();
-
