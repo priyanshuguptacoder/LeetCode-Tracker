@@ -30,8 +30,19 @@ function useCountUp(target, duration = 1200, enabled = true) {
 }
 
 // ============================================
-// STAT CARD — animated number + icon accent
+// KPI CARD — animated number tile
 // ============================================
+function KpiCard({ value, label, sub, icon, colorClass, isReady }) {
+  const animated = useCountUp(value, 1000, isReady);
+  return (
+    <div className={`kpi-card ${colorClass}`}>
+      <span className="kpi-icon">{icon}</span>
+      <div className="kpi-value">{animated}</div>
+      <div className="kpi-label">{label}</div>
+      {sub && <div className="kpi-sub">{sub}</div>}
+    </div>
+  );
+}
 function StatCard({ value, label, icon, gradient, delay = 0, isReady }) {
   const animated = useCountUp(value, 1200, isReady);
   return (
@@ -3243,196 +3254,226 @@ function App() {
         </div>
 
         <div className="container">
-          {/* Unified Hero Section */}
-          <div className="hero-card fade-up">
-            <div className="hero-content">
-              <div className="hero-profile">
-                <h1>Priyanshu Gupta</h1>
-                <p className="subtitle">Your Personal DSA Growth Engine</p>
-                <span className={`sync-status ${syncStatus}`}>
-                  {syncStatus === 'checking' ? '⏳ Checking' : syncStatus === 'ok' ? '🟢 Active' : '🔴 Expired'}
-                </span>
+          {/* ── Row 0: Hero ── */}
+          <div className="hero-card-v2 fade-up">
+            <div className="hero-top-row">
+              <div className="hero-identity">
+                <h1 className="hero-name">Priyanshu Gupta</h1>
+                <div className="hero-tagline">
+                  <span>DSA Performance Engine</span>
+                  <span className={`sync-status ${syncStatus}`}>
+                    {syncStatus === 'checking' ? '⏳ Syncing' : syncStatus === 'ok' ? '🟢 Active' : '🔴 Expired'}
+                  </span>
+                </div>
               </div>
-              <div className="hero-actions">
+              <div className="hero-actions-v2">
                 <button
                   className="btn-sync-lc"
                   onClick={handleSyncLeetCode}
                   disabled={syncing}
-                  title="Sync LeetCode + Codeforces (problems + contest stats)"
+                  title="Sync LeetCode + Codeforces"
                 >
-                  {syncing ? (
-                    <><span className="sync-spinner">⟳</span> Syncing...</>
-                  ) : (
-                    <>🔄 Sync All</>
-                  )}
+                  {syncing ? <><span className="sync-spinner">⟳</span> Syncing...</> : <>🔄 Sync All</>}
                 </button>
-
                 <a href="https://leetcode.com/u/invisiblemanfromheart/" target="_blank" rel="noopener noreferrer" className="btn-profile">
-                  <span>LC Profile</span>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
-                  </svg>
+                  <span>LC</span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" /></svg>
                 </a>
-
                 <a href="https://codeforces.com/profile/priyanshuguptacoder" target="_blank" rel="noopener noreferrer" className="btn-profile">
-                  <span>CF Profile</span>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
-                  </svg>
+                  <span>CF</span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" /></svg>
                 </a>
-
-                <button
-                  className={`btn-admin-lock ${isAdminUnlocked ? 'unlocked' : 'locked'}`}
-                  onClick={() => isAdminUnlocked ? lockAdmin() : setShowAdminModal(true)}
-                  title={isAdminUnlocked ? 'Admin mode active — click to lock' : 'Click to unlock admin mode'}
-                >
+                <button className={`btn-admin-lock ${isAdminUnlocked ? 'unlocked' : 'locked'}`} onClick={() => isAdminUnlocked ? lockAdmin() : setShowAdminModal(true)} title={isAdminUnlocked ? 'Admin active' : 'Unlock admin'}>
                   {isAdminUnlocked ? '🔓' : '🔒'}
                 </button>
-                <button
-                  className="theme-toggle"
-                  onClick={() => setDarkMode(prev => !prev)}
-                  title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-                >
+                <button className="theme-toggle" onClick={() => setDarkMode(prev => !prev)} title={darkMode ? 'Light mode' : 'Dark mode'}>
                   {darkMode ? '☀️' : '🌙'}
                 </button>
               </div>
             </div>
-            
-            <div className="hero-stats-bar">
-              <StatCard value={totalSolved} label="Total Solved" icon="✅" delay={0.05} isReady={statsReady} />
-              <div className="navbar-stat-divider" />
-              <StatCard value={displayActiveDays} label="Active Days" icon="📅" delay={0.10} isReady={statsReady} />
-              <div className="navbar-stat-divider" />
-              <StatCard value={lcSolved} label="LeetCode" icon="💻" delay={0.15} isReady={statsReady} />
-              <div className="navbar-stat-divider" />
-              <StatCard value={cfSolved} label="Codeforces" icon="🏆" delay={0.20} isReady={statsReady} />
-            </div>
           </div>
 
-          {/* Primary Dashboard Grid: Distribution */}
-          <div className="dashboard-single-card fade-up fade-up-2">
-            <ProgressDistributionCard
-              title="Overall Problem Distribution"
-              icon="📊"
-              easyCount={easyCount}
-              mediumCount={mediumCount}
-              hardCount={hardCount}
-              totalCount={totalSolved}
-              onFilterChange={setSelectedFilter}
-              selectedFilter={selectedFilter}
-              trend={thisWeekTrend}
-            />
+          {/* ── Row 1: KPI Cards ── */}
+          <div className="kpi-row fade-up fade-up-1">
+            <KpiCard value={totalSolved} label="Total Solved" icon="✅" colorClass="kpi-card-total" sub={`${lcSolved} LC · ${cfSolved} CF`} isReady={statsReady} />
+            <KpiCard value={displayCurrentStreak} label="Day Streak" icon="🔥" colorClass="kpi-card-streak" sub={`Best: ${displayMaxStreak}d`} isReady={statsReady} />
+            <KpiCard value={displayActiveDays} label="Active Days" icon="📅" colorClass="kpi-card-active" sub={`${consistencyScore?.score ?? 0}% consistency`} isReady={statsReady} />
+            <KpiCard value={intelligentRevision ? intelligentRevision.length : 0} label="Due Revision" icon="🔁" colorClass="kpi-card-revision" sub={`${dailyRevisionCount}/${DAILY_REVISION_LIMIT} done today`} isReady={statsReady} />
           </div>
 
-          {/* Streak & Monthly Stats */}
-          <div className="streak-monthly-grid fade-up fade-up-2">
-            <div className="streak-card">
-              <div className="streak-header">
-                <h3 className="card-title">🔥 Streak Stats</h3>
-              </div>
-              {/* Streak stats — read-only display, values come from DB */}
-              <div className="streak-stats">
-                <div className="streak-item streak-primary">
-                  <div className="streak-value">{displayCurrentStreak}</div>
-                  <div className="streak-label">Current Streak</div>
-                </div>
-                <div className="streak-divider"></div>
-                <div className="streak-item streak-secondary">
-                  <div className="streak-value">{displayMaxStreak}</div>
-                  <div className="streak-label">Max Streak</div>
-                </div>
-                <div className="streak-divider"></div>
-                <div className="streak-item streak-tertiary">
-                  <div className="streak-value">{displayActiveDays}</div>
-                  <div className="streak-label">Active Days</div>
-                </div>
-              </div>
+          {/* ── Row 2: Monthly Planner + Streak ── */}
+          <div className="dash-main-grid fade-up fade-up-2">
 
-              {/* Per-platform streak breakdown */}
-              {(dbStreak.lc || dbStreak.cf) && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '16px' }}>
-                  {[
-                    {
-                      key: 'lc',
-                      label: '💻 LeetCode',
-                      activeDays: dbStreak.lc?.activeDays ?? '—',
-                      streak: dbStreak.lc?.currentStreak ?? '—',
-                      borderColor: '#22c55e',
-                      bg: 'rgba(34,197,94,0.06)',
-                    },
-                    {
-                      key: 'cf',
-                      label: '🏆 Codeforces',
-                      activeDays: dbStreak.cf?.activeDays ?? '—',
-                      streak: dbStreak.cf?.currentStreak ?? '—',
-                      borderColor: '#f59e0b',
-                      bg: 'rgba(245,158,11,0.06)',
-                    },
-                  ].map(p => (
-                    <div key={p.key} style={{
-                      background: p.bg,
-                      borderRadius: 12,
-                      border: '1px solid rgba(255,255,255,0.05)',
-                      borderLeft: `3px solid ${p.borderColor}`,
-                      padding: '14px 16px',
-                    }}>
-                      {/* Header */}
-                      <div style={{ fontSize: '0.72rem', color: '#9ca3af', marginBottom: 6, fontWeight: 500 }}>
-                        {p.label}
-                      </div>
-                      {/* Primary — Active Days */}
-                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 8 }}>
-                        <span style={{ fontSize: '1.9rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1 }}>
-                          {p.activeDays}
-                        </span>
-                        <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>active days</span>
-                      </div>
-                      {/* Secondary — Current Streak */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#9ca3af' }}>
-                        <span>Current Streak</span>
-                        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                          {p.streak}{typeof p.streak === 'number' ? 'd' : ''}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Today Status */}
-              <div className={`today-status ${(() => {
-                const solvedToday = Object.values(solvedDates).includes(todayLocalStr);
-                return solvedToday ? 'solved' : 'pending';
-              })()}`}>
+            {/* LEFT: Monthly Planner */}
+            <div className="planner-card-v2">
+              <div className="planner-header">
+                <h3 className="card-title" style={{ margin: 0 }}>📅 Monthly Planner</h3>
+                <span className="planner-month">{new Date().toLocaleString('en-US', { timeZone: 'UTC', month: 'long', year: 'numeric' })}</span>
                 {(() => {
-                  const solvedToday = Object.values(solvedDates).includes(todayLocalStr);
-                  return solvedToday
-                    ? <><span className="status-icon">✅</span> Solved Today — Consistency Maintained</>
-                    : <><span className="status-icon">🎯</span> Today's session pending — stay consistent</>;
+                  const pace = targetSuggestion.hasData
+                    ? parseFloat(targetSuggestion.avgLast30) >= parseFloat(targetSuggestion.dailyRequired)
+                    : null;
+                  if (pace === null) return null;
+                  return <span className={`mp-track-badge ${pace ? 'on-track' : 'behind'}`}>{pace ? '🟢 On track' : '🔴 Behind'}</span>;
                 })()}
               </div>
 
-              {/* Last 7 Days Activity */}
+              {/* Progress bar */}
+              {targetSuggestion.hasData ? (
+                <>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                        <strong style={{ color: 'var(--primary)', fontSize: '1rem' }}>{currentMonthStats.count}</strong>
+                        <span style={{ color: 'var(--text-muted)' }}> / {targetSuggestion.moderateMonthlyTarget}</span>
+                      </span>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                        {Math.min(100, Math.round((currentMonthStats.count / targetSuggestion.moderateMonthlyTarget) * 100))}%
+                      </span>
+                    </div>
+                    <div className="mp-bar-v2-track">
+                      <div className="mp-bar-v2-fill" style={{ width: `${Math.min(100, Math.round((currentMonthStats.count / targetSuggestion.moderateMonthlyTarget) * 100))}%` }} />
+                      {(() => {
+                        const daysInMonth = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 1, 0)).getUTCDate();
+                        const dayOfMonth = new Date().getUTCDate();
+                        const expectedPct = Math.round((dayOfMonth / daysInMonth) * 100);
+                        return <div className="mp-bar-v2-marker" style={{ left: `${expectedPct}%` }} title={`Expected: ${expectedPct}%`} />;
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Pace row */}
+                  <div className="mp-pace-row">
+                    <div className="mp-pace-item">
+                      <span className="mp-pace-val">{targetSuggestion.avgLast30}</span>
+                      <span className="mp-pace-lbl">your pace</span>
+                    </div>
+                    <div className="mp-pace-divider" />
+                    <div className="mp-pace-item">
+                      <span className="mp-pace-val" style={{ color: parseFloat(targetSuggestion.dailyRequired) > parseFloat(targetSuggestion.avgLast30) ? 'var(--warning)' : 'var(--success)' }}>
+                        {targetSuggestion.dailyRequired}
+                      </span>
+                      <span className="mp-pace-lbl">required</span>
+                    </div>
+                    <div className="mp-pace-divider" />
+                    <div className="mp-pace-item">
+                      <span className="mp-pace-val">{targetSuggestion.remainingDays}</span>
+                      <span className="mp-pace-lbl">days left</span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                  <strong style={{ color: 'var(--primary)' }}>{currentMonthStats.count}</strong> solved this month · Need 7+ days of data for targets
+                </div>
+              )}
+
+              {/* Today's Plan */}
+              {targetSuggestion.hasData && (() => {
+                const solveTarget = Math.max(1, Math.ceil(parseFloat(targetSuggestion.dailyRequired)));
+                const reviseTarget = Math.min(3, coachingMetrics.forgottenCount > 0 ? 5 : 3);
+                const focusTopics = weaknessAnalysis.slice(0, 2).map(w => w.topic);
+                return (
+                  <div className="today-plan-block">
+                    <div className="today-plan-title">🎯 Today's Plan</div>
+                    <div className="today-plan-nums">
+                      <div className="today-plan-num">
+                        <span className="today-plan-big">{solveTarget}</span>
+                        <span className="today-plan-sub">solve</span>
+                      </div>
+                      <div className="today-plan-sep">·</div>
+                      <div className="today-plan-num">
+                        <span className="today-plan-big">{reviseTarget}</span>
+                        <span className="today-plan-sub">revise</span>
+                      </div>
+                    </div>
+                    {focusTopics.length > 0 && (
+                      <div className="today-plan-focus">Focus: {focusTopics.join(' · ')}</div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Insights */}
+              {smartCoachInsights.length > 0 && (
+                <div>
+                  <div className="section-label">Insights</div>
+                  <div className="insight-list">
+                    {smartCoachInsights.slice(0, 3).map((ins, i) => (
+                      <div key={i} className={`insight-row insight-row-${ins.sev === 'critical' ? 'urgent' : ins.sev === 'warning' ? 'warning' : 'ok'}`}>
+                        <span className="insight-msg">{ins.icon} {ins.msg}</span>
+                        <span className="insight-action">→ {ins.action}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* RIGHT: Streak card */}
+            <div className="streak-card-v2">
+              <h3 className="card-title" style={{ margin: 0 }}>🔥 Streak</h3>
+
+              {/* Big numbers */}
+              <div className="streak-nums-row">
+                <div className="streak-num-block">
+                  <span className="streak-num-val">{displayCurrentStreak}</span>
+                  <span className="streak-num-label">Current</span>
+                </div>
+                <div className="streak-num-divider" />
+                <div className="streak-num-block">
+                  <span className="streak-num-val">{displayMaxStreak}</span>
+                  <span className="streak-num-label">Best</span>
+                </div>
+                <div className="streak-num-divider" />
+                <div className="streak-num-block">
+                  <span className="streak-num-val">{displayActiveDays}</span>
+                  <span className="streak-num-label">Active</span>
+                </div>
+              </div>
+
+              {/* Today status pill */}
+              {(() => {
+                const solvedToday = Object.values(solvedDates).includes(todayLocalStr);
+                return (
+                  <div className={`streak-today-pill ${solvedToday ? 'done' : 'pending'}`}>
+                    {solvedToday
+                      ? '✅ Solved today — streak maintained'
+                      : '🎯 Today\'s session pending'}
+                  </div>
+                );
+              })()}
+
+              {/* Per-platform mini cards */}
+              {(dbStreak.lc || dbStreak.cf) && (
+                <div className="platform-mini-grid">
+                  <div className="platform-mini-card platform-mini-card-lc">
+                    <div className="platform-mini-label">💻 LeetCode</div>
+                    <div className="platform-mini-val">{dbStreak.lc?.activeDays ?? '—'}</div>
+                    <div className="platform-mini-sub">{dbStreak.lc?.currentStreak ?? '—'}d streak</div>
+                  </div>
+                  <div className="platform-mini-card platform-mini-card-cf">
+                    <div className="platform-mini-label">🏆 Codeforces</div>
+                    <div className="platform-mini-val">{dbStreak.cf?.activeDays ?? '—'}</div>
+                    <div className="platform-mini-sub">{dbStreak.cf?.currentStreak ?? '—'}d streak</div>
+                  </div>
+                </div>
+              )}
+
+              {/* 7-day activity */}
               <div className="recent-activity-section">
-                <div className="recent-activity-title">Last 7 Days Activity</div>
+                <div className="recent-activity-title">Last 7 Days</div>
                 <div className="recent-activity-grid">
                   {(() => {
                     const days = [];
                     const todayUTC = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
-
                     for (let i = 6; i >= 0; i--) {
                       const date = new Date(todayUTC);
                       date.setUTCDate(date.getUTCDate() - i);
                       const dateStr = toLocalDateStr(date);
                       const dayName = date.toLocaleString('en-US', { timeZone: 'UTC', weekday: 'short' });
-
-                      // Count problems solved on this date
-                      const problemCount = Object.values(solvedDates).filter(
-                        d => d === dateStr
-                      ).length;
-
+                      const problemCount = Object.values(solvedDates).filter(d => d === dateStr).length;
                       const isToday = i === 0;
-
                       days.push(
                         <div key={dateStr} className={`activity-day ${isToday ? 'today' : ''}`}>
                           <div className="activity-day-name">{dayName}</div>
@@ -3440,10 +3481,7 @@ function App() {
                             {problemCount > 0 ? problemCount : '—'}
                           </div>
                           <div className="activity-day-bar">
-                            <div
-                              className="activity-day-bar-fill"
-                              style={{ height: `${Math.min((problemCount / 5) * 100, 100)}%` }}
-                            ></div>
+                            <div className="activity-day-bar-fill" style={{ height: `${Math.min((problemCount / 5) * 100, 100)}%` }} />
                           </div>
                         </div>
                       );
@@ -3453,139 +3491,27 @@ function App() {
                 </div>
               </div>
 
-              {/* Next Milestone */}
+              {/* Milestone */}
               <div className="streak-milestone">
                 <div className="milestone-header">
                   <span className="milestone-label">Next Milestone</span>
                   <span className="milestone-target">{displayCurrentStreak < 50 ? '50 Days' : '100 Days'}</span>
                 </div>
                 <div className="milestone-progress-bar">
-                  <div className="milestone-progress-fill" style={{ width: `${displayCurrentStreak < 50 ? (displayCurrentStreak / 50) * 100 : ((displayCurrentStreak - 50) / 50) * 100}%` }}></div>
+                  <div className="milestone-progress-fill" style={{ width: `${displayCurrentStreak < 50 ? (displayCurrentStreak / 50) * 100 : ((displayCurrentStreak - 50) / 50) * 100}%` }} />
                 </div>
-                <div className="milestone-text">{displayCurrentStreak < 50 ? `${displayCurrentStreak} / 50 days` : `${displayCurrentStreak} / 100 days`}</div>
+                <div className="milestone-text">{displayCurrentStreak < 50 ? `${displayCurrentStreak} / 50` : `${displayCurrentStreak} / 100`}</div>
               </div>
 
-              {/* Motivation Message */}
               <div className="motivation-message">
                 {displayCurrentStreak >= 30 ? '🔥 Discipline Level: Elite' : displayCurrentStreak >= 15 ? '⚡ Momentum Building' : '🚀 Build Your Streak'}
               </div>
             </div>
-
-            <div className="monthly-card">
-              <h3 className="card-title">📅 Monthly Planner</h3>
-
-              {/* ── Progress Overview ── */}
-              <div className="mp-section">
-                <div className="mp-month-row">
-                  <span className="mp-month-name">{new Date().toLocaleString('en-US', { timeZone: 'UTC', month: 'long', year: 'numeric' })}</span>
-                  {(() => {
-                    const pace = targetSuggestion.hasData
-                      ? parseFloat(targetSuggestion.avgLast30) >= parseFloat(targetSuggestion.dailyRequired)
-                      : null;
-                    if (pace === null) return null;
-                    return (
-                      <span className={`mp-track-badge ${pace ? 'on-track' : 'behind'}`}>
-                        {pace ? '🟢 On track' : '🔴 Behind'}
-                      </span>
-                    );
-                  })()}
-                </div>
-                {targetSuggestion.hasData ? (
-                  <>
-                    <div className="mp-progress-bar-track">
-                      <div className="mp-progress-bar-fill" style={{ width: `${Math.min(100, Math.round((currentMonthStats.count / targetSuggestion.moderateMonthlyTarget) * 100))}%` }} />
-                      {/* Expected progress marker */}
-                      {(() => {
-                        const daysInMonth = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 1, 0)).getUTCDate();
-                        const dayOfMonth = new Date().getUTCDate();
-                        const expectedPct = Math.round((dayOfMonth / daysInMonth) * 100);
-                        return <div className="mp-expected-marker" style={{ left: `${expectedPct}%` }} title={`Expected: ${expectedPct}%`} />;
-                      })()}
-                    </div>
-                    <div className="mp-progress-label">
-                      <span><strong style={{ color: 'var(--primary)' }}>{currentMonthStats.count}</strong> solved · {targetSuggestion.moderateMonthlyTarget - currentMonthStats.count} remaining</span>
-                      <span style={{ color: 'var(--text-muted)' }}>{Math.min(100, Math.round((currentMonthStats.count / targetSuggestion.moderateMonthlyTarget) * 100))}%</span>
-                    </div>
-                    <div className="mp-stats-row">
-                      <div className="mp-stat">
-                        <span className="mp-stat-val">{targetSuggestion.avgLast30}</span>
-                        <span className="mp-stat-lbl">your pace/day</span>
-                      </div>
-                      <div className="mp-stat-divider" />
-                      <div className="mp-stat">
-                        <span className="mp-stat-val" style={{ color: parseFloat(targetSuggestion.dailyRequired) > parseFloat(targetSuggestion.avgLast30) ? 'var(--warning, #f59e0b)' : 'var(--success)' }}>
-                          {targetSuggestion.dailyRequired}
-                        </span>
-                        <span className="mp-stat-lbl">required/day</span>
-                      </div>
-                      <div className="mp-stat-divider" />
-                      <div className="mp-stat">
-                        <span className="mp-stat-val">{targetSuggestion.remainingDays}</span>
-                        <span className="mp-stat-lbl">days left</span>
-                      </div>
-                    </div>
-                    {parseFloat(targetSuggestion.dailyRequired) > parseFloat(targetSuggestion.avgLast30) && (
-                      <div className="mp-pace-gap">
-                        +{(parseFloat(targetSuggestion.dailyRequired) - parseFloat(targetSuggestion.avgLast30)).toFixed(1)} more/day needed
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', padding: '0.5rem 0' }}>
-                    <strong style={{ color: 'var(--primary)' }}>{currentMonthStats.count}</strong> solved · Need 7+ days of data for targets
-                  </div>
-                )}
-              </div>
-
-              {/* ── Today's Plan ── */}
-              {targetSuggestion.hasData && (() => {
-                const solveTarget = Math.max(1, Math.ceil(parseFloat(targetSuggestion.dailyRequired)));
-                const reviseTarget = Math.min(3, coachingMetrics.forgottenCount > 0 ? 5 : 3);
-                const focusTopics = weaknessAnalysis.slice(0, 2).map(w => w.topic);
-                return (
-                  <div className="mp-today-plan">
-                    <div className="mp-today-title">🎯 Today's Plan</div>
-                    <div className="mp-today-numbers">
-                      <div className="mp-today-num">
-                        <span className="mp-today-big">{solveTarget}</span>
-                        <span className="mp-today-sub">solve</span>
-                      </div>
-                      <div className="mp-today-sep">·</div>
-                      <div className="mp-today-num">
-                        <span className="mp-today-big">{reviseTarget}</span>
-                        <span className="mp-today-sub">revise</span>
-                      </div>
-                    </div>
-                    {focusTopics.length > 0 && (
-                      <div className="mp-today-focus">Focus: {focusTopics.join(' · ')}</div>
-                    )}
-                  </div>
-                );
-              })()}
-
-              {/* ── Action Insights (severity system) ── */}
-              {smartCoachInsights.length > 0 && (
-                <div className="mp-section mp-insights">
-                  <div className="mp-insights-title">Insights</div>
-                  {smartCoachInsights.map((ins, i) => (
-                    <div key={i} className={`mp-insight-row mp-insight-${ins.sev === 'critical' ? 'urgent' : ins.sev === 'warning' ? 'improve' : 'positive'}`}>
-                      <span>{ins.icon} {ins.msg}</span>
-                      <span className="mp-insight-action">→ {ins.action}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
           </div>
 
-          {/* 📊 Platform Difficulty Distribution */}
-          <div className="section-header-custom" style={{ margin: '24px 0 16px 0' }}>
-            <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
-              📊 Platform Difficulty Distribution
-            </h2>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '20px', marginBottom: '24px' }}>
+          {/* ── Row 3: Platform Distribution ── */}
+          <div className="section-label fade-up fade-up-2">Platform Breakdown</div>
+          <div className="platform-dist-grid fade-up fade-up-2">
             <ProgressDistributionCard
               title="LeetCode Distribution"
               icon="💻"
@@ -3593,6 +3519,8 @@ function App() {
               mediumCount={lcMediumSolved}
               hardCount={lcHardSolved}
               totalCount={lcSolved}
+              onFilterChange={setSelectedFilter}
+              selectedFilter={selectedFilter}
             />
             <ProgressDistributionCard
               title="Codeforces Distribution"
@@ -3604,8 +3532,9 @@ function App() {
             />
           </div>
 
-          {/* Striver & TLE Progress Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '20px', marginBottom: '24px' }}>
+          {/* ── Row 4: Sheet Progress ── */}
+          <div className="section-label fade-up fade-up-3">Sheet Progress</div>
+          <div className="sheet-grid fade-up fade-up-3">
             <ProgressDistributionCard
               title="Striver Progress"
               icon="📘"
@@ -3627,13 +3556,13 @@ function App() {
             />
           </div>
 
-          {/* 30-Day Activity Trend (Moved to Analytics Section) */}
-          <div className="analytics-chart-container fade-up fade-up-2">
+          {/* ── Row 5: Activity Chart ── */}
+          <div className="analytics-chart-container fade-up fade-up-3">
             <SolvedActivityChart allProblems={allProblems} />
           </div>
 
-          {/* Advanced Analytics Grid */}
-          <div className="advanced-analytics-grid fade-up fade-up-3">
+          {/* ── Row 6: Analytics 4-up ── */}
+          <div className="analytics-row fade-up fade-up-4">
             {/* Consistency Score */}
             <div className="analytics-card consistency-card">
               <h3 className="card-title">🎯 Consistency Score</h3>
@@ -3731,10 +3660,10 @@ function App() {
               </div>
             </div>
 
-            {/* Contest Stats — placed below streak/monthly analytics */}
+            {/* Contest Stats — placed inside analytics row */}
           </div>
 
-          {/* Contest Stats — directly below streak + monthly planner */}
+          {/* ── Contest Stats ── */}
           <ContestStats stats={contestStats} />
 
 
