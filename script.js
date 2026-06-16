@@ -1,4 +1,3 @@
-/** @jsxRuntime classic */
 const { useState, useEffect, useRef } = React;
 
 // ============================================
